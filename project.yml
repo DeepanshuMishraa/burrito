@@ -7,6 +7,10 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MARKETING_VERSION: 1.0
     CURRENT_PROJECT_VERSION: 1
+packages:
+  Lottie:
+    url: https://github.com/airbnb/lottie-spm.git
+    from: 4.6.1
 targets:
   burrito:
     type: application
@@ -16,6 +20,8 @@ targets:
       - Sources
       - path: Resources
         buildPhase: resources
+    dependencies:
+      - package: Lottie
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

@@ -1,6 +1,7 @@
 import AppKit
 import AVFAudio
 import Collaboration
+import Lottie
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
@@ -94,6 +95,8 @@ struct ContentView: View {
                 PermissionGateView(permissions: permissions) {
                     permissionOnboardingCompleted = true
                 }
+            } else if notes.contains(where: { $0.processingStage == .generatingNotes }) {
+                ScooterGenerationLoader()
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
@@ -300,14 +303,22 @@ struct ContentView: View {
                         sidebarSelection = .trash
                     }
 
-                    BurritoSectionLabel(title: "Folders")
-                        .padding(.horizontal, 10)
-                        .padding(.top, 22)
-                        .padding(.bottom, 6)
+                    HStack {
+                        BurritoSectionLabel(title: "Folders")
+                        Spacer()
+                        SidebarHeaderAddButton {
+                            showingNewFolder = true
+                        }
+                    }
+                    .padding(.leading, 10)
+                    .padding(.trailing, 2)
+                    .padding(.top, 22)
+                    .padding(.bottom, 6)
                     ForEach(folders) { folder in
                         SidebarNavigationButton(
                             title: folder.name,
                             systemImage: "folder",
+                            markerColor: FolderAccent.color(for: folder.id),
                             count: notes.filter { $0.deletedAt == nil && $0.folder?.id == folder.id }.count,
                             isSelected: sidebarSelection == .folder(folder.id)
                         ) {
@@ -323,14 +334,6 @@ struct ContentView: View {
                             }
                     }
 
-                    if sidebarSelection == .trash {
-                        Button("Empty Trash", role: .destructive) {
-                            confirmingEmptyTrash = true
-                        }
-                        .disabled(visibleNotes.isEmpty)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 12)
-                    }
                 }
                 .padding(.horizontal, 8)
                 .hidesEnclosingScrollIndicators()
@@ -338,18 +341,6 @@ struct ContentView: View {
             .scrollIndicators(.hidden)
 
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Button("New folder", systemImage: "folder.badge.plus") {
-                        showingNewFolder = true
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(SidebarUtilityButtonStyle())
-                    .accessibilityLabel("New folder")
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-
                 Rectangle()
                     .fill(BurritoTheme.softBorder)
                     .frame(height: 1)
@@ -372,24 +363,49 @@ struct ContentView: View {
     }
 
     private var noteList: some View {
-        ZStack {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                if sidebarSelection == .trash {
+                    Button {
+                        confirmingEmptyTrash = true
+                    } label: {
+                        Label("Empty trash", systemImage: "trash")
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle(destructive: true))
+                    .disabled(visibleNotes.isEmpty)
+                } else {
+                    Button {
+                        recordingDestination = .newNote
+                    } label: {
+                        Label("New recording", systemImage: "plus")
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle())
+                }
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 52)
+            .background(BurritoTheme.canvas)
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if sidebarSelection == .all {
                         Text("Coming up")
-                            .font(.system(size: 36, weight: .regular, design: .serif))
-                            .padding(.bottom, 18)
+                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .tracking(-0.5)
+                            .padding(.bottom, 16)
 
                         CalendarCard(
                             calendarAccess: calendarAccess,
                             startRecording: { recordingDestination = .newNote },
                             openSettings: openCalendarSettings
                         )
-                        .padding(.bottom, 30)
+                        .padding(.bottom, 26)
                     } else {
                         Text(sectionTitle)
-                            .font(.system(size: 34, weight: .regular, design: .serif))
-                            .padding(.bottom, 28)
+                            .font(.system(size: 32, weight: .regular, design: .serif))
+                            .tracking(-0.4)
+                            .padding(.bottom, 24)
                     }
 
                     if visibleNotes.isEmpty {
@@ -401,11 +417,12 @@ struct ContentView: View {
                         }
                     } else {
                         ForEach(noteDays, id: \.date) { group in
-                            Text(group.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
-                                .font(.system(size: 12, weight: .semibold))
+                            Text(noteGroupTitle(for: group.date))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.tertiary)
-                                .padding(.top, 20)
-                                .padding(.bottom, 8)
+                                .padding(.top, 18)
+                                .padding(.leading, 8)
+                                .padding(.bottom, 6)
                             ForEach(group.notes) { note in
                                 TimelineNoteItem(
                                     note: note,
@@ -421,23 +438,27 @@ struct ContentView: View {
                         }
                     }
                 }
-                .frame(maxWidth: 820, alignment: .leading)
-                .padding(.horizontal, 44)
-                .padding(.top, 72)
+                .frame(maxWidth: 780, alignment: .leading)
+                .padding(.horizontal, 38)
+                .padding(.top, 22)
                 .padding(.bottom, 100)
                 .frame(maxWidth: .infinity)
                 .hidesEnclosingScrollIndicators()
             }
             .scrollIndicators(.hidden)
         }
-        .overlay(alignment: .topTrailing) {
-            Button("New recording", systemImage: "plus") {
-                recordingDestination = .newNote
-            }
-            .buttonStyle(BurritoActionButtonStyle(prominent: false))
-            .padding(14)
-        }
         .background(BurritoTheme.canvas)
+    }
+
+    private func noteGroupTitle(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "Today"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
     @ViewBuilder
@@ -533,6 +554,32 @@ struct ContentView: View {
             let alert = NSAlert(error: error)
             alert.runModal()
         }
+    }
+}
+
+private struct ScooterGenerationLoader: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            BurritoTheme.canvas.ignoresSafeArea()
+
+            if reduceMotion {
+                LottieView(animation: .named("Scooter-loader"))
+                    .currentProgress(0.5)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 360, height: 360)
+            } else {
+                LottieView(animation: .named("Scooter-loader"))
+                    .playing(loopMode: .loop)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 360, height: 360)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Generating notes")
     }
 }
 
@@ -694,6 +741,32 @@ private struct BurritoActionButtonStyle: ButtonStyle {
     }
 }
 
+private struct HomeToolbarButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    var destructive = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(destructive ? Color.red.opacity(0.82) : Color.secondary)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(
+                configuration.isPressed
+                    ? BurritoTheme.controlFill.opacity(1.35)
+                    : BurritoTheme.controlFill,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(BurritoTheme.softBorder.opacity(0.7))
+            }
+            .opacity(isEnabled ? 1 : 0.35)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 private struct BurritoDestructiveButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
@@ -749,17 +822,27 @@ private struct SidebarToggleButton: View {
     }
 }
 
-private struct SidebarUtilityButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(width: 30, height: 30)
-            .background(
-                configuration.isPressed ? BurritoTheme.controlFill : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7)
-            )
-            .opacity(configuration.isPressed ? 0.68 : 1)
+private struct SidebarHeaderAddButton: View {
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(isHovered ? .primary : .tertiary)
+                .frame(width: 22, height: 22)
+                .background(
+                    isHovered ? BurritoTheme.controlFill : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .help("New folder")
+        .accessibilityLabel("New folder")
     }
 }
 
@@ -1087,15 +1170,24 @@ private struct SidebarItemLabel: View {
 private struct SidebarNavigationButton: View {
     let title: String
     let systemImage: String
+    var markerColor: Color? = nil
     let count: Int
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .frame(width: 18)
+            HStack(spacing: 9) {
+                Group {
+                    if let markerColor {
+                        Circle()
+                            .fill(markerColor)
+                            .frame(width: 9, height: 9)
+                    } else {
+                        Image(systemName: systemImage)
+                    }
+                }
+                .frame(width: 18)
                 Text(title)
                     .lineLimit(1)
                 Spacer()
@@ -1106,14 +1198,15 @@ private struct SidebarNavigationButton: View {
                 }
             }
             .foregroundStyle(isSelected ? .primary : .secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 34)
+            .font(.system(size: 13))
+            .padding(.horizontal, 9)
+            .frame(height: 32)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
             isSelected ? BurritoTheme.controlFill : Color.clear,
-            in: RoundedRectangle(cornerRadius: 8)
+            in: RoundedRectangle(cornerRadius: 7)
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -1130,18 +1223,18 @@ private struct CalendarCard: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(today.formatted(.dateTime.day()))
-                    .font(.system(size: 38, weight: .regular, design: .serif))
+                    .font(.system(size: 34, weight: .regular, design: .serif))
                 Text(today.formatted(.dateTime.month(.abbreviated)))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(today.formatted(.dateTime.weekday(.wide)))
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            .frame(width: 150, alignment: .leading)
-            .padding(22)
+            .frame(width: 112, alignment: .leading)
+            .padding(18)
 
             Rectangle()
-                .fill(BurritoTheme.softBorder)
+                .fill(BurritoTheme.softBorder.opacity(0.75))
                 .frame(width: 1)
 
             Group {
@@ -1205,14 +1298,14 @@ private struct CalendarCard: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 188)
+            .frame(maxWidth: .infinity, minHeight: 156)
         }
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 18))
+        .background(BurritoTheme.raised.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -1224,25 +1317,34 @@ private struct CalendarConnectionState: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 22, weight: .light))
+                .font(.system(size: 18, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
             Text(detail)
-                .font(.caption)
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
             if let buttonTitle {
                 Button(buttonTitle, action: action)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
-                    .padding(.top, 4)
+                    .buttonStyle(HomeToolbarButtonStyle())
+                    .padding(.top, 3)
             }
         }
-        .padding(20)
+        .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BurritoTheme.controlFill.opacity(0.3), in: RoundedRectangle(cornerRadius: 9))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(
+                    BurritoTheme.softBorder.opacity(0.7),
+                    style: StrokeStyle(lineWidth: 0.75, dash: [5, 5])
+                )
+        }
+        .padding(10)
     }
 }
 
@@ -1251,7 +1353,7 @@ private struct UpcomingEventRow: View {
     let startRecording: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(event.startDate, format: .dateTime.hour().minute())
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
@@ -1261,15 +1363,15 @@ private struct UpcomingEventRow: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .frame(width: 58, alignment: .trailing)
+            .frame(width: 54, alignment: .trailing)
 
             Capsule()
                 .fill(BurritoTheme.accent)
-                .frame(width: 3, height: 34)
+                .frame(width: 3, height: 30)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 Text(event.isAllDay ? "All day · \(event.calendarName)" : event.calendarName)
                     .font(.caption)
@@ -1278,9 +1380,9 @@ private struct UpcomingEventRow: View {
             }
             Spacer()
             Button("Record", systemImage: "waveform", action: startRecording)
-                .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                .buttonStyle(HomeToolbarButtonStyle())
         }
-        .frame(minHeight: 58)
+        .frame(minHeight: 52)
     }
 }
 
@@ -1288,16 +1390,16 @@ private struct TimelineNoteRow: View {
     let note: Note
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: note.processingStage == nil ? "doc.text" : "ellipsis")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 7))
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+                .frame(width: 32, height: 32)
+                .background(BurritoTheme.controlFill.opacity(0.8), in: RoundedRectangle(cornerRadius: 7))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     if note.isFavorite {
                         Image(systemName: "star.fill")
@@ -1306,17 +1408,60 @@ private struct TimelineNoteRow: View {
                     }
                 }
                 Text(note.processingStage?.rawValue ?? note.templateSnapshot.name)
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
             Spacer()
+            if let folder = note.folder {
+                FolderTag(folder: folder)
+            }
             Text(note.updatedAt, style: .time)
-                .font(.caption.monospacedDigit())
+                .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.tertiary)
+                .frame(minWidth: 54, alignment: .trailing)
         }
-        .padding(.horizontal, 10)
-        .frame(height: 58)
+        .padding(.horizontal, 8)
+        .frame(height: 52)
         .contentShape(Rectangle())
+    }
+}
+
+private enum FolderAccent {
+    static func color(for id: UUID) -> Color {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in id.uuidString.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Color(
+            hue: Double(hash % 360) / 360,
+            saturation: 0.68,
+            brightness: 0.9
+        )
+    }
+}
+
+private struct FolderTag: View {
+    let folder: Folder
+
+    private var color: Color {
+        FolderAccent.color(for: folder.id)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text(folder.name)
+                .lineLimit(1)
+        }
+        .font(.system(size: 9, weight: .medium))
+        .foregroundStyle(color)
+        .padding(.horizontal, 6)
+        .frame(height: 17)
+        .background(color.opacity(0.13), in: Capsule())
+        .accessibilityLabel("Folder: \(folder.name)")
     }
 }
 
@@ -1363,8 +1508,8 @@ private struct TimelineNoteItem: View {
         }
         .padding(.trailing, 4)
         .background(
-            isHovered ? BurritoTheme.controlFill.opacity(0.42) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 9)
+            isHovered ? BurritoTheme.controlFill.opacity(0.34) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8)
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

@@ -10,6 +10,7 @@
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
+		1DD68C6D9799D4BFB7E88354 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = ECFA337F1032D11A4CC3842E /* Lottie */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A516A8DE5CC1A96513E93F1E /* AppIcon.icon */; };
@@ -18,6 +19,7 @@
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
+		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
@@ -56,6 +58,7 @@
 		765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocumentTests.swift; sourceTree = "<group>"; };
 		76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoTheme.swift; sourceTree = "<group>"; };
 		78A20AF8BC980AFBBC930B6C /* burrito.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = burrito.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Scooter-loader.json"; sourceTree = "<group>"; };
 		80312D2153FF4924DF498F98 /* CoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorTests.swift; sourceTree = "<group>"; };
 		8932061A0CA5A58DCC622228 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -65,6 +68,17 @@
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		03CED97521BAB353229B3164 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1DD68C6D9799D4BFB7E88354 /* Lottie in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		05E85C1DB4D0CA916BC1F73E /* Tests */ = {
@@ -124,6 +138,7 @@
 			isa = PBXGroup;
 			children = (
 				A516A8DE5CC1A96513E93F1E /* AppIcon.icon */,
+				7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -137,6 +152,7 @@
 			buildPhases = (
 				0907166A5AF25E328637C558 /* Sources */,
 				9A4094E4C831B5B85CAB23BD /* Resources */,
+				03CED97521BAB353229B3164 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -144,6 +160,7 @@
 			);
 			name = burrito;
 			packageProductDependencies = (
+				ECFA337F1032D11A4CC3842E /* Lottie */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -195,6 +212,9 @@
 			);
 			mainGroup = A663BA1E2DD0DA518906750A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 89BA562FB69766E4020166D8 /* Products */;
 			projectDirPath = "";
@@ -212,6 +232,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
+				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,6 +530,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.6.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ECFA337F1032D11A4CC3842E /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */;
+			productName = Lottie;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 6F4026EE2DF748544F14AE96 /* Project object */;
 }
