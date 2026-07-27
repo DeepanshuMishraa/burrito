@@ -1,0 +1,37 @@
+Sources/ContentView.swift
+  s_a943844e87ed85::t_23ead0b846cd68 560-585
+  s_a943844e87ed85::t_77a9270a397868 386,394-396,403,406-408,420-421,423-425,441-443,453-461,744,748-750,752-763,766,1180,1201-1203,1209,1226,1228,1230,1233-1234,1237,1301,1303,1305-1306,1308,1320,1322,1325,1327,1333-1334,1337,1339-1347,1356,1366,1370,1374,1383,1385,1393,1395-1398,1402,1411,1415-1417,1419,1421,1423-1424,1511-1512
+  s_a943844e87ed85::t_25164da4b4261f 309,321,462,767-768,825-845,1173,1181-1190,1429-1466
+  s_a943844e87ed85::t_dec90849c51ade 313-316
+  s_a943844e87ed85::t_aa74fbb47770a4 306-308,310-312
+  s_a943844e87ed85::t_e9422814bff438 4,98-99
+  s_a943844e87ed85::t_3e2e73c51c4c2d 366-368,384-385,387-389
+  s_a943844e87ed85::t_673258a41e4ecb 369-383,745-747,751,764-765
+  s_a943844e87ed85::t_ef1916b4c12212 463
+  s_a943844e87ed85::t_229738c1f68bd7 769
+  s_a943844e87ed85::t_2ced659359bc67 1467
+project.yml
+  s_a943844e87ed85::t_e9422814bff438 10-13,23-24
+burrito.xcodeproj/project.pbxproj
+  s_a943844e87ed85::t_3bbd1370fa11af 13,22,61,72-82,141,155,163,215-217,235,533-551
+burrito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  s_a943844e87ed85::t_52eb2962dd20be 1-15
+Resources/Scooter-loader.json
+  s_a943844e87ed85::t_031a99226329ac 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "fdd77dd56c8a9dc0006eac846f4ea3d1e0d14e88",
+  "prompts": {},
+  "sessions": {
+    "s_a943844e87ed85": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa2c6-2c2e-7713-b376-fe9ba08759cf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
