@@ -176,6 +176,20 @@ struct RecordingOptions: Equatable, Sendable {
     var retainsAudio: Bool
 }
 
+enum RecordingDestination: Equatable, Identifiable, Sendable {
+    case newNote
+    case appendToNote(id: UUID)
+
+    var id: String {
+        switch self {
+        case .newNote:
+            "new-note"
+        case .appendToNote(let id):
+            "append-\(id.uuidString)"
+        }
+    }
+}
+
 struct RecordingFiles: Equatable, Sendable {
     var sessionID: UUID
     var systemAudioURL: URL

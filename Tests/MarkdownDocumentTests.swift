@@ -1,0 +1,60 @@
+import Testing
+@testable import Burrito
+
+@Suite("Markdown document")
+struct MarkdownDocumentTests {
+    @Test("Parses generated note structure into semantic blocks")
+    func parsesGeneratedNotes() {
+        let document = MarkdownDocument.parse(
+            """
+            # Overview
+
+            A **short** summary.
+
+            ## Key points
+            - First
+            - Second
+
+            1. Start here
+            2. Continue
+
+            > Remember this.
+
+            ---
+
+            ```
+            let value = 1
+            ```
+            """
+        )
+
+        #expect(
+            document.blocks == [
+                .heading(level: 1, text: "Overview"),
+                .paragraph("A **short** summary."),
+                .heading(level: 2, text: "Key points"),
+                .unorderedList(["First", "Second"]),
+                .orderedList(["Start here", "Continue"]),
+                .quote("Remember this."),
+                .divider,
+                .code("let value = 1"),
+            ]
+        )
+    }
+
+    @Test("Repairs collapsed headings and bullets from generated Markdown")
+    func repairsCollapsedGeneratedMarkdown() {
+        let document = MarkdownDocument.parse(
+            "## Overview: A concise summary. ## Key Points: * First point. * Second point."
+        )
+
+        #expect(
+            document.blocks == [
+                .heading(level: 2, text: "Overview"),
+                .paragraph("A concise summary."),
+                .heading(level: 2, text: "Key Points"),
+                .unorderedList(["First point.", "Second point."]),
+            ]
+        )
+    }
+}

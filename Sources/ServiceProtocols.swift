@@ -3,7 +3,13 @@ import Foundation
 @MainActor
 protocol AudioCapturing: AnyObject {
     var activity: AudioActivity { get }
-    func start(files: RecordingFiles, includesMicrophone: Bool) async -> Result<Void, BurritoError>
+    var liveTranscript: String { get }
+    var hasMeaningfulAudio: Bool { get }
+    func start(
+        files: RecordingFiles,
+        includesMicrophone: Bool,
+        languageIdentifier: String
+    ) async -> Result<Void, BurritoError>
     func stop() async -> Result<Void, BurritoError>
 }
 

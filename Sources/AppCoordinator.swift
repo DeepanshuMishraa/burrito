@@ -9,6 +9,8 @@ final class AppCoordinator {
     private(set) var captureState: CaptureState = .idle
     private(set) var activeNoteID: UUID?
     private(set) var elapsed: TimeInterval = 0
+    private(set) var activity = AudioActivity.silent
+    private(set) var liveTranscript = ""
     private(set) var lastError: BurritoError?
     private(set) var isInstallingLanguageAsset = false
 
@@ -18,9 +20,8 @@ final class AppCoordinator {
     private let fileStore: any RecordingFileStore
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
     private var activeFiles: RecordingFiles?
+    private var appendsToExistingNote = false
     private var timerTask: Task<Void, Never>?
-
-    var activity: AudioActivity { capture.activity }
 
     init(
         capture: any AudioCapturing,
@@ -59,7 +60,11 @@ final class AppCoordinator {
         }
     }
 
-    func start(options: RecordingOptions, context: ModelContext) async {
+    func start(
+        options: RecordingOptions,
+        destination: RecordingDestination = .newNote,
+        context: ModelContext
+    ) async {
         guard captureState == .idle else {
             lastError = .recordingAlreadyInProgress
             return
@@ -67,8 +72,24 @@ final class AppCoordinator {
         captureState = .preparing
         lastError = nil
 
+        let existingNote: Note? = switch destination {
+        case .newNote:
+            nil
+        case .appendToNote(let id):
+            fetchNote(id: id, context: context)
+        }
+        if case .appendToNote = destination, existingNote == nil {
+            failBeforeRecording(
+                .storageFailed(
+                    details: "The note to extend no longer exists. No recording was started."
+                )
+            )
+            return
+        }
+        let languageIdentifier = existingNote?.languageIdentifier ?? options.languageIdentifier
+
         let modelAvailability = await generator.availability(
-            languageIdentifier: options.languageIdentifier
+            languageIdentifier: languageIdentifier
         )
         if case .failure(let error) = modelAvailability {
             failBeforeRecording(error)
@@ -80,7 +101,7 @@ final class AppCoordinator {
             return
         }
 
-        let languageAvailability = await transcriber.verifyLanguage(options.languageIdentifier)
+        let languageAvailability = await transcriber.verifyLanguage(languageIdentifier)
         if case .failure(let error) = languageAvailability {
             failBeforeRecording(error)
             return
@@ -96,17 +117,29 @@ final class AppCoordinator {
         }
 
         let now = Date.now
-        let note = Note(
-            id: sessionID,
-            lifecycle: .recording,
-            createdAt: now,
-            languageIdentifier: options.languageIdentifier,
-            template: options.template,
-            retainsAudio: options.retainsAudio
-        )
-        note.systemAudioRelativePath = fileStore.relativePath(for: files.systemAudioURL)
-        note.microphoneAudioRelativePath = files.microphoneAudioURL.map(fileStore.relativePath(for:))
-        context.insert(note)
+        let note: Note
+        if let existingNote {
+            note = existingNote
+            note.lifecycle = .recording
+            note.processingStage = nil
+            note.lastErrorMessage = nil
+            note.retainsAudio = note.retainsAudio || options.retainsAudio
+        } else {
+            let newNote = Note(
+                id: sessionID,
+                lifecycle: .recording,
+                createdAt: now,
+                languageIdentifier: options.languageIdentifier,
+                template: options.template,
+                retainsAudio: options.retainsAudio
+            )
+            newNote.systemAudioRelativePath = fileStore.relativePath(for: files.systemAudioURL)
+            newNote.microphoneAudioRelativePath = files.microphoneAudioURL.map(
+                fileStore.relativePath(for:)
+            )
+            context.insert(newNote)
+            note = newNote
+        }
 
         do {
             try context.save()
@@ -115,12 +148,19 @@ final class AppCoordinator {
             return
         }
 
-        switch await capture.start(files: files, includesMicrophone: options.includesMicrophone) {
+        switch await capture.start(
+            files: files,
+            includesMicrophone: options.includesMicrophone,
+            languageIdentifier: languageIdentifier
+        ) {
         case .success:
             activeFiles = files
             activeNoteID = note.id
+            appendsToExistingNote = existingNote != nil
             captureState = .recording(sessionID: sessionID, startedAt: now)
             elapsed = 0
+            activity = .silent
+            liveTranscript = ""
             startTimer(startedAt: now)
         case .failure(let error):
             note.lifecycle = .recoverable
@@ -135,7 +175,8 @@ final class AppCoordinator {
     func stop(context: ModelContext) async {
         guard case .recording(let sessionID, let startedAt) = captureState,
               let files = activeFiles,
-              let note = fetchNote(id: sessionID, context: context)
+              let noteID = activeNoteID,
+              let note = fetchNote(id: noteID, context: context)
         else {
             lastError = .noActiveRecording
             return
@@ -143,10 +184,12 @@ final class AppCoordinator {
 
         timerTask?.cancel()
         timerTask = nil
+        activity = .silent
+        liveTranscript = ""
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
-        note.duration = Date.now.timeIntervalSince(startedAt)
+        let recordingDuration = Date.now.timeIntervalSince(startedAt)
         note.updatedAt = .now
         try? context.save()
 
@@ -155,6 +198,14 @@ final class AppCoordinator {
             return
         }
 
+        guard capture.hasMeaningfulAudio else {
+            finishSilentRecording(note: note, files: files, context: context)
+            return
+        }
+
+        note.duration = appendsToExistingNote
+            ? note.duration + recordingDuration
+            : recordingDuration
         note.processingStage = .transcribing
         try? context.save()
 
@@ -187,13 +238,41 @@ final class AppCoordinator {
         }
 
         note.processingStage = .organizing
+        let newSegments = Transcript.merge(
+            system: systemSegments,
+            microphone: microphoneSegments
+        )
+        let combinedSegments: [TranscriptSegment]
+        if appendsToExistingNote {
+            let existingSegments = note.transcriptSegments
+            let offset = existingSegments
+                .map { $0.startTime + $0.duration }
+                .max() ?? 0
+            let appendedSegments = newSegments.map { segment in
+                TranscriptSegment(
+                    id: segment.id,
+                    source: segment.source,
+                    startTime: segment.startTime + offset,
+                    duration: segment.duration,
+                    text: segment.text
+                )
+            }
+            combinedSegments = existingSegments + appendedSegments
+        } else {
+            combinedSegments = newSegments
+        }
         note.replaceTranscript(
-            with: Transcript.merge(system: systemSegments, microphone: microphoneSegments),
-            marksEdited: false
+            with: combinedSegments,
+            marksEdited: true
         )
         try? context.save()
 
-        if !note.retainsAudio {
+        if note.retainsAudio {
+            note.systemAudioRelativePath = fileStore.relativePath(for: files.systemAudioURL)
+            note.microphoneAudioRelativePath = files.microphoneAudioURL.map(
+                fileStore.relativePath(for:)
+            )
+        } else {
             if case .failure(let error) = fileStore.removeAudio(for: files) {
                 note.lastErrorMessage = error.recoveryMessage
             } else {
@@ -202,11 +281,49 @@ final class AppCoordinator {
             }
         }
 
-        await generate(note: note, context: context)
+        if appendsToExistingNote {
+            await appendGeneratedNotes(
+                from: newSegments,
+                to: note,
+                context: context
+            )
+        } else {
+            await generate(note: note, context: context)
+        }
         activeFiles = nil
         activeNoteID = nil
+        appendsToExistingNote = false
         captureState = .idle
         elapsed = 0
+        activity = .silent
+        liveTranscript = ""
+    }
+
+    private func finishSilentRecording(
+        note: Note,
+        files: RecordingFiles,
+        context: ModelContext
+    ) {
+        if !note.retainsAudio {
+            if case .failure(let error) = fileStore.removeAudio(for: files) {
+                note.lastErrorMessage = error.recoveryMessage
+            }
+            if !appendsToExistingNote {
+                note.systemAudioRelativePath = nil
+                note.microphoneAudioRelativePath = nil
+            }
+        }
+        note.lifecycle = .ready
+        note.processingStage = nil
+        note.updatedAt = .now
+        try? context.save()
+        activeFiles = nil
+        activeNoteID = nil
+        appendsToExistingNote = false
+        captureState = .idle
+        elapsed = 0
+        activity = .silent
+        liveTranscript = ""
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
@@ -245,10 +362,55 @@ final class AppCoordinator {
         try? context.save()
     }
 
+    private func appendGeneratedNotes(
+        from segments: [TranscriptSegment],
+        to note: Note,
+        context: ModelContext
+    ) async {
+        let existingTitle = note.title
+        let existingBody = note.markdownBody
+        let hadUserEdits = note.userEditedNotes
+
+        note.lifecycle = .processing
+        note.processingStage = .generatingNotes
+        note.lastErrorMessage = nil
+        try? context.save()
+
+        switch await generator.generate(
+            segments: segments,
+            template: note.templateSnapshot,
+            languageIdentifier: note.languageIdentifier
+        ) {
+        case .success(let generated):
+            let appendedBody = """
+                ## \(generated.title)
+
+                \(generated.markdown)
+                """
+            note.title = existingTitle
+            note.markdownBody = existingBody.trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+                ? generated.markdown
+                : "\(existingBody)\n\n---\n\n\(appendedBody)"
+            note.generatedFromTranscriptRevision = note.transcriptRevision
+            note.userEditedNotes = hadUserEdits
+            note.lifecycle = .ready
+            note.processingStage = nil
+            note.updatedAt = .now
+        case .failure(let error):
+            note.lifecycle = .recoverable
+            note.processingStage = nil
+            note.lastErrorMessage = error.recoveryMessage
+            lastError = error
+        }
+        try? context.save()
+    }
+
     func dismissFailure() {
         if case .failed = captureState {
             captureState = .idle
             activeNoteID = nil
+            appendsToExistingNote = false
         }
         lastError = nil
     }
@@ -273,6 +435,8 @@ final class AppCoordinator {
 
     private func failBeforeRecording(_ error: BurritoError) {
         captureState = .idle
+        activity = .silent
+        liveTranscript = ""
         lastError = error
     }
 
@@ -284,6 +448,9 @@ final class AppCoordinator {
         lastError = error
         captureState = .failed(sessionID: note.id, message: error.recoveryMessage)
         activeFiles = nil
+        appendsToExistingNote = false
+        activity = .silent
+        liveTranscript = ""
         timerTask?.cancel()
         timerTask = nil
     }
@@ -300,9 +467,12 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
-                self?.elapsed = Date.now.timeIntervalSince(startedAt)
+                guard let self else { return }
+                elapsed = Date.now.timeIntervalSince(startedAt)
+                activity = capture.activity
+                liveTranscript = capture.liveTranscript
             }
         }
     }

@@ -7,13 +7,21 @@ import Testing
 @MainActor
 private final class CaptureSpyingStub: AudioCapturing {
     var activity = AudioActivity.silent
+    var liveTranscript = ""
+    var hasMeaningfulAudio = true
     private(set) var starts = 0
     private(set) var stops = 0
+    private(set) var languageIdentifiers: [String] = []
     var startResult: Result<Void, BurritoError> = .success(())
     var stopResult: Result<Void, BurritoError> = .success(())
 
-    func start(files: RecordingFiles, includesMicrophone: Bool) async -> Result<Void, BurritoError> {
+    func start(
+        files: RecordingFiles,
+        includesMicrophone: Bool,
+        languageIdentifier: String
+    ) async -> Result<Void, BurritoError> {
         starts += 1
+        languageIdentifiers.append(languageIdentifier)
         return startResult
     }
 
@@ -131,6 +139,135 @@ struct CoordinatorTests {
         #expect(note.lifecycle == .ready)
         #expect(note.title == "Generated")
         #expect(note.transcriptSegments.count == 2)
+        #expect(fileStore.removeCount.withLock { $0 } == 1)
+    }
+
+    @Test("Continuing a note appends transcript and duration without creating another note")
+    func appendsRecordingToExistingNote() async throws {
+        let context = try makeContext()
+        let existingSegment = TranscriptSegment(
+            source: .system,
+            startTime: 0,
+            duration: 4,
+            text: "Existing text"
+        )
+        let note = Note(
+            lifecycle: .ready,
+            title: "Existing note",
+            markdownBody: "# Existing notes",
+            transcriptSegments: [existingSegment],
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            retainsAudio: false
+        )
+        note.duration = 10
+        context.insert(note)
+        try context.save()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: note.templateSnapshot,
+            languageIdentifier: note.languageIdentifier,
+            includesMicrophone: false,
+            retainsAudio: false
+        )
+
+        await coordinator.start(
+            options: options,
+            destination: .appendToNote(id: note.id),
+            context: context
+        )
+        #expect(coordinator.activeNoteID == note.id)
+        await coordinator.stop(context: context)
+
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 1)
+        #expect(note.transcriptSegments.map(\.text) == ["Existing text", "System text"])
+        #expect(note.transcriptSegments.last?.startTime == 4)
+        #expect(note.duration >= 10)
+        #expect(note.title == "Existing note")
+        #expect(note.markdownBody.hasPrefix("# Existing notes"))
+        #expect(note.markdownBody.contains("# Generated"))
+        #expect(note.lifecycle == .ready)
+    }
+
+    @Test("Recording publishes live transcript and audio activity")
+    func liveRecordingFeedback() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        capture.activity = AudioActivity(system: 0.72, microphone: 0.31)
+        capture.liveTranscript = "A live sentence"
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            includesMicrophone: true,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        try await Task.sleep(for: .milliseconds(120))
+
+        #expect(coordinator.activity == capture.activity)
+        #expect(coordinator.liveTranscript == "A live sentence")
+        #expect(capture.languageIdentifiers == ["en-US"])
+
+        await coordinator.stop(context: context)
+        #expect(coordinator.activity == .silent)
+        #expect(coordinator.liveTranscript.isEmpty)
+    }
+
+    @Test("Silent recordings do not create transcripts or generated notes")
+    func silentRecordingDoesNotGenerateNotes() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        capture.hasMeaningfulAudio = false
+        let fileStore = FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: fileStore,
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            includesMicrophone: false,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.lifecycle == .ready)
+        #expect(note.transcriptSegments.isEmpty)
+        #expect(note.markdownBody.isEmpty)
+        #expect(note.title == "New Recording")
         #expect(fileStore.removeCount.withLock { $0 } == 1)
     }
 

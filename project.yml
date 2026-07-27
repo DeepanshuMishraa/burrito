@@ -32,6 +32,9 @@ targets:
         DEVELOPMENT_TEAM: YY5H9WM46P
     entitlements:
       path: Burrito.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.personal-information.calendars: true
   BurritoTests:
     type: bundle.unit-test
     platform: macOS

@@ -60,7 +60,7 @@ struct ContentView: View {
     @State private var selectedNoteID: UUID?
     @State private var searchText = ""
     @State private var sort: NoteSort = .newest
-    @State private var showingRecordingSetup = false
+    @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
@@ -116,10 +116,6 @@ struct ContentView: View {
                 PermissionGateView(permissions: permissions) {
                     permissionOnboardingCompleted = true
                 }
-            } else if coordinator.captureState.isRecording {
-                RecordingStatusView(coordinator: coordinator) {
-                    Task { await coordinator.stop(context: modelContext) }
-                }
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
@@ -128,19 +124,32 @@ struct ContentView: View {
                     folders: folders,
                     exportAction: { exportMarkdown(selectedNote) },
                     backAction: { selectedNoteID = nil },
-                    newRecordingAction: { showingRecordingSetup = true }
+                    newRecordingAction: {
+                        recordingDestination = .appendToNote(id: selectedNote.id)
+                    }
                 )
+            } else if coordinator.captureState.isRecording {
+                RecordingStatusView(coordinator: coordinator) {
+                    Task { await coordinator.stop(context: modelContext) }
+                }
             } else {
                 home
             }
         }
         .frame(minWidth: 1_020, minHeight: 640)
         .tint(BurritoTheme.accent)
-        .sheet(isPresented: $showingRecordingSetup) {
-            RecordingSetupView(templates: templates) { options in
-                showingRecordingSetup = false
+        .sheet(item: $recordingDestination) { destination in
+            RecordingSetupView(
+                templates: templates,
+                continuingNote: note(for: destination)
+            ) { options in
+                recordingDestination = nil
                 Task {
-                    await coordinator.start(options: options, context: modelContext)
+                    await coordinator.start(
+                        options: options,
+                        destination: destination,
+                        context: modelContext
+                    )
                     selectedNoteID = coordinator.activeNoteID
                 }
             }
@@ -210,7 +219,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
-            showingRecordingSetup = true
+            recordingDestination = .newNote
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoToggleRecording)) { _ in
             toggleRecording()
@@ -405,7 +414,7 @@ struct ContentView: View {
 
                         CalendarCard(
                             calendarAccess: calendarAccess,
-                            startRecording: { showingRecordingSetup = true },
+                            startRecording: { recordingDestination = .newNote },
                             openSettings: openCalendarSettings
                         )
                         .padding(.bottom, 30)
@@ -420,7 +429,7 @@ struct ContentView: View {
                             isTrash: sidebarSelection == .trash,
                             isSearching: !searchText.isEmpty
                         ) {
-                            showingRecordingSetup = true
+                            recordingDestination = .newNote
                         }
                     } else {
                         ForEach(noteDays, id: \.date) { group in
@@ -464,7 +473,7 @@ struct ContentView: View {
                 }
                 .menuStyle(.borderlessButton)
                 Button("New recording", systemImage: "plus") {
-                    showingRecordingSetup = true
+                    recordingDestination = .newNote
                 }
                 .buttonStyle(BurritoActionButtonStyle(prominent: false))
             }
@@ -526,8 +535,15 @@ struct ContentView: View {
         if coordinator.captureState.isRecording {
             Task { await coordinator.stop(context: modelContext) }
         } else {
-            showingRecordingSetup = true
+            recordingDestination = selectedNote.map {
+                .appendToNote(id: $0.id)
+            } ?? .newNote
         }
+    }
+
+    private func note(for destination: RecordingDestination) -> Note? {
+        guard case .appendToNote(let id) = destination else { return nil }
+        return notes.first { $0.id == id }
     }
 
     private func createFolder() {
@@ -761,6 +777,156 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .overlay { Circle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
+    }
+}
+
+private struct BurritoInlineButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(BurritoTheme.softBorder)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct BurritoPopoverPanel<Content: View>: View {
+    var title: String? = nil
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let title {
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+            }
+            VStack(spacing: 3) {
+                content()
+            }
+        }
+        .padding(7)
+        .frame(width: 216)
+        .background(BurritoTheme.raised)
+        .presentationBackground(BurritoTheme.raised)
+    }
+}
+
+private struct BurritoPopoverRow: View {
+    let title: String
+    let systemImage: String
+    var isSelected = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            BurritoPopoverRowLabel(
+                title: title,
+                systemImage: systemImage,
+                isSelected: isSelected,
+                isHovered: isHovered
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+private struct BurritoPopoverRowLabel: View {
+    let title: String
+    let systemImage: String
+    var isSelected = false
+    var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
+                .frame(width: 16)
+            Text(title)
+                .font(.system(size: 12, weight: .regular))
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(BurritoTheme.accent)
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 32)
+        .contentShape(RoundedRectangle(cornerRadius: 7))
+        .background(
+            isHovered ? BurritoTheme.controlFill : Color.clear,
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+    }
+}
+
+private struct BurritoPopoverDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(BurritoTheme.softBorder)
+            .frame(height: 1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+    }
+}
+
+private struct ScrollIndicatorHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> ProbeView {
+        ProbeView()
+    }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.hideIndicators()
+    }
+
+    final class ProbeView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            Task { @MainActor [weak self] in
+                self?.hideIndicators()
+            }
+        }
+
+        func hideIndicators() {
+            var ancestor = superview
+            while let view = ancestor {
+                if let scrollView = view as? NSScrollView {
+                    scrollView.hasVerticalScroller = false
+                    scrollView.hasHorizontalScroller = false
+                    scrollView.autohidesScrollers = true
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
+    }
+}
+
+private extension View {
+    func hidesEnclosingScrollIndicators() -> some View {
+        background {
+            ScrollIndicatorHider()
+                .frame(width: 0, height: 0)
+        }
     }
 }
 
@@ -1326,7 +1492,9 @@ private struct RecordingStatusView: View {
                     .font(.system(size: 16))
                     .foregroundStyle(.tertiary)
                     .padding(.top, 30)
-                Spacer()
+                LiveTranscriptView(text: coordinator.liveTranscript)
+                    .padding(.top, 20)
+                Spacer(minLength: 80)
             }
             .frame(maxWidth: 820, alignment: .leading)
             .padding(.horizontal, 44)
@@ -1334,12 +1502,16 @@ private struct RecordingStatusView: View {
             .padding(.bottom, 130)
             .frame(maxWidth: .infinity)
 
-            ListeningRail(
-                elapsed: coordinator.elapsed,
-                systemLevel: coordinator.activity.system,
-                microphoneLevel: coordinator.activity.microphone,
-                stop: stop
-            )
+            HStack {
+                RecordingControlButton(
+                    isRecording: true,
+                    elapsed: coordinator.elapsed,
+                    systemLevel: coordinator.activity.system,
+                    microphoneLevel: coordinator.activity.microphone,
+                    action: stop
+                )
+                Spacer()
+            }
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
         }
@@ -1347,58 +1519,153 @@ private struct RecordingStatusView: View {
     }
 }
 
-private struct ListeningRail: View {
+private struct RecordingControlButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isRecording: Bool
     let elapsed: TimeInterval
     let systemLevel: Double
     let microphoneLevel: Double
-    let stop: () -> Void
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 12) {
-                HStack(alignment: .center, spacing: 3) {
-                    ForEach(0..<4, id: \.self) { index in
-                        Capsule()
-                            .fill(BurritoTheme.accent)
-                            .frame(
-                                width: 4,
-                                height: 10 + CGFloat(index % 3) * 6
-                                    + CGFloat(max(systemLevel, microphoneLevel) * 8)
-                            )
-                    }
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(BurritoTheme.raised)
+                Circle()
+                    .stroke(
+                        isRecording ? Color.red.opacity(0.68) : BurritoTheme.softBorder,
+                        lineWidth: isRecording ? 2 : 1
+                    )
+                if isRecording {
+                    Circle()
+                        .stroke(Color.red.opacity(0.18), lineWidth: 7)
+                        .scaleEffect(reduceMotion ? 1 : 1.12)
                 }
-                Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
-                    .font(.system(size: 13, design: .monospaced))
-                    .monospacedDigit()
-                Button("Stop", systemImage: "stop.fill", action: stop)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                if isRecording {
+                    HStack(alignment: .center, spacing: 2) {
+                        ForEach(0..<5, id: \.self) { index in
+                            Capsule()
+                                .fill(Color.red)
+                                .frame(width: 3, height: barHeight(at: index))
+                        }
+                    }
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.12),
+                        value: systemLevel
+                    )
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.12),
+                        value: microphoneLevel
+                    )
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(BurritoTheme.accent)
+                }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 58)
-            .background(BurritoTheme.raised, in: Capsule())
-            .overlay { Capsule().stroke(BurritoTheme.softBorder) }
-
-            HStack {
-                Text("Listening to system audio")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Label("Transcribes after stop", systemImage: "text.document")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 22)
-            .frame(height: 58)
-            .background(BurritoTheme.raised, in: Capsule())
-            .overlay { Capsule().stroke(BurritoTheme.softBorder) }
+            .frame(width: 54, height: 54)
+            .contentShape(Circle())
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Recording")
+        .buttonStyle(.plain)
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+        .help(isRecording ? "Stop recording" : "Continue recording")
+        .accessibilityLabel(isRecording ? "Stop recording" : "Continue recording")
         .accessibilityValue(
-            Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond))
+            isRecording
+                ? "Elapsed \(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))"
+                : "Not recording"
         )
+    }
+
+    private func barHeight(at index: Int) -> CGFloat {
+        let level = index.isMultiple(of: 2)
+            ? max(systemLevel, microphoneLevel * 0.7)
+            : max(microphoneLevel, systemLevel * 0.7)
+        let shape = [0.58, 0.86, 1.0, 0.78, 0.52][index]
+        return 6 + CGFloat(level * 22 * shape)
+    }
+}
+
+private struct LiveTranscriptView: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(BurritoTheme.accent)
+                    .frame(width: 7, height: 7)
+                Text("Listening now")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(BurritoTheme.accent)
+            }
+            Text(text.isEmpty ? "Speak or play audio. Words will appear here." : text)
+                .font(.system(size: 15))
+                .foregroundStyle(text.isEmpty ? .tertiary : .primary)
+                .lineSpacing(5)
+                .textSelection(.enabled)
+                .contentTransition(.interpolate)
+                .animation(.smooth(duration: 0.2), value: text)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(BurritoTheme.accent.opacity(0.28))
+        }
+    }
+}
+
+private struct ProcessingRail: View {
+    let stage: ProcessingStage
+    let isContinuation: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(BurritoTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text("Private on this Mac")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 62)
+        .background(BurritoTheme.raised, in: Capsule())
+        .overlay { Capsule().stroke(BurritoTheme.softBorder) }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var title: String {
+        switch stage {
+        case .preparingAudio: "Finishing the recording"
+        case .transcribing: "Preparing the final transcript"
+        case .organizing: isContinuation ? "Adding the continuation" : "Organizing the transcript"
+        case .generatingNotes: isContinuation ? "Writing the new note section" : "Writing your notes"
+        }
+    }
+
+    private var detail: String {
+        switch stage {
+        case .preparingAudio: "Securing the captured audio."
+        case .transcribing: "Checking the live text against the saved audio."
+        case .organizing:
+            isContinuation
+                ? "Keeping the existing note and extending its transcript."
+                : "Combining the captured audio into one transcript."
+        case .generatingNotes: "Applying the selected note style."
+        }
     }
 }
 
@@ -1418,6 +1685,7 @@ private struct ActivityMeter: View {
 private struct RecordingSetupView: View {
     @Environment(\.dismiss) private var dismiss
     let templates: [NoteTemplate]
+    let continuingNote: Note?
     let start: (RecordingOptions) -> Void
 
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
@@ -1433,13 +1701,25 @@ private struct RecordingSetupView: View {
             ?? templates.first
     }
 
+    private var effectiveTemplate: TemplateSnapshot? {
+        continuingNote?.templateSnapshot ?? selectedTemplate?.snapshot
+    }
+
+    private var effectiveLanguage: String {
+        continuingNote?.languageIdentifier ?? language
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("New recording")
+                    Text(continuingNote == nil ? "New recording" : "Continue recording")
                         .font(.system(size: 32, weight: .regular, design: .serif))
-                    Text("How should Burrito shape these notes?")
+                    Text(
+                        continuingNote == nil
+                            ? "How should Burrito shape these notes?"
+                            : "New audio and transcript will be added to this note."
+                    )
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -1449,45 +1729,66 @@ private struct RecordingSetupView: View {
                     .keyboardShortcut(.cancelAction)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                BurritoSectionLabel(title: "Note style")
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 10),
-                        GridItem(.flexible(), spacing: 10)
-                    ],
-                    spacing: 10
-                ) {
-                    ForEach(templates) { template in
-                        TemplateChoiceCard(
-                            template: template,
-                            isSelected: selectedTemplate?.id == template.id
-                        ) {
-                            templateID = template.id
+            if let continuingNote {
+                VStack(alignment: .leading, spacing: 8) {
+                    BurritoSectionLabel(title: "Extending")
+                    Text(continuingNote.title)
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(
+                        "\(continuingNote.templateSnapshot.name) · \(continuingNote.languageIdentifier)"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    BurritoSectionLabel(title: "Note style")
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)
+                        ],
+                        spacing: 10
+                    ) {
+                        ForEach(templates) { template in
+                            TemplateChoiceCard(
+                                template: template,
+                                isSelected: selectedTemplate?.id == template.id
+                            ) {
+                                templateID = template.id
+                            }
                         }
                     }
                 }
             }
 
             VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 9) {
-                    BurritoSectionLabel(title: "Language")
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3),
-                        spacing: 8
-                    ) {
-                        ForEach(languageOptions, id: \.identifier) { option in
-                            BurritoChoiceButton(
-                                title: option.title,
-                                isSelected: language == option.identifier
-                            ) {
-                                language = option.identifier
+                if continuingNote == nil {
+                    VStack(alignment: .leading, spacing: 9) {
+                        BurritoSectionLabel(title: "Language")
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.flexible(), spacing: 8),
+                                count: 3
+                            ),
+                            spacing: 8
+                        ) {
+                            ForEach(languageOptions, id: \.identifier) { option in
+                                BurritoChoiceButton(
+                                    title: option.title,
+                                    isSelected: language == option.identifier
+                                ) {
+                                    language = option.identifier
+                                }
                             }
                         }
                     }
+                    .padding(14)
+                    Divider().padding(.leading, 12)
                 }
-                .padding(14)
-                Divider().padding(.leading, 12)
                 BurritoToggleRow(
                     title: "Include microphone",
                     subtitle: "Capture your voice as a separate track",
@@ -1503,24 +1804,26 @@ private struct RecordingSetupView: View {
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
 
             HStack {
-                Button("Template details", systemImage: "text.document") {
-                    showingTemplateDetails = true
+                if continuingNote == nil {
+                    Button("Template details", systemImage: "text.document") {
+                        showingTemplateDetails = true
+                    }
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
                 }
-                .buttonStyle(BurritoActionButtonStyle(prominent: false))
                 Spacer()
                 Button("Start recording", systemImage: "waveform") {
-                    guard let selectedTemplate else { return }
+                    guard let effectiveTemplate else { return }
                     start(
                         RecordingOptions(
-                            template: selectedTemplate.snapshot,
-                            languageIdentifier: language,
+                            template: effectiveTemplate,
+                            languageIdentifier: effectiveLanguage,
                             includesMicrophone: includesMicrophone,
                             retainsAudio: retainsAudio
                         )
                     )
                 }
                 .buttonStyle(BurritoActionButtonStyle(prominent: true))
-                .disabled(selectedTemplate == nil)
+                .disabled(effectiveTemplate == nil)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -1802,6 +2105,125 @@ private struct TemplatePromptCard: View {
     }
 }
 
+private struct MarkdownNoteContent: View {
+    let markdown: String
+
+    private var document: MarkdownDocument {
+        MarkdownDocument.parse(markdown)
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 16) {
+            ForEach(Array(document.blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: MarkdownDocument.Block) -> some View {
+        switch block {
+        case .heading(let level, let text):
+            inlineText(text)
+                .font(headingFont(level: level))
+                .foregroundStyle(.primary)
+                .padding(.top, level == 1 ? 6 : 10)
+        case .paragraph(let text):
+            inlineText(text)
+                .font(.system(size: 15))
+                .foregroundStyle(.primary.opacity(0.88))
+                .lineSpacing(5)
+        case .unorderedList(let items):
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 11) {
+                        Circle()
+                            .fill(BurritoTheme.accent)
+                            .frame(width: 5, height: 5)
+                        inlineText(item)
+                            .font(.system(size: 15))
+                            .lineSpacing(4)
+                    }
+                }
+            }
+            .padding(.leading, 4)
+        case .orderedList(let items):
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 11) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .frame(width: 21, height: 21)
+                            .background(BurritoTheme.accentSoft, in: Circle())
+                        inlineText(item)
+                            .font(.system(size: 15))
+                            .lineSpacing(4)
+                    }
+                }
+            }
+        case .quote(let text):
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(BurritoTheme.accent)
+                    .frame(width: 3)
+                inlineText(text)
+                    .font(.system(size: 15, design: .serif).italic())
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(4)
+                    .padding(.vertical, 8)
+            }
+            .padding(.horizontal, 14)
+            .background(BurritoTheme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+        case .code(let text):
+            ScrollView(.horizontal) {
+                Text(text)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(.primary.opacity(0.82))
+                    .textSelection(.enabled)
+                    .padding(16)
+            }
+            .scrollIndicators(.hidden)
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(BurritoTheme.softBorder)
+            }
+        case .divider:
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+                .padding(.vertical, 8)
+        }
+    }
+
+    private func inlineText(_ source: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace
+        )
+        if let attributed = try? AttributedString(
+            markdown: source,
+            options: options
+        ) {
+            return Text(attributed)
+        }
+        return Text(source)
+    }
+
+    private func headingFont(level: Int) -> Font {
+        switch level {
+        case 1:
+            .system(size: 28, weight: .semibold, design: .serif)
+        case 2:
+            .system(size: 21, weight: .semibold, design: .serif)
+        default:
+            .system(size: 16, weight: .semibold)
+        }
+    }
+}
+
 private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
@@ -1814,7 +2236,12 @@ private struct NoteDetailView: View {
     let newRecordingAction: () -> Void
 
     @State private var selectedTab = 0
+    @State private var isEditingMarkdown = false
+    @State private var showingFolderPopover = false
+    @State private var showingMorePopover = false
     @State private var confirmingRegeneration = false
+    @State private var didCopyNotes = false
+    @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var player: AVAudioPlayer?
 
     var body: some View {
@@ -1838,25 +2265,42 @@ private struct NoteDetailView: View {
                         title: note.templateSnapshot.name,
                         systemImage: note.templateSnapshot.symbol
                     )
-                    Menu {
-                        Button("No Folder") { note.folder = nil }
-                        Divider()
-                        ForEach(folders) { folder in
-                            Button {
-                                note.folder = folder
-                            } label: {
-                                if note.folder?.id == folder.id {
-                                    Label(folder.name, systemImage: "checkmark")
-                                } else {
-                                    Text(folder.name)
+                    BurritoInlineButton(
+                        title: note.folder?.name ?? "Add to folder",
+                        systemImage: "folder"
+                    ) {
+                        showingFolderPopover.toggle()
+                    }
+                    .popover(
+                        isPresented: $showingFolderPopover,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        BurritoPopoverPanel(title: "Move to folder") {
+                            BurritoPopoverRow(
+                                title: "No folder",
+                                systemImage: "tray",
+                                isSelected: note.folder == nil
+                            ) {
+                                note.folder = nil
+                                showingFolderPopover = false
+                            }
+                            ForEach(folders) { folder in
+                                BurritoPopoverRow(
+                                    title: folder.name,
+                                    systemImage: "folder",
+                                    isSelected: note.folder?.id == folder.id
+                                ) {
+                                    note.folder = folder
+                                    showingFolderPopover = false
                                 }
                             }
                         }
-                    } label: {
-                        Label(note.folder?.name ?? "Add to folder", systemImage: "folder")
                     }
-                    .menuStyle(.borderlessButton)
-                    Button("Generate again", systemImage: "arrow.clockwise") {
+                    BurritoInlineButton(
+                        title: "Generate again",
+                        systemImage: "arrow.clockwise"
+                    ) {
                         requestRegeneration()
                     }
                     .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
@@ -1869,6 +2313,17 @@ private struct NoteDetailView: View {
                     EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
                         selectedTab = 1
                     }
+                    Spacer()
+                    if selectedTab == 0, !isRecordingThisNote {
+                        BurritoInlineButton(
+                            title: isEditingMarkdown ? "Done" : "Edit",
+                            systemImage: isEditingMarkdown ? "checkmark" : "pencil"
+                        ) {
+                            withAnimation(.smooth(duration: 0.2)) {
+                                isEditingMarkdown.toggle()
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: 820, alignment: .leading)
@@ -1876,17 +2331,43 @@ private struct NoteDetailView: View {
             .padding(.top, 72)
             .frame(maxWidth: .infinity)
 
-            if let stage = note.processingStage {
-                ProcessingView(stage: stage)
-            } else if selectedTab == 0 {
-                TextEditor(text: notesBinding)
-                    .font(.system(size: 15))
-                    .scrollContentBackground(.hidden)
-                    .lineSpacing(5)
-                    .frame(maxWidth: 820)
+            if isRecordingThisNote {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        if !note.markdownBody.isEmpty {
+                            MarkdownNoteContent(markdown: note.markdownBody)
+                        }
+                        LiveTranscriptView(text: coordinator.liveTranscript)
+                    }
+                    .frame(maxWidth: 820, alignment: .leading)
                     .padding(.horizontal, 44)
-                    .padding(.vertical, 24)
-                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .hidesEnclosingScrollIndicators()
+                }
+                .defaultScrollAnchor(.bottom)
+                .scrollIndicators(.hidden)
+            } else if selectedTab == 0 {
+                if isEditingMarkdown {
+                    TextEditor(text: notesBinding)
+                        .font(.system(size: 14, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .lineSpacing(5)
+                        .frame(maxWidth: 820)
+                        .padding(.horizontal, 44)
+                        .padding(.vertical, 24)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                } else {
+                    ScrollView {
+                        MarkdownNoteContent(markdown: note.markdownBody)
+                            .frame(maxWidth: 820, alignment: .leading)
+                            .padding(.horizontal, 44)
+                            .padding(.vertical, 30)
+                            .hidesEnclosingScrollIndicators()
+                    }
+                    .scrollIndicators(.hidden)
+                    .transition(.opacity)
+                }
             } else {
                 TranscriptEditor(note: note)
             }
@@ -1902,36 +2383,72 @@ private struct NoteDetailView: View {
                 .buttonStyle(BurritoIconButtonStyle())
                 .accessibilityHint("Returns to the notes library")
                 Spacer()
-                Button("Favorite", systemImage: note.isFavorite ? "star.fill" : "star") {
-                    note.isFavorite.toggle()
+                Button {
+                    copyMarkdown()
+                } label: {
+                    Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
+                        .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
                 }
-                .labelStyle(.iconOnly)
                 .buttonStyle(BurritoIconButtonStyle())
-                Menu("More", systemImage: "ellipsis.circle") {
-                    Button("Copy Markdown", systemImage: "doc.on.doc") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(note.markdownBody, forType: .string)
-                    }
-                    Button("Export Markdown…", systemImage: "square.and.arrow.up") {
-                        exportAction()
-                    }
-                    ShareLink(item: note.markdownBody) {
-                        Label("Share…", systemImage: "square.and.arrow.up")
-                    }
-                    Divider()
-                    if let path = note.systemAudioRelativePath {
-                        Button("Play System Audio", systemImage: "play.fill") {
-                            play(fileStore.url(forRelativePath: path))
+                .accessibilityLabel(didCopyNotes ? "Notes copied" : "Copy notes")
+                .help(didCopyNotes ? "Copied" : "Copy notes")
+                Button {
+                    exportAction()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(BurritoIconButtonStyle())
+                .accessibilityLabel("Export Markdown")
+                .help("Export Markdown")
+                Button {
+                    showingMorePopover.toggle()
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .rotationEffect(.degrees(90))
+                }
+                .buttonStyle(BurritoIconButtonStyle())
+                .accessibilityLabel("More actions")
+                .popover(
+                    isPresented: $showingMorePopover,
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
+                    BurritoPopoverPanel {
+                        ShareLink(item: note.markdownBody) {
+                            BurritoPopoverRowLabel(
+                                title: "Share",
+                                systemImage: "paperplane"
+                            )
                         }
-                    }
-                    if let path = note.microphoneAudioRelativePath {
-                        Button("Play Microphone Audio", systemImage: "mic.fill") {
-                            play(fileStore.url(forRelativePath: path))
+                        .buttonStyle(.plain)
+                        if let path = note.systemAudioRelativePath {
+                            BurritoPopoverDivider()
+                            BurritoPopoverRow(
+                                title: "Play system audio",
+                                systemImage: "play.fill"
+                            ) {
+                                play(fileStore.url(forRelativePath: path))
+                                showingMorePopover = false
+                            }
                         }
-                    }
-                    if player?.isPlaying == true {
-                        Button("Stop Audio", systemImage: "stop.fill") {
-                            player?.stop()
+                        if let path = note.microphoneAudioRelativePath {
+                            BurritoPopoverRow(
+                                title: "Play microphone",
+                                systemImage: "mic.fill"
+                            ) {
+                                play(fileStore.url(forRelativePath: path))
+                                showingMorePopover = false
+                            }
+                        }
+                        if player?.isPlaying == true {
+                            BurritoPopoverRow(
+                                title: "Stop audio",
+                                systemImage: "stop.fill"
+                            ) {
+                                player?.stop()
+                                showingMorePopover = false
+                            }
                         }
                     }
                 }
@@ -1940,31 +2457,51 @@ private struct NoteDetailView: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
-                if note.notesMayBeOutdated {
+                if isRecordingThisNote {
                     HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(BurritoTheme.accent)
-                        Text("The transcript changed. Generated notes may be outdated.")
-                        Spacer()
-                        Button("Regenerate") {
-                            requestRegeneration()
+                        RecordingControlButton(
+                            isRecording: true,
+                            elapsed: coordinator.elapsed,
+                            systemLevel: coordinator.activity.system,
+                            microphoneLevel: coordinator.activity.microphone
+                        ) {
+                            Task { await coordinator.stop(context: modelContext) }
                         }
+                        Spacer()
                     }
-                    .font(.callout)
-                    .padding(.horizontal, 18)
-                    .frame(height: 44)
-                    .background(BurritoTheme.accentSoft, in: Capsule())
-                }
+                } else if let stage = note.processingStage {
+                    ProcessingRail(
+                        stage: stage,
+                        isContinuation: !note.markdownBody.isEmpty
+                    )
+                } else {
+                    if note.notesMayBeOutdated {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(BurritoTheme.accent)
+                            Text("The transcript changed. Generated notes may be outdated.")
+                            Spacer()
+                            Button("Regenerate") {
+                                requestRegeneration()
+                            }
+                        }
+                        .font(.callout)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                        .background(BurritoTheme.accentSoft, in: Capsule())
+                    }
 
-                ReadyRail(
-                    hasAudio: note.systemAudioRelativePath != nil || note.microphoneAudioRelativePath != nil,
-                    newRecording: newRecordingAction,
-                    copy: {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(note.markdownBody, forType: .string)
-                    },
-                    export: exportAction
-                )
+                    HStack {
+                        RecordingControlButton(
+                            isRecording: false,
+                            elapsed: 0,
+                            systemLevel: 0,
+                            microphoneLevel: 0,
+                            action: newRecordingAction
+                        )
+                        Spacer()
+                    }
+                }
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
@@ -1986,6 +2523,10 @@ private struct NoteDetailView: View {
                 }
             }
         }
+    }
+
+    private var isRecordingThisNote: Bool {
+        coordinator.captureState.isRecording && coordinator.activeNoteID == note.id
     }
 
     private var titleBinding: Binding<String> {
@@ -2019,6 +2560,24 @@ private struct NoteDetailView: View {
         }
     }
 
+    private func copyMarkdown() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(note.markdownBody, forType: .string)
+        copyFeedbackTask?.cancel()
+        withAnimation(.smooth(duration: 0.18)) {
+            didCopyNotes = true
+        }
+        copyFeedbackTask = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.smooth(duration: 0.18)) {
+                    didCopyNotes = false
+                }
+            }
+        }
+    }
+
     private func requestRegeneration() {
         if note.userEditedNotes {
             confirmingRegeneration = true
@@ -2033,48 +2592,6 @@ private struct NoteDetailView: View {
             player?.play()
         } catch {
             NSSound.beep()
-        }
-    }
-}
-
-private struct ReadyRail: View {
-    let hasAudio: Bool
-    let newRecording: () -> Void
-    let copy: () -> Void
-    let export: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(action: newRecording) {
-                HStack(spacing: 9) {
-                    Image(systemName: "waveform")
-                        .foregroundStyle(BurritoTheme.accent)
-                    Text("New recording")
-                }
-                .padding(.horizontal, 18)
-                .frame(height: 58)
-            }
-            .buttonStyle(.plain)
-            .background(BurritoTheme.raised, in: Capsule())
-            .overlay { Capsule().stroke(BurritoTheme.softBorder) }
-
-            HStack(spacing: 16) {
-                Label(
-                    hasAudio ? "Audio kept locally" : "Transcript saved locally",
-                    systemImage: hasAudio ? "waveform" : "lock"
-                )
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                Spacer()
-                Button("Copy notes", systemImage: "doc.on.doc", action: copy)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
-                Button("Export", systemImage: "square.and.arrow.up", action: export)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
-            }
-            .padding(.horizontal, 20)
-            .frame(height: 58)
-            .background(BurritoTheme.raised, in: Capsule())
-            .overlay { Capsule().stroke(BurritoTheme.softBorder) }
         }
     }
 }
@@ -2207,93 +2724,115 @@ private struct TemplateEditorView: View {
     }
 }
 
-private struct ProcessingView: View {
-    let stage: ProcessingStage
-
-    private var stageIndex: Int {
-        ProcessingStage.allCases.firstIndex(of: stage) ?? 0
-    }
-
-    var body: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(BurritoTheme.accentSoft)
-                    .frame(width: 76, height: 76)
-                Image(systemName: "text.document")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(BurritoTheme.accent)
-            }
-            VStack(spacing: 6) {
-                Text(stage.rawValue)
-                    .font(.system(size: 24, weight: .semibold))
-                Text("Working privately on this Mac.")
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 7) {
-                ForEach(Array(ProcessingStage.allCases.enumerated()), id: \.element) { index, value in
-                    VStack(spacing: 7) {
-                        Capsule()
-                            .fill(index <= stageIndex ? BurritoTheme.accent : BurritoTheme.controlFill)
-                            .frame(width: 58, height: 4)
-                        Text(shortName(for: value))
-                            .font(.caption2)
-                            .foregroundStyle(index == stageIndex ? .primary : .tertiary)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func shortName(for stage: ProcessingStage) -> String {
-        switch stage {
-        case .preparingAudio: "Prepare"
-        case .transcribing: "Transcribe"
-        case .organizing: "Organize"
-        case .generatingNotes: "Write"
-        }
-    }
-}
-
 private struct TranscriptEditor: View {
     @Bindable var note: Note
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(note.transcriptSegments) { segment in
-                    HStack(alignment: .top, spacing: 16) {
-                        VStack(alignment: .trailing, spacing: 5) {
-                            Text(Duration.seconds(segment.startTime).formatted(.time(pattern: .minuteSecond)))
-                                .monospacedDigit()
-                            Text(segment.source.rawValue)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(BurritoTheme.controlFill, in: Capsule())
-                        }
+            if note.transcriptSegments.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "text.bubble")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.tertiary)
+                    Text("No transcript yet")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("Recorded speech will appear here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(width: 92, alignment: .trailing)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(
+                        Array(note.transcriptSegments.enumerated()),
+                        id: \.element.id
+                    ) { index, segment in
+                        HStack(alignment: .top, spacing: 14) {
+                            VStack(spacing: 7) {
+                                ZStack {
+                                    Circle()
+                                        .fill(sourceTint(for: segment.source).opacity(0.16))
+                                    Image(systemName: sourceIcon(for: segment.source))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(sourceTint(for: segment.source))
+                                }
+                                .frame(width: 32, height: 32)
+                                if index < note.transcriptSegments.count - 1 {
+                                    Rectangle()
+                                        .fill(BurritoTheme.softBorder)
+                                        .frame(width: 1)
+                                        .frame(maxHeight: .infinity)
+                                }
+                            }
 
-                        TextField("Transcript segment", text: binding(for: segment.id), axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 14))
-                            .lineSpacing(4)
-                            .lineLimit(1...8)
-                    }
-                    .padding(.vertical, 14)
-                    if segment.id != note.transcriptSegments.last?.id {
-                        Divider().padding(.leading, 108)
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text(sourceTitle(for: segment.source))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(sourceTint(for: segment.source))
+                                    Spacer()
+                                    Text(
+                                        Duration.seconds(segment.startTime)
+                                            .formatted(.time(pattern: .minuteSecond))
+                                    )
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.tertiary)
+                                }
+
+                                TextField(
+                                    "Transcript segment",
+                                    text: binding(for: segment.id),
+                                    axis: .vertical
+                                )
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 14))
+                                .lineSpacing(4)
+                                .lineLimit(1...10)
+                            }
+                            .padding(15)
+                            .background(
+                                BurritoTheme.raised.opacity(0.62),
+                                in: RoundedRectangle(cornerRadius: 13)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 13)
+                                    .stroke(BurritoTheme.softBorder)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: 760)
+                .padding(.horizontal, 44)
+                .padding(.vertical, 26)
+                .frame(maxWidth: .infinity)
+                .hidesEnclosingScrollIndicators()
             }
-            .frame(maxWidth: BurritoTheme.editorWidth)
-            .padding(.horizontal, 30)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
         }
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+    }
+
+    private func sourceIcon(for source: AudioSource) -> String {
+        switch source {
+        case .system: "speaker.wave.2.fill"
+        case .microphone: "mic.fill"
+        }
+    }
+
+    private func sourceTitle(for source: AudioSource) -> String {
+        switch source {
+        case .system: "System audio"
+        case .microphone: "Microphone"
+        }
+    }
+
+    private func sourceTint(for source: AudioSource) -> Color {
+        switch source {
+        case .system: BurritoTheme.accent
+        case .microphone: BurritoTheme.sage
+        }
     }
 
     private func binding(for id: UUID) -> Binding<String> {
