@@ -12,21 +12,6 @@ private enum SidebarSelection: Hashable {
     case folder(UUID)
 }
 
-private enum NoteSort: String, CaseIterable, Identifiable {
-    case newest
-    case oldest
-    case title
-
-    var id: Self { self }
-    var label: String {
-        switch self {
-        case .newest: "Newest"
-        case .oldest: "Oldest"
-        case .title: "Title"
-        }
-    }
-}
-
 private struct MacUserProfile {
     let name: String
     let image: NSImage?
@@ -59,7 +44,6 @@ struct ContentView: View {
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
     @State private var searchText = ""
-    @State private var sort: NoteSort = .newest
     @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
@@ -91,13 +75,7 @@ struct ContentView: View {
             return isInSection && matchesSearch
         }
 
-        return filtered.sorted {
-            switch sort {
-            case .newest: $0.updatedAt > $1.updatedAt
-            case .oldest: $0.updatedAt < $1.updatedAt
-            case .title: $0.title.localizedStandardCompare($1.title) == .orderedAscending
-            }
-        }
+        return filtered.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     private var noteDays: [(date: Date, notes: [Note])] {
@@ -257,22 +235,18 @@ struct ContentView: View {
             value: isSidebarVisible
         )
         .background(BurritoTheme.canvas)
+        .overlay(alignment: .topLeading) {
+            SidebarToggleButton(isExpanded: isSidebarVisible) {
+                isSidebarVisible.toggle()
+            }
+            .padding(.leading, 92)
+            .offset(y: -24)
+        }
     }
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button {
-                    isSidebarVisible = false
-                } label: {
-                    Image(systemName: "sidebar.left")
-                }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("Hide sidebar")
-            }
-            .frame(height: 52)
-            .padding(.horizontal, 12)
+            Color.clear.frame(height: 52)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -359,7 +333,9 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 8)
+                .hidesEnclosingScrollIndicators()
             }
+            .scrollIndicators(.hidden)
 
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
@@ -367,13 +343,8 @@ struct ContentView: View {
                         showingNewFolder = true
                     }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(BurritoIconButtonStyle())
+                    .buttonStyle(SidebarUtilityButtonStyle())
                     .accessibilityLabel("New folder")
-                    SettingsLink {
-                        Image(systemName: "gearshape")
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel("Settings")
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -392,9 +363,6 @@ struct ContentView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                     Spacer()
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
                 }
                 .padding(12)
             }
@@ -439,12 +407,12 @@ struct ContentView: View {
                                 .padding(.top, 20)
                                 .padding(.bottom, 8)
                             ForEach(group.notes) { note in
-                                Button {
+                                TimelineNoteItem(
+                                    note: note,
+                                    folders: folders
+                                ) {
                                     selectedNoteID = note.id
-                                } label: {
-                                    TimelineNoteRow(note: note)
                                 }
-                                .buttonStyle(.plain)
                                 .draggable(note.id.uuidString)
                                 .contextMenu {
                                     noteContextMenu(note)
@@ -458,40 +426,16 @@ struct ContentView: View {
                 .padding(.top, 72)
                 .padding(.bottom, 100)
                 .frame(maxWidth: .infinity)
+                .hidesEnclosingScrollIndicators()
             }
+            .scrollIndicators(.hidden)
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 10) {
-                Menu {
-                    Picker("Sort", selection: $sort) {
-                        ForEach(NoteSort.allCases) { value in
-                            Text(value.label).tag(value)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down")
-                }
-                .menuStyle(.borderlessButton)
-                Button("New recording", systemImage: "plus") {
-                    recordingDestination = .newNote
-                }
-                .buttonStyle(BurritoActionButtonStyle(prominent: false))
+            Button("New recording", systemImage: "plus") {
+                recordingDestination = .newNote
             }
+            .buttonStyle(BurritoActionButtonStyle(prominent: false))
             .padding(14)
-        }
-        .overlay(alignment: .topLeading) {
-            if !isSidebarVisible {
-                Button {
-                    isSidebarVisible = true
-                } label: {
-                    Image(systemName: "sidebar.right")
-                }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("Show sidebar")
-                .padding(.leading, 100)
-                .padding(.top, 14)
-                .transition(.opacity)
-            }
         }
         .background(BurritoTheme.canvas)
     }
@@ -780,6 +724,45 @@ private struct BurritoIconButtonStyle: ButtonStyle {
     }
 }
 
+private struct SidebarToggleButton: View {
+    let isExpanded: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isHovered ? .primary : .secondary)
+                .frame(width: 30, height: 30)
+                .background(
+                    isHovered ? BurritoTheme.controlFill : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 7)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .help(isExpanded ? "Hide sidebar" : "Show sidebar")
+        .accessibilityLabel(isExpanded ? "Hide sidebar" : "Show sidebar")
+    }
+}
+
+private struct SidebarUtilityButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: 30, height: 30)
+            .background(
+                configuration.isPressed ? BurritoTheme.controlFill : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .opacity(configuration.isPressed ? 0.68 : 1)
+    }
+}
+
 private struct BurritoInlineButton: View {
     let title: String
     let systemImage: String
@@ -830,6 +813,7 @@ private struct BurritoPopoverRow: View {
     let title: String
     let systemImage: String
     var isSelected = false
+    var tint: Color? = nil
     let action: () -> Void
 
     @State private var isHovered = false
@@ -840,7 +824,8 @@ private struct BurritoPopoverRow: View {
                 title: title,
                 systemImage: systemImage,
                 isSelected: isSelected,
-                isHovered: isHovered
+                isHovered: isHovered,
+                tint: tint
             )
         }
         .buttonStyle(.plain)
@@ -853,15 +838,17 @@ private struct BurritoPopoverRowLabel: View {
     let systemImage: String
     var isSelected = false
     var isHovered = false
+    var tint: Color? = nil
 
     var body: some View {
         HStack(spacing: 9) {
             Image(systemName: systemImage)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
+                .foregroundStyle(tint ?? (isSelected ? BurritoTheme.accent : Color.secondary))
                 .frame(width: 16)
             Text(title)
                 .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(tint ?? Color.primary)
             Spacer()
             if isSelected {
                 Image(systemName: "checkmark")
@@ -899,24 +886,70 @@ private struct ScrollIndicatorHider: NSViewRepresentable {
     }
 
     final class ProbeView: NSView {
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            scheduleIndicatorUpdate()
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            Task { @MainActor [weak self] in
-                self?.hideIndicators()
-            }
+            scheduleIndicatorUpdate()
+        }
+
+        override func layout() {
+            super.layout()
+            hideIndicators()
         }
 
         func hideIndicators() {
+            if let contentView = window?.contentView {
+                hideIndicators(in: contentView)
+                return
+            }
+
             var ancestor = superview
             while let view = ancestor {
                 if let scrollView = view as? NSScrollView {
-                    scrollView.hasVerticalScroller = false
-                    scrollView.hasHorizontalScroller = false
-                    scrollView.autohidesScrollers = true
+                    configure(scrollView)
                     return
                 }
                 ancestor = view.superview
             }
+        }
+
+        private func scheduleIndicatorUpdate() {
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                self?.hideIndicators()
+                try? await Task.sleep(for: .milliseconds(100))
+                self?.hideIndicators()
+                try? await Task.sleep(for: .milliseconds(500))
+                self?.hideIndicators()
+            }
+        }
+
+        private func hideIndicators(in view: NSView) {
+            if let scrollView = view as? NSScrollView {
+                configure(scrollView)
+            }
+            for subview in view.subviews {
+                hideIndicators(in: subview)
+            }
+        }
+
+        private func configure(_ scrollView: NSScrollView) {
+            scrollView.scrollerStyle = .overlay
+            scrollView.verticalScroller?.alphaValue = 0
+            scrollView.verticalScroller?.isHidden = true
+            scrollView.horizontalScroller?.alphaValue = 0
+            scrollView.horizontalScroller?.isHidden = true
+            if scrollView.hasVerticalScroller {
+                scrollView.hasVerticalScroller = false
+            }
+            if scrollView.hasHorizontalScroller {
+                scrollView.hasHorizontalScroller = false
+            }
+            scrollView.autohidesScrollers = true
         }
     }
 }
@@ -1284,6 +1317,134 @@ private struct TimelineNoteRow: View {
         .padding(.horizontal, 10)
         .frame(height: 58)
         .contentShape(Rectangle())
+    }
+}
+
+private struct TimelineNoteItem: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let note: Note
+    let folders: [Folder]
+    let open: () -> Void
+
+    @State private var isHovered = false
+    @State private var showingActions = false
+    @State private var showingFolders = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Button(action: open) {
+                TimelineNoteRow(note: note)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showingActions.toggle()
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isHovered || showingActions ? .primary : .tertiary)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        showingActions ? BurritoTheme.controlFill : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 7)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Note actions")
+            .accessibilityLabel("Actions for \(note.title)")
+            .popover(
+                isPresented: $showingActions,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                noteActionsPopover
+            }
+        }
+        .padding(.trailing, 4)
+        .background(
+            isHovered ? BurritoTheme.controlFill.opacity(0.42) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 9)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .onChange(of: showingActions) { _, isPresented in
+            if !isPresented {
+                showingFolders = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var noteActionsPopover: some View {
+        if showingFolders {
+            BurritoPopoverPanel(title: "Add to folder") {
+                BurritoPopoverRow(title: "Back", systemImage: "chevron.left") {
+                    showingFolders = false
+                }
+                BurritoPopoverDivider()
+                BurritoPopoverRow(
+                    title: "No folder",
+                    systemImage: "tray",
+                    isSelected: note.folder == nil
+                ) {
+                    note.folder = nil
+                    showingActions = false
+                }
+                ForEach(folders) { folder in
+                    BurritoPopoverRow(
+                        title: folder.name,
+                        systemImage: "folder",
+                        isSelected: note.folder?.id == folder.id
+                    ) {
+                        note.folder = folder
+                        showingActions = false
+                    }
+                }
+            }
+        } else if note.deletedAt == nil {
+            BurritoPopoverPanel {
+                BurritoPopoverRow(
+                    title: note.isFavorite ? "Remove from favorites" : "Add to favorites",
+                    systemImage: note.isFavorite ? "star.slash" : "star"
+                ) {
+                    note.isFavorite.toggle()
+                    showingActions = false
+                }
+                BurritoPopoverRow(
+                    title: note.folder == nil ? "Add to folder" : "Change folder",
+                    systemImage: "folder"
+                ) {
+                    showingFolders = true
+                }
+                BurritoPopoverDivider()
+                BurritoPopoverRow(
+                    title: "Move to trash",
+                    systemImage: "trash",
+                    tint: .red
+                ) {
+                    note.deletedAt = .now
+                    showingActions = false
+                }
+            }
+        } else {
+            BurritoPopoverPanel {
+                BurritoPopoverRow(title: "Restore note", systemImage: "arrow.uturn.backward") {
+                    note.deletedAt = nil
+                    showingActions = false
+                }
+                BurritoPopoverDivider()
+                BurritoPopoverRow(
+                    title: "Delete permanently",
+                    systemImage: "trash",
+                    tint: .red
+                ) {
+                    modelContext.delete(note)
+                    showingActions = false
+                }
+            }
+        }
     }
 }
 
