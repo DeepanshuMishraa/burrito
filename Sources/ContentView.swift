@@ -1527,48 +1527,39 @@ private struct RecordingControlButton: View {
     let microphoneLevel: Double
     let action: () -> Void
 
+    @State private var isHovered = false
+    @State private var readyPulse = false
+
     var body: some View {
         Button(action: action) {
             ZStack {
-                Circle()
-                    .fill(BurritoTheme.raised)
-                Circle()
-                    .stroke(
-                        isRecording ? Color.red.opacity(0.68) : BurritoTheme.softBorder,
-                        lineWidth: isRecording ? 2 : 1
-                    )
                 if isRecording {
-                    Circle()
-                        .stroke(Color.red.opacity(0.18), lineWidth: 7)
-                        .scaleEffect(reduceMotion ? 1 : 1.12)
-                }
-                if isRecording {
-                    HStack(alignment: .center, spacing: 2) {
-                        ForEach(0..<5, id: \.self) { index in
-                            Capsule()
-                                .fill(Color.red)
-                                .frame(width: 3, height: barHeight(at: index))
-                        }
-                    }
-                    .animation(
-                        reduceMotion ? nil : .smooth(duration: 0.12),
-                        value: systemLevel
-                    )
-                    .animation(
-                        reduceMotion ? nil : .smooth(duration: 0.12),
-                        value: microphoneLevel
-                    )
+                    activeControl
+                        .transition(.scale(scale: 0.72).combined(with: .opacity))
                 } else {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(BurritoTheme.accent)
+                    readyControl
+                        .transition(.scale(scale: 0.72).combined(with: .opacity))
                 }
             }
-            .frame(width: 54, height: 54)
+            .frame(width: 64, height: 64)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
+        .scaleEffect(isHovered ? 1.04 : 1)
+        .shadow(
+            color: isRecording
+                ? Color.red.opacity(isHovered ? 0.28 : 0.18)
+                : Color.black.opacity(isHovered ? 0.16 : 0.10),
+            radius: isHovered ? 16 : 11,
+            y: isHovered ? 7 : 4
+        )
+        .animation(.smooth(duration: 0.18), value: isHovered)
+        .animation(.spring(response: 0.36, dampingFraction: 0.76), value: isRecording)
+        .onHover { isHovered = $0 }
+        .onAppear {
+            guard !reduceMotion else { return }
+            readyPulse = true
+        }
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .help(isRecording ? "Stop recording" : "Continue recording")
         .accessibilityLabel(isRecording ? "Stop recording" : "Continue recording")
@@ -1579,12 +1570,114 @@ private struct RecordingControlButton: View {
         )
     }
 
-    private func barHeight(at index: Int) -> CGFloat {
-        let level = index.isMultiple(of: 2)
-            ? max(systemLevel, microphoneLevel * 0.7)
-            : max(microphoneLevel, systemLevel * 0.7)
-        let shape = [0.58, 0.86, 1.0, 0.78, 0.52][index]
-        return 6 + CGFloat(level * 22 * shape)
+    private var readyControl: some View {
+        ZStack {
+            Circle()
+                .fill(BurritoTheme.accent.opacity(0.13))
+                .frame(width: 58, height: 58)
+                .scaleEffect(readyPulse ? 1.08 : 0.96)
+                .opacity(readyPulse ? 0.25 : 0.68)
+                .animation(
+                    .easeInOut(duration: 1.8).repeatForever(autoreverses: true),
+                    value: readyPulse
+                )
+
+            Circle()
+                .fill(BurritoTheme.raised)
+                .frame(width: 54, height: 54)
+                .overlay {
+                    Circle().stroke(BurritoTheme.softBorder)
+                }
+
+            Circle()
+                .fill(BurritoTheme.accentSoft.opacity(isHovered ? 1 : 0.72))
+                .frame(width: 38, height: 38)
+
+            HStack(alignment: .center, spacing: 2.5) {
+                ForEach(0..<5, id: \.self) { index in
+                    Capsule()
+                        .fill(BurritoTheme.accent)
+                        .frame(
+                            width: 2.5,
+                            height: readyBarHeight(at: index)
+                        )
+                }
+            }
+        }
+    }
+
+    private var activeControl: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: 1 / 30,
+                paused: reduceMotion
+            )
+        ) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate
+            ZStack {
+                Circle()
+                    .fill(Color.red.opacity(0.12 + (audioEnergy * 0.12)))
+                    .frame(width: 62, height: 62)
+                    .scaleEffect(1 + (audioEnergy * 0.10))
+
+                ForEach(0..<12, id: \.self) { index in
+                    Capsule()
+                        .fill(
+                            index.isMultiple(of: 3)
+                                ? BurritoTheme.accent
+                                : Color.red.opacity(0.58)
+                        )
+                        .frame(
+                            width: 2,
+                            height: activeRayHeight(
+                                at: index,
+                                phase: phase
+                            )
+                        )
+                        .offset(y: -29)
+                        .rotationEffect(.degrees(Double(index) * 30))
+                }
+
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [BurritoTheme.accent, .red],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 48, height: 48)
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.18))
+                    }
+
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(.white)
+                    .frame(width: 13, height: 13)
+                    .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
+            }
+            .animation(.smooth(duration: 0.12), value: audioEnergy)
+        }
+    }
+
+    private var audioEnergy: Double {
+        min(1, max(systemLevel, microphoneLevel))
+    }
+
+    private func readyBarHeight(at index: Int) -> CGFloat {
+        let heights: [CGFloat] = [7, 12, 18, 12, 7]
+        let pulseScale = readyPulse && !reduceMotion
+            ? 1 + (CGFloat(index.isMultiple(of: 2) ? 0.10 : -0.08))
+            : 1
+        return heights[index] * pulseScale
+    }
+
+    private func activeRayHeight(at index: Int, phase: TimeInterval) -> CGFloat {
+        let wave = (sin((phase * 5) + Double(index) * 0.82) + 1) / 2
+        let motion = reduceMotion ? 0.5 : wave
+        let sourceLevel = index.isMultiple(of: 2) ? systemLevel : microphoneLevel
+        let level = max(audioEnergy * 0.65, sourceLevel)
+        return 3 + CGFloat((level * 7) + (motion * level * 3))
     }
 }
 
