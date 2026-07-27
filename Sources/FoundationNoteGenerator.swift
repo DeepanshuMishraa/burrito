@@ -2,26 +2,97 @@ import Foundation
 import FoundationModels
 
 enum GenerationPrompt {
-    static let digestInstructions = "Extract only facts present in the transcript. Preserve names, decisions, examples, and action items. Do not add commentary."
+    static let digestInstructions = """
+        Extract a factual digest from the transcript. Preserve the dominant subjects, names,
+        terminology, numbers, dates, examples, decisions, action items, qualifications, uncertainty,
+        and unresolved questions. Merge repetition and discard filler. Never add outside facts,
+        explanations, or conclusions. Do not let an isolated remark outweigh the dominant discussion.
+        """
     static let digestPrefix = "Create a compact factual digest of this timestamped transcript:\n\n"
-    static let condenseInstructions = "Combine these factual digests into a shorter digest without inventing facts, omitting decisions, or duplicating information."
+    static let condenseInstructions = """
+        Combine these factual digests into a shorter, coherent digest. Preserve the dominant subjects
+        and all material names, facts, decisions, actions, examples, constraints, uncertainty, and open
+        questions. Merge duplication. Do not invent information or promote a minor aside into a main topic.
+        """
 
     static func finalInstructions(template: TemplateSnapshot) -> String {
         """
-        Write accurate local notes from the supplied factual digest.
-        Follow this template: \(template.instructions)
-        Return a short TITLE: and a complete NOTE: in Markdown.
+        Write polished notes using only the supplied factual digest.
+
+        Source fidelity:
+        - Never add outside knowledge or fabricate missing context.
+        - Preserve important names, terminology, numbers, dates, decisions, actions, and uncertainty.
+        - Do not present speculation, proposals, or opinions as established facts.
+        - Prefer omission over invention when the source is ambiguous.
+
+        Writing:
+        - Synthesize ideas instead of following transcript chronology.
+        - Remove filler, repetition, and meta-commentary about the transcript or note-generation process.
+        - Use descriptive Markdown headings, compact paragraphs, bullets, and tables only where useful.
+        - Do not create empty sections or claim that information was unavailable.
+        - Write in the language used by the supplied digest.
+
+        Template-specific requirements:
+        \(BuiltInTemplate.resolvedInstructions(for: template))
+
+        Return a short TITLE: and a complete NOTE: in Markdown. The title must be a standalone,
+        specific noun phrase of 3–8 words. Do not prefix it with “New Recording”, “Recording”,
+        “Notes”, “Summary”, or another label.
         """
     }
 
-    static func titleInstructions(currentTitle: String) -> String {
+    static func titleInstructions(currentTitle _: String) -> String {
         """
-        Return only a short title for the dominant subject of the complete factual digest.
-        The current title is "\(currentTitle)".
-        Keep it when it still describes the dominant subject. Change it when the transcript
-        has clearly shifted and another subject now occupies most of the discussion.
-        Do not use quotes, labels, commentary, or Markdown.
+        Create one fresh, specific title from the complete factual digest.
+
+        Selection rules:
+        - Identify the dominant subject that occupies most of the discussion, not the first or most recent remark.
+        - Prefer the concrete subject plus its meaningful focus, outcome, or comparison.
+        - Use a standalone noun phrase of 3–8 words.
+        - Base the title only on the complete discussion. Do not compare against, preserve, or extend an earlier title.
+        - When the subject shifts, title the subject that now dominates the complete discussion.
+        - Generic placeholders such as “New Recording”, “Recording”, “Notes”, and “Summary” carry no meaning.
+
+        Output rules:
+        - Return only the title.
+        - Do not use a label, colon, quotation marks, Markdown, sentence punctuation, or commentary.
         """
+    }
+}
+
+enum GeneratedTitle {
+    private static let genericValues = [
+        "new recording",
+        "recording",
+        "notes",
+        "summary",
+        "untitled",
+    ]
+
+    static func sanitized(_ response: String) -> String? {
+        guard let firstLine = response.split(whereSeparator: \.isNewline).first else {
+            return nil
+        }
+        var value = String(firstLine).trimmingCharacters(
+            in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "#*\"“”"))
+        )
+
+        let prefixes = ["title", "new recording", "recording", "notes", "summary"]
+        for prefix in prefixes {
+            guard value.lowercased().hasPrefix(prefix) else { continue }
+            let suffix = value.dropFirst(prefix.count)
+            guard let delimiter = suffix.first, ":–—-".contains(delimiter) else { continue }
+            value = String(suffix.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+            break
+        }
+
+        value = value.trimmingCharacters(
+            in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".:;,-–—#*\"“”"))
+        )
+        guard !value.isEmpty, !genericValues.contains(value.lowercased()) else {
+            return nil
+        }
+        return value
     }
 }
 
@@ -74,6 +145,12 @@ private struct GeneratedNoteResponse {
     var markdown: String
 }
 
+@Generable
+private struct GeneratedTitleResponse {
+    @Guide(description: "A standalone, specific 3–8 word noun phrase with no label, prefix, colon, quotation marks, Markdown, or ending punctuation.")
+    var title: String
+}
+
 actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
     private let model = SystemLanguageModel.default
 
@@ -117,11 +194,29 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
             options: options
         ).content
         return GeneratedNote(
-            title: response.title.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+            title: GeneratedTitle.sanitized(response.title) ?? "Additional Notes",
             markdown: response.markdown.trimmingCharacters(
                 in: CharacterSet.whitespacesAndNewlines
             )
         )
+    }
+
+    func completeTitle(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> String {
+        let session = LanguageModelSession(model: model, instructions: instructions)
+        let options = GenerationOptions(
+            sampling: nil,
+            temperature: 0.2,
+            maximumResponseTokens: maximumResponseTokens
+        )
+        return try await session.respond(
+            to: prompt,
+            generating: GeneratedTitleResponse.self,
+            options: options
+        ).content.title
     }
 }
 
@@ -211,19 +306,12 @@ struct FoundationNoteGenerator: NoteGenerating {
                 finalInstructions: instructions,
                 reservedOutputTokens: TokenBudget.titleOutput
             )
-            let response = try await adapter.complete(
+            let response = try await adapter.completeTitle(
                 instructions: instructions,
                 prompt: digest,
                 maximumResponseTokens: TokenBudget.titleOutput
             )
-            let firstLine = response.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-            let unlabeledTitle = firstLine.lowercased().hasPrefix("title:")
-                ? String(firstLine.dropFirst("title:".count))
-                : firstLine
-            let title = unlabeledTitle.trimmingCharacters(
-                in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "#*\""))
-            )
-            guard !title.isEmpty else {
+            guard let title = GeneratedTitle.sanitized(response) else {
                 return .failure(.generationFailed(details: "The model returned an empty title."))
             }
             return .success(title)

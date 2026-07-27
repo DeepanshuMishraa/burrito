@@ -151,15 +151,20 @@ enum SeedData {
         let existing = try context.fetch(FetchDescriptor<NoteTemplate>())
         let existingIDs = Set(existing.compactMap(\.builtInID))
 
-        for template in BuiltInTemplate.allCases where !existingIDs.contains(template.rawValue) {
-            context.insert(
-                NoteTemplate(
-                    builtInID: template.rawValue,
-                    name: template.name,
-                    symbol: template.symbol,
-                    instructions: template.instructions
+        for template in BuiltInTemplate.allCases {
+            if !existingIDs.contains(template.rawValue) {
+                context.insert(
+                    NoteTemplate(
+                        builtInID: template.rawValue,
+                        name: template.name,
+                        symbol: template.symbol,
+                        instructions: template.instructions
+                    )
                 )
-            )
+            } else if let stored = existing.first(where: { $0.builtInID == template.rawValue }),
+                      stored.instructions == template.legacyInstructions {
+                stored.instructions = template.instructions
+            }
         }
         try context.save()
     }

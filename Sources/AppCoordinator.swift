@@ -329,19 +329,35 @@ final class AppCoordinator {
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
         let oldTitle = note.title
         let oldBody = note.markdownBody
+        let transcriptSegments = note.transcriptSegments
+        let template = note.templateSnapshot
+        let languageIdentifier = note.languageIdentifier
 
         note.lifecycle = .processing
         note.processingStage = .generatingNotes
         note.lastErrorMessage = nil
         try? context.save()
 
-        switch await generator.generate(
-            segments: note.transcriptSegments,
-            template: note.templateSnapshot,
-            languageIdentifier: note.languageIdentifier
-        ) {
+        async let generatedResult = generator.generate(
+            segments: transcriptSegments,
+            template: template,
+            languageIdentifier: languageIdentifier
+        )
+        async let titleResult = generator.suggestTitle(
+            segments: transcriptSegments,
+            currentTitle: oldTitle,
+            languageIdentifier: languageIdentifier
+        )
+        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
+
+        switch generatedResultValue {
         case .success(let generated):
-            note.title = generated.title
+            note.title = await resolvedSuggestedTitle(
+                initialResult: titleResultValue,
+                segments: transcriptSegments,
+                currentTitle: oldTitle,
+                languageIdentifier: languageIdentifier
+            ) ?? generated.title
             note.markdownBody = generated.markdown
             note.generatedFromTranscriptRevision = note.transcriptRevision
             note.userEditedNotes = false
@@ -370,28 +386,35 @@ final class AppCoordinator {
         let existingTitle = note.title
         let existingBody = note.markdownBody
         let hadUserEdits = note.userEditedNotes
+        let completeTranscript = note.transcriptSegments
+        let template = note.templateSnapshot
+        let languageIdentifier = note.languageIdentifier
 
         note.lifecycle = .processing
         note.processingStage = .generatingNotes
         note.lastErrorMessage = nil
         try? context.save()
 
-        switch await generator.generate(
+        async let generatedResult = generator.generate(
             segments: segments,
-            template: note.templateSnapshot,
-            languageIdentifier: note.languageIdentifier
-        ) {
+            template: template,
+            languageIdentifier: languageIdentifier
+        )
+        async let titleResult = generator.suggestTitle(
+            segments: completeTranscript,
+            currentTitle: existingTitle,
+            languageIdentifier: languageIdentifier
+        )
+        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
+
+        switch generatedResultValue {
         case .success(let generated):
-            let updatedTitle = switch await generator.suggestTitle(
-                segments: note.transcriptSegments,
+            let updatedTitle = await resolvedSuggestedTitle(
+                initialResult: titleResultValue,
+                segments: completeTranscript,
                 currentTitle: existingTitle,
-                languageIdentifier: note.languageIdentifier
-            ) {
-            case .success(let title):
-                title
-            case .failure:
-                existingTitle
-            }
+                languageIdentifier: languageIdentifier
+            ) ?? existingTitle
             let appendedBody = """
                 ## \(generated.title)
 
@@ -414,6 +437,35 @@ final class AppCoordinator {
             lastError = error
         }
         try? context.save()
+    }
+
+    private func resolvedSuggestedTitle(
+        initialResult: Result<String, BurritoError>,
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> String? {
+        let result: Result<String, BurritoError>
+        switch initialResult {
+        case .success:
+            result = initialResult
+        case .failure:
+            result = await generator.suggestTitle(
+                segments: segments,
+                currentTitle: currentTitle,
+                languageIdentifier: languageIdentifier
+            )
+        }
+
+        guard case .success(let candidate) = result else { return nil }
+        let normalizedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCurrentTitle = currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedCandidate.isEmpty,
+              normalizedCandidate.localizedCaseInsensitiveCompare(normalizedCurrentTitle) != .orderedSame
+        else {
+            return nil
+        }
+        return normalizedCandidate
     }
 
     func dismissFailure() {

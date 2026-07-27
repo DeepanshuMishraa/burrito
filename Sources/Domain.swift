@@ -161,6 +161,91 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
     var instructions: String {
         switch self {
         case .summary:
+            """
+            Produce a concise, high-signal summary for someone who did not hear the recording.
+
+            Structure:
+            - Start with `## Overview`: one compact paragraph explaining the central subject, purpose, and outcome.
+            - Add `## Key Points`: a prioritized bullet list of the most important facts, arguments, explanations, and examples.
+            - Add `## Decisions and Actions` only when the source contains decisions, commitments, owners, or next steps.
+            - End with `## Takeaways`: two to five durable conclusions the reader should remember.
+
+            Rules:
+            - Organize by importance, not transcript order.
+            - Merge repeated ideas and remove conversational filler, greetings, tangents, and verbal scaffolding.
+            - Preserve material names, numbers, dates, constraints, comparisons, and qualifications exactly.
+            - Distinguish confirmed conclusions from proposals, opinions, and unresolved questions.
+            - Never invent context, rationale, decisions, owners, deadlines, or recommendations.
+            - Omit any section that would otherwise be empty.
+            - Prefer precise, information-dense sentences over generic statements.
+            """
+        case .detailed:
+            """
+            Produce comprehensive reference notes that retain the recording's useful substance without becoming a transcript.
+
+            Structure:
+            - Start with `## Overview`: the subject, purpose, scope, and main conclusion.
+            - Create descriptive `##` topic sections in a logical reading order.
+            - Within each topic, capture definitions, background, reasoning, mechanisms, evidence, examples, tradeoffs, constraints, and consequences when present.
+            - Add `## Decisions`, `## Action Items`, and `## Open Questions` only when supported by the source.
+            - End with `## Conclusions` when the discussion reaches meaningful conclusions.
+
+            Rules:
+            - Reorganize fragmented remarks into coherent topics while preserving their meaning.
+            - Retain important names, terminology, figures, dates, commands, steps, and quoted labels accurately.
+            - Attribute claims or viewpoints when the speaker or source attribution matters.
+            - Preserve uncertainty and disagreement; do not turn tentative language into fact.
+            - Merge duplication, but do not discard distinct caveats or supporting details.
+            - Do not add outside knowledge, explanations, recommendations, or inferred intent.
+            - Use short paragraphs and bullets where they improve scanning. Omit empty sections.
+            """
+        case .studyNotes:
+            """
+            Produce rigorous study notes that teach the supplied material and support later revision.
+
+            Structure:
+            - Start with `## Topic Overview`: a compact map of what the material covers.
+            - Add `## Learning Objectives`: observable things a learner should understand or be able to explain after studying.
+            - Create one `##` section per major concept. Define it, explain how it works, connect it to related concepts, and preserve stated reasoning or derivations.
+            - Include `### Examples` beneath the relevant concept when examples appear in the source.
+            - Add `## Key Terms`: a concise glossary containing only terms actually used.
+            - Add `## Review Questions`: questions answerable from these notes, spanning recall and conceptual understanding.
+            - Add `## Common Pitfalls` only when misconceptions, edge cases, or warnings are discussed.
+
+            Rules:
+            - Explain clearly without introducing facts that are absent from the recording.
+            - Preserve formulas, technical terms, commands, numbers, causal relationships, and step order exactly.
+            - Separate definitions, examples, and consequences instead of blending them together.
+            - Call out comparisons and tradeoffs explicitly when discussed.
+            - Do not fabricate examples, answers, mnemonics, citations, or missing steps.
+            - Remove repetition and filler. Omit unsupported or empty sections.
+            """
+        case .meeting:
+            """
+            Produce operational meeting notes that make outcomes, ownership, and unresolved work immediately clear.
+
+            Structure:
+            - Start with `## Meeting Summary`: the meeting purpose, principal topics, and overall outcome.
+            - Add `## Discussion`: concise, topic-based bullets capturing material context, proposals, objections, tradeoffs, and conclusions.
+            - Add `## Decisions`: each explicit decision and its stated rationale or constraint.
+            - Add `## Action Items`: a Markdown table with `Action`, `Owner`, and `Due` columns. Use `Unassigned` or `Not stated` when the recording does not provide an owner or deadline.
+            - Add `## Open Questions`: unresolved questions, blockers, dependencies, and items requiring follow-up.
+            - Add `## Next Meeting` only when scheduling or a future agenda is stated.
+
+            Rules:
+            - Include participants or roles only when explicitly identified.
+            - Attribute proposals, concerns, and commitments when attribution affects meaning.
+            - Never convert a suggestion into a decision or a discussion point into an action item.
+            - Never infer owners, deadlines, consensus, status, or priority.
+            - Preserve names, dates, quantities, project terms, and commitments accurately.
+            - Consolidate repetition and omit greetings, filler, and empty sections.
+            """
+        }
+    }
+
+    var legacyInstructions: String {
+        switch self {
+        case .summary:
             "Create a concise overview, key points, and takeaways."
         case .detailed:
             "Create an overview, clearly titled topic sections, important details, and conclusions."
@@ -169,6 +254,17 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         case .meeting:
             "Create a meeting summary, decisions, action items with owners when stated, and open questions."
         }
+    }
+
+    static func resolvedInstructions(for template: TemplateSnapshot) -> String {
+        guard let builtIn = allCases.first(where: {
+            $0.name == template.name
+                && ($0.instructions == template.instructions
+                    || $0.legacyInstructions == template.instructions)
+        }) else {
+            return template.instructions
+        }
+        return builtIn.instructions
     }
 }
 

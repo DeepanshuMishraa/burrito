@@ -9,7 +9,10 @@ struct LocalTranscriber: Transcribing {
         guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
             return .failure(.unsupportedLanguage(identifier: identifier))
         }
-        let transcriber = SpeechTranscriber(locale: supported, preset: .timeIndexedProgressiveTranscription)
+        let transcriber = SpeechTranscriber(
+            locale: supported,
+            preset: .timeIndexedTranscriptionWithAlternatives
+        )
         switch await AssetInventory.status(forModules: [transcriber]) {
         case .installed:
             return .success(())
@@ -30,7 +33,7 @@ struct LocalTranscriber: Transcribing {
 
         let transcriber = SpeechTranscriber(
             locale: supported,
-            preset: .timeIndexedProgressiveTranscription
+            preset: .timeIndexedTranscriptionWithAlternatives
         )
 
         do {
@@ -66,7 +69,7 @@ struct LocalTranscriber: Transcribing {
             }
             let transcriber = SpeechTranscriber(
                 locale: locale,
-                preset: .timeIndexedProgressiveTranscription
+                preset: .timeIndexedTranscriptionWithAlternatives
             )
             let audioFile = try AVAudioFile(forReading: fileURL)
             let analyzer = SpeechAnalyzer(modules: [transcriber])

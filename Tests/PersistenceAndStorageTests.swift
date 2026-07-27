@@ -63,6 +63,31 @@ struct PersistenceTests {
         // Then
         #expect(note.notesMayBeOutdated)
     }
+
+    @Test("Seed data upgrades untouched legacy built-in prompts")
+    func upgradesLegacyBuiltInPrompts() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let template = BuiltInTemplate.summary
+        let stored = NoteTemplate(
+            builtInID: template.rawValue,
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.legacyInstructions
+        )
+        context.insert(stored)
+        try context.save()
+
+        try SeedData.insertBuiltInTemplatesIfNeeded(context: context)
+
+        #expect(stored.instructions == template.instructions)
+    }
 }
 
 @Suite("Recording storage")

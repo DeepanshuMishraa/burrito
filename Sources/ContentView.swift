@@ -57,6 +57,10 @@ struct ContentView: View {
         notes.first { $0.id == selectedNoteID }
     }
 
+    private var activeProcessingStage: ProcessingStage? {
+        notes.lazy.compactMap(\.processingStage).first
+    }
+
     private var visibleNotes: [Note] {
         let filtered = notes.filter { note in
             let isInSection = switch sidebarSelection ?? .all {
@@ -95,8 +99,8 @@ struct ContentView: View {
                 PermissionGateView(permissions: permissions) {
                     permissionOnboardingCompleted = true
                 }
-            } else if notes.contains(where: { $0.processingStage == .generatingNotes }) {
-                ScooterGenerationLoader()
+            } else if let activeProcessingStage {
+                ScooterGenerationLoader(stage: activeProcessingStage)
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
@@ -559,27 +563,129 @@ struct ContentView: View {
 
 private struct ScooterGenerationLoader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let stage: ProcessingStage
+
+    private var stageIndex: Int {
+        ProcessingStage.allCases.firstIndex(of: stage) ?? 0
+    }
+
+    private var copy: (eyebrow: String, title: String, detail: String) {
+        switch stage {
+        case .preparingAudio:
+            (
+                "SECURING THE RECORDING · 1 OF 4",
+                "Packing up every sound",
+                "Closing the audio tracks cleanly so nothing gets lost between record and replay."
+            )
+        case .transcribing:
+            (
+                "LOCAL TRANSCRIPTION · 2 OF 4",
+                "Listening back, carefully",
+                "Running a high-accuracy pass over every captured second and pinning words to time."
+            )
+        case .organizing:
+            (
+                "SHAPING THE TRANSCRIPT · 3 OF 4",
+                "Finding the thread",
+                "Merging voices, restoring chronology, and separating the useful signal from repetition."
+            )
+        case .generatingNotes:
+            (
+                "WRITING YOUR NOTE · 4 OF 4",
+                "Turning speech into something useful",
+                "Building the note while testing its title against the full conversation."
+            )
+        }
+    }
 
     var body: some View {
         ZStack {
             BurritoTheme.canvas.ignoresSafeArea()
 
-            if reduceMotion {
-                LottieView(animation: .named("Scooter-loader"))
-                    .currentProgress(0.5)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 360, height: 360)
-            } else {
-                LottieView(animation: .named("Scooter-loader"))
-                    .playing(loopMode: .loop)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 360, height: 360)
+            VStack(spacing: 4) {
+                if reduceMotion {
+                    LottieView(animation: .named("Scooter-loader"))
+                        .currentProgress(0.5)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 320, height: 320)
+                } else {
+                    LottieView(animation: .named("Scooter-loader"))
+                        .playing(loopMode: .loop)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 320, height: 320)
+                }
+
+                VStack(spacing: 12) {
+                    Text(copy.eyebrow)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .tracking(1.35)
+                        .foregroundStyle(BurritoTheme.accent.opacity(0.86))
+
+                    Text(copy.title)
+                        .font(.system(size: 28, weight: .regular, design: .serif))
+                        .tracking(-0.35)
+                        .foregroundStyle(.primary)
+
+                    Text(copy.detail)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .frame(maxWidth: 470)
+
+                    HStack(spacing: 18) {
+                        ForEach(
+                            Array(ProcessingStage.allCases.enumerated()),
+                            id: \.element
+                        ) { index, item in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(stageColor(at: index))
+                                    .frame(width: 5, height: 5)
+                                Text(shortLabel(for: item))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(stageColor(at: index))
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                .id(stage)
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .offset(y: 8))
+                )
             }
+            .offset(y: -22)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.32),
+                value: stage
+            )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Generating notes")
+        .accessibilityLabel("\(copy.title). \(copy.detail)")
+    }
+
+    private func shortLabel(for stage: ProcessingStage) -> String {
+        switch stage {
+        case .preparingAudio: "Audio"
+        case .transcribing: "Transcript"
+        case .organizing: "Structure"
+        case .generatingNotes: "Note"
+        }
+    }
+
+    private func stageColor(at index: Int) -> Color {
+        if index == stageIndex {
+            BurritoTheme.accent
+        } else if index < stageIndex {
+            BurritoTheme.accent.opacity(0.5)
+        } else {
+            Color.secondary.opacity(0.3)
+        }
     }
 }
 

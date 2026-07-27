@@ -138,8 +138,45 @@ struct TemplateTests {
             currentTitle: "Database System Overview"
         )
 
-        #expect(prompt.contains("Database System Overview"))
+        #expect(!prompt.contains("Database System Overview"))
+        #expect(prompt.contains("fresh"))
         #expect(prompt.contains("dominant subject"))
-        #expect(prompt.contains("most of the discussion"))
+        #expect(prompt.contains("complete discussion"))
+        #expect(prompt.contains("Do not compare against, preserve, or extend an earlier title"))
+    }
+
+    @Test("Legacy built-in snapshots receive the expanded prompt")
+    func resolvesLegacyBuiltInPrompt() {
+        let template = BuiltInTemplate.meeting
+        let snapshot = TemplateSnapshot(
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.legacyInstructions
+        )
+
+        let prompt = GenerationPrompt.finalInstructions(template: snapshot)
+
+        #expect(prompt.contains("Markdown table"))
+        #expect(prompt.contains("Never infer owners"))
+    }
+
+    @Test("Custom template instructions are not replaced by a matching name")
+    func preservesCustomInstructionsWithBuiltInName() {
+        let snapshot = TemplateSnapshot(
+            name: BuiltInTemplate.summary.name,
+            symbol: "sparkles",
+            instructions: "Use a single paragraph written as a technical abstract."
+        )
+
+        let prompt = GenerationPrompt.finalInstructions(template: snapshot)
+
+        #expect(prompt.contains(snapshot.instructions))
+    }
+
+    @Test("Generated titles discard labels and generic placeholders")
+    func sanitizesGeneratedTitles() {
+        #expect(GeneratedTitle.sanitized("New Recording: Phone Blocks") == "Phone Blocks")
+        #expect(GeneratedTitle.sanitized("TITLE: Inference Runtime Design") == "Inference Runtime Design")
+        #expect(GeneratedTitle.sanitized("New Recording") == nil)
     }
 }

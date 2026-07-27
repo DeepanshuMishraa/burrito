@@ -75,7 +75,42 @@ private struct GeneratorStub: NoteGenerating {
         currentTitle: String,
         languageIdentifier: String
     ) async -> Result<String, BurritoError> {
-        .success(segments.count > 1 ? suggestedTitle : currentTitle)
+        .success(suggestedTitle)
+    }
+}
+
+private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
+    let titleResponses: Mutex<[Result<String, BurritoError>]>
+    let titleCallCount = Mutex(0)
+
+    init(titleResponses: [Result<String, BurritoError>]) {
+        self.titleResponses = Mutex(titleResponses)
+    }
+
+    func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func generate(
+        segments: [TranscriptSegment],
+        template: TemplateSnapshot,
+        languageIdentifier: String
+    ) async -> Result<GeneratedNote, BurritoError> {
+        .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        titleCallCount.withLock { $0 += 1 }
+        return titleResponses.withLock { responses in
+            guard !responses.isEmpty else {
+                return .failure(.generationFailed(details: "No title response remains."))
+            }
+            return responses.removeFirst()
+        }
     }
 }
 
@@ -146,7 +181,7 @@ struct CoordinatorTests {
         // Then
         #expect(capture.stops == 1)
         #expect(note.lifecycle == .ready)
-        #expect(note.title == "Generated")
+        #expect(note.title == "Generated title")
         #expect(note.transcriptSegments.count == 2)
         #expect(fileStore.removeCount.withLock { $0 } == 1)
     }
@@ -207,6 +242,59 @@ struct CoordinatorTests {
         #expect(note.markdownBody.hasPrefix("# Existing notes"))
         #expect(note.markdownBody.contains("# Generated"))
         #expect(note.lifecycle == .ready)
+    }
+
+    @Test("A failed parallel title pass retries after note generation")
+    func retriesDynamicTitleAfterGeneration() async throws {
+        let context = try makeContext()
+        let note = Note(
+            lifecycle: .ready,
+            title: "Database Notes",
+            markdownBody: "# Existing notes",
+            transcriptSegments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 0,
+                    duration: 4,
+                    text: "The database originally stored request metadata."
+                ),
+            ],
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            retainsAudio: false
+        )
+        context.insert(note)
+        try context.save()
+        let generator = RetryingTitleGeneratorStub(titleResponses: [
+            .failure(.generationFailed(details: "The model was busy.")),
+            .success("Inference Runtime Architecture"),
+        ])
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+
+        await coordinator.start(
+            options: RecordingOptions(
+                template: note.templateSnapshot,
+                languageIdentifier: note.languageIdentifier,
+                includesMicrophone: false,
+                retainsAudio: false
+            ),
+            destination: .appendToNote(id: note.id),
+            context: context
+        )
+        await coordinator.stop(context: context)
+
+        #expect(note.title == "Inference Runtime Architecture")
+        #expect(generator.titleCallCount.withLock { $0 } == 2)
     }
 
     @Test("Recording publishes live transcript and audio activity")
