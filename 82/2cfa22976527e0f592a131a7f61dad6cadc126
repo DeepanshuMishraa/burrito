@@ -1,0 +1,26 @@
+Tests/DomainTests.swift
+  s_a943844e87ed85::t_80636e73128cf1 55-82
+Sources/ServiceProtocols.swift
+  s_a943844e87ed85::t_80636e73128cf1 49-58
+Sources/FoundationNoteGenerator.swift
+  s_a943844e87ed85::t_7dd60919460794 257
+  s_a943844e87ed85::t_80636e73128cf1 6-7,21,23-27,30,34-37,58-66,79-83,85,87-99,101-109,114,119-126,165-172,179-180,185-193,195-205,207,210,216-220,223,228,245-255,258-262,267-268
+  s_a943844e87ed85::t_20704a4892e1ea 86,100,110-113,256,263
+  s_a943844e87ed85::t_1b6b6fbe180f87 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "822cfa22976527e0f592a131a7f61dad6cadc126",
+  "prompts": {},
+  "sessions": {
+    "s_a943844e87ed85": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa2c6-2c2e-7713-b376-fe9ba08759cf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
