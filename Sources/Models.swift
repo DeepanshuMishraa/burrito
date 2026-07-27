@@ -1,0 +1,166 @@
+import Foundation
+import SwiftData
+
+@Model
+final class Folder {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var order: Int
+    @Relationship(deleteRule: .nullify, inverse: \Note.folder) var notes: [Note]
+
+    init(id: UUID = UUID(), name: String, order: Int = 0) {
+        self.id = id
+        self.name = name
+        self.order = order
+        self.notes = []
+    }
+}
+
+@Model
+final class NoteTemplate {
+    @Attribute(.unique) var id: UUID
+    var builtInID: String?
+    var name: String
+    var symbol: String
+    var instructions: String
+    var createdAt: Date
+
+    var isBuiltIn: Bool { builtInID != nil }
+
+    init(
+        id: UUID = UUID(),
+        builtInID: String? = nil,
+        name: String,
+        symbol: String,
+        instructions: String,
+        createdAt: Date = .now
+    ) {
+        self.id = id
+        self.builtInID = builtInID
+        self.name = name
+        self.symbol = symbol
+        self.instructions = instructions
+        self.createdAt = createdAt
+    }
+
+    var snapshot: TemplateSnapshot {
+        TemplateSnapshot(name: name, symbol: symbol, instructions: instructions)
+    }
+}
+
+@Model
+final class Note {
+    @Attribute(.unique) var id: UUID
+    var lifecycleRawValue: String
+    var processingStageRawValue: String?
+    var title: String
+    var markdownBody: String
+    var transcriptData: Data
+    var createdAt: Date
+    var updatedAt: Date
+    var recordingStartedAt: Date?
+    var duration: TimeInterval
+    var languageIdentifier: String
+    var templateName: String
+    var templateSymbol: String
+    var templateInstructions: String
+    var isFavorite: Bool
+    var deletedAt: Date?
+    var systemAudioRelativePath: String?
+    var microphoneAudioRelativePath: String?
+    var retainsAudio: Bool
+    var transcriptRevision: Int
+    var generatedFromTranscriptRevision: Int
+    var userEditedNotes: Bool
+    var lastErrorMessage: String?
+    var folder: Folder?
+
+    init(
+        id: UUID = UUID(),
+        lifecycle: NoteLifecycle = .recording,
+        title: String = "New Recording",
+        markdownBody: String = "",
+        transcriptSegments: [TranscriptSegment] = [],
+        createdAt: Date = .now,
+        languageIdentifier: String,
+        template: TemplateSnapshot,
+        retainsAudio: Bool
+    ) {
+        self.id = id
+        self.lifecycleRawValue = lifecycle.rawValue
+        self.processingStageRawValue = nil
+        self.title = title
+        self.markdownBody = markdownBody
+        self.transcriptData = (try? JSONEncoder().encode(transcriptSegments)) ?? Data()
+        self.createdAt = createdAt
+        self.updatedAt = createdAt
+        self.recordingStartedAt = createdAt
+        self.duration = 0
+        self.languageIdentifier = languageIdentifier
+        self.templateName = template.name
+        self.templateSymbol = template.symbol
+        self.templateInstructions = template.instructions
+        self.isFavorite = false
+        self.deletedAt = nil
+        self.systemAudioRelativePath = nil
+        self.microphoneAudioRelativePath = nil
+        self.retainsAudio = retainsAudio
+        self.transcriptRevision = 0
+        self.generatedFromTranscriptRevision = 0
+        self.userEditedNotes = false
+        self.lastErrorMessage = nil
+        self.folder = nil
+    }
+
+    var lifecycle: NoteLifecycle {
+        get { NoteLifecycle(rawValue: lifecycleRawValue) ?? .recoverable }
+        set { lifecycleRawValue = newValue.rawValue }
+    }
+
+    var processingStage: ProcessingStage? {
+        get { processingStageRawValue.flatMap(ProcessingStage.init(rawValue:)) }
+        set { processingStageRawValue = newValue?.rawValue }
+    }
+
+    var transcriptSegments: [TranscriptSegment] {
+        get { (try? JSONDecoder().decode([TranscriptSegment].self, from: transcriptData)) ?? [] }
+        set { transcriptData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    var templateSnapshot: TemplateSnapshot {
+        TemplateSnapshot(name: templateName, symbol: templateSymbol, instructions: templateInstructions)
+    }
+
+    var notesMayBeOutdated: Bool {
+        transcriptRevision != generatedFromTranscriptRevision
+    }
+
+    func replaceTranscript(with segments: [TranscriptSegment], marksEdited: Bool) {
+        transcriptSegments = segments
+        transcriptRevision += 1
+        updatedAt = .now
+        if !marksEdited {
+            generatedFromTranscriptRevision = transcriptRevision
+        }
+    }
+}
+
+enum SeedData {
+    @MainActor
+    static func insertBuiltInTemplatesIfNeeded(context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<NoteTemplate>())
+        let existingIDs = Set(existing.compactMap(\.builtInID))
+
+        for template in BuiltInTemplate.allCases where !existingIDs.contains(template.rawValue) {
+            context.insert(
+                NoteTemplate(
+                    builtInID: template.rawValue,
+                    name: template.name,
+                    symbol: template.symbol,
+                    instructions: template.instructions
+                )
+            )
+        }
+        try context.save()
+    }
+}

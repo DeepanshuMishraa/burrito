@@ -1,0 +1,45 @@
+name: burrito
+options:
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: 1.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  burrito:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Sources
+      - path: Resources
+        buildPhase: resources
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.burrito
+        PRODUCT_NAME: Burrito
+        PRODUCT_MODULE_NAME: Burrito
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_ENTITLEMENTS: Burrito.entitlements
+    entitlements:
+      path: Burrito.entitlements
+  BurritoTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - Tests
+    dependencies:
+      - target: burrito
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.burrito.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Burrito.app/Contents/MacOS/Burrito"
+        BUNDLE_LOADER: "$(TEST_HOST)"
