@@ -56,6 +56,7 @@ private struct TranscriberStub: Transcribing {
 
 private struct GeneratorStub: NoteGenerating {
     var availabilityResult: Result<Void, BurritoError> = .success(())
+    var suggestedTitle = "Generated title"
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
         availabilityResult
@@ -67,6 +68,14 @@ private struct GeneratorStub: NoteGenerating {
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
         .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        .success(segments.count > 1 ? suggestedTitle : currentTitle)
     }
 }
 
@@ -194,7 +203,7 @@ struct CoordinatorTests {
         #expect(note.transcriptSegments.map(\.text) == ["Existing text", "System text"])
         #expect(note.transcriptSegments.last?.startTime == 4)
         #expect(note.duration >= 10)
-        #expect(note.title == "Existing note")
+        #expect(note.title == "Generated title")
         #expect(note.markdownBody.hasPrefix("# Existing notes"))
         #expect(note.markdownBody.contains("# Generated"))
         #expect(note.lifecycle == .ready)

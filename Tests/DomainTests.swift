@@ -22,6 +22,17 @@ struct TranscriptTests {
         #expect(merged.map(\.text) == ["Mic first", "System first", "Later"])
         #expect(merged.map(\.source) == [.microphone, .system, .system])
     }
+
+    @Test("Displays newest transcript passages first")
+    func latestFirst() {
+        let segments = [
+            TranscriptSegment(source: .system, startTime: 2, duration: 1, text: "Middle"),
+            TranscriptSegment(source: .system, startTime: 8, duration: 1, text: "Latest"),
+            TranscriptSegment(source: .system, startTime: 0, duration: 1, text: "Oldest"),
+        ]
+
+        #expect(Transcript.latestFirst(segments).map(\.text) == ["Latest", "Middle", "Oldest"])
+    }
 }
 
 private struct CharacterTokenMeasurer: PromptTokenMeasuring {
@@ -119,5 +130,16 @@ struct TemplateTests {
 
         // Then
         #expect(prompt.contains(custom.instructions))
+    }
+
+    @Test("Title prompt favors the dominant topic across the complete transcript")
+    func dominantTopicTitlePrompt() {
+        let prompt = GenerationPrompt.titleInstructions(
+            currentTitle: "Database System Overview"
+        )
+
+        #expect(prompt.contains("Database System Overview"))
+        #expect(prompt.contains("dominant subject"))
+        #expect(prompt.contains("most of the discussion"))
     }
 }

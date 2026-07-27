@@ -47,6 +47,15 @@ enum Transcript {
         }
         .joined(separator: "\n")
     }
+
+    static func latestFirst(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
+        segments.sorted {
+            if $0.startTime == $1.startTime {
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            return $0.startTime > $1.startTime
+        }
+    }
 }
 
 enum CaptureState: Equatable, Sendable {

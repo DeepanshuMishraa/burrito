@@ -2819,58 +2819,98 @@ private struct TemplateEditorView: View {
 
 private struct TranscriptEditor: View {
     @Bindable var note: Note
+    @State private var hoveredSegmentID: UUID?
 
     var body: some View {
         ScrollView {
             if note.transcriptSegments.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "text.bubble")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.tertiary)
-                    Text("No transcript yet")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("Recorded speech will appear here.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(spacing: 14) {
+                    TranscriptSignalMark(tint: BurritoTheme.accent)
+                        .frame(width: 34, height: 28)
+                    VStack(spacing: 4) {
+                        Text("The tape is quiet")
+                            .font(.system(size: 18, design: .serif))
+                        Text("Recorded words will gather here.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 80)
+                .padding(.top, 88)
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 0) {
+                    HStack(spacing: 18) {
+                        HStack(spacing: 8) {
+                            TranscriptSignalMark(tint: BurritoTheme.accent)
+                                .frame(width: 26, height: 20)
+                            Text("Conversation tape")
+                                .font(.system(size: 15, weight: .medium, design: .serif))
+                        }
+                        Spacer()
+                        HStack(spacing: 12) {
+                            sourceKey(title: "Computer", tint: BurritoTheme.accent)
+                            sourceKey(title: "You", tint: BurritoTheme.sage)
+                        }
+                        Text("\(note.transcriptSegments.count) passages")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
+                    .padding(.leading, 72)
+                    .padding(.trailing, 10)
+                    .padding(.bottom, 28)
+
                     ForEach(
-                        Array(note.transcriptSegments.enumerated()),
+                        Array(
+                            Transcript.latestFirst(note.transcriptSegments)
+                                .enumerated()
+                        ),
                         id: \.element.id
                     ) { index, segment in
-                        HStack(alignment: .top, spacing: 14) {
-                            VStack(spacing: 7) {
-                                ZStack {
-                                    Circle()
-                                        .fill(sourceTint(for: segment.source).opacity(0.16))
-                                    Image(systemName: sourceIcon(for: segment.source))
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(sourceTint(for: segment.source))
-                                }
-                                .frame(width: 32, height: 32)
+                        HStack(alignment: .top, spacing: 0) {
+                            Text(
+                                Duration.seconds(segment.startTime)
+                                    .formatted(.time(pattern: .minuteSecond))
+                            )
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                hoveredSegmentID == segment.id ? .secondary : .tertiary
+                            )
+                            .frame(width: 54, alignment: .trailing)
+                            .padding(.top, 3)
+
+                            VStack(spacing: 8) {
+                                TranscriptSignalMark(tint: sourceTint(for: segment.source))
+                                    .frame(width: 30, height: 22)
                                 if index < note.transcriptSegments.count - 1 {
                                     Rectangle()
-                                        .fill(BurritoTheme.softBorder)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    sourceTint(for: segment.source).opacity(0.34),
+                                                    BurritoTheme.softBorder,
+                                                ],
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                        )
                                         .frame(width: 1)
                                         .frame(maxHeight: .infinity)
                                 }
                             }
+                            .frame(width: 50)
 
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack {
+                            VStack(alignment: .leading, spacing: 7) {
+                                HStack(spacing: 8) {
                                     Text(sourceTitle(for: segment.source))
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .tracking(0.5)
+                                        .textCase(.uppercase)
                                         .foregroundStyle(sourceTint(for: segment.source))
-                                    Spacer()
-                                    Text(
-                                        Duration.seconds(segment.startTime)
-                                            .formatted(.time(pattern: .minuteSecond))
-                                    )
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .monospacedDigit()
+                                    Text(durationLabel(for: segment.duration))
+                                        .font(.system(size: 9, design: .monospaced))
+                                        .monospacedDigit()
                                     .foregroundStyle(.tertiary)
                                 }
 
@@ -2884,15 +2924,21 @@ private struct TranscriptEditor: View {
                                 .lineSpacing(4)
                                 .lineLimit(1...10)
                             }
-                            .padding(15)
-                            .background(
-                                BurritoTheme.raised.opacity(0.62),
-                                in: RoundedRectangle(cornerRadius: 13)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 13)
-                                    .stroke(BurritoTheme.softBorder)
-                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 1)
+                            .padding(.bottom, 28)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.top, 5)
+                        .background(
+                            sourceTint(for: segment.source).opacity(
+                                hoveredSegmentID == segment.id ? 0.055 : 0
+                            ),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                        .animation(.easeOut(duration: 0.14), value: hoveredSegmentID)
+                        .onHover { isHovered in
+                            hoveredSegmentID = isHovered ? segment.id : nil
                         }
                     }
                 }
@@ -2907,17 +2953,21 @@ private struct TranscriptEditor: View {
         .scrollIndicators(.hidden)
     }
 
-    private func sourceIcon(for source: AudioSource) -> String {
-        switch source {
-        case .system: "speaker.wave.2.fill"
-        case .microphone: "mic.fill"
+    private func sourceKey(title: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Capsule()
+                .fill(tint)
+                .frame(width: 9, height: 3)
+            Text(title)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.tertiary)
         }
     }
 
     private func sourceTitle(for source: AudioSource) -> String {
         switch source {
-        case .system: "System audio"
-        case .microphone: "Microphone"
+        case .system: "Computer"
+        case .microphone: "You"
         }
     }
 
@@ -2926,6 +2976,11 @@ private struct TranscriptEditor: View {
         case .system: BurritoTheme.accent
         case .microphone: BurritoTheme.sage
         }
+    }
+
+    private func durationLabel(for duration: TimeInterval) -> String {
+        let rounded = max(1, Int(duration.rounded()))
+        return "\(rounded)s"
     }
 
     private func binding(for id: UUID) -> Binding<String> {
@@ -2940,5 +2995,22 @@ private struct TranscriptEditor: View {
                 note.replaceTranscript(with: segments, marksEdited: true)
             }
         )
+    }
+}
+
+private struct TranscriptSignalMark: View {
+    let tint: Color
+    private let heights: [CGFloat] = [5, 11, 17, 9, 14, 6]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 1.7) {
+            ForEach(Array(heights.enumerated()), id: \.offset) { _, height in
+                Capsule()
+                    .fill(tint)
+                    .frame(width: 2, height: height)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
     }
 }

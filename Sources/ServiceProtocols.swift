@@ -37,6 +37,11 @@ protocol NoteGenerating: Sendable {
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError>
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError>
 }
 
 protocol RecordingFileStore: Sendable {

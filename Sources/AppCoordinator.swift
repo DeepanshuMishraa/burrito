@@ -382,12 +382,22 @@ final class AppCoordinator {
             languageIdentifier: note.languageIdentifier
         ) {
         case .success(let generated):
+            let updatedTitle = switch await generator.suggestTitle(
+                segments: note.transcriptSegments,
+                currentTitle: existingTitle,
+                languageIdentifier: note.languageIdentifier
+            ) {
+            case .success(let title):
+                title
+            case .failure:
+                existingTitle
+            }
             let appendedBody = """
                 ## \(generated.title)
 
                 \(generated.markdown)
                 """
-            note.title = existingTitle
+            note.title = updatedTitle
             note.markdownBody = existingBody.trimmingCharacters(in: .whitespacesAndNewlines)
                 .isEmpty
                 ? generated.markdown
