@@ -10,6 +10,7 @@ final class AppCoordinator {
     private(set) var activeNoteID: UUID?
     private(set) var elapsed: TimeInterval = 0
     private(set) var lastError: BurritoError?
+    private(set) var isInstallingLanguageAsset = false
 
     private let capture: any AudioCapturing
     private let transcriber: any Transcribing
@@ -250,6 +251,24 @@ final class AppCoordinator {
             activeNoteID = nil
         }
         lastError = nil
+    }
+
+    func installMissingLanguageAsset() async {
+        guard case .languageAssetMissing(let identifier) = lastError,
+              !isInstallingLanguageAsset
+        else {
+            return
+        }
+
+        isInstallingLanguageAsset = true
+        defer { isInstallingLanguageAsset = false }
+
+        switch await transcriber.installLanguageAsset(identifier) {
+        case .success:
+            dismissFailure()
+        case .failure(let error):
+            lastError = error
+        }
     }
 
     private func failBeforeRecording(_ error: BurritoError) {

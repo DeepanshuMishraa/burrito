@@ -83,6 +83,7 @@ enum BurritoError: Error, Equatable, Sendable {
     case speechRecognitionPermissionDenied
     case unsupportedLanguage(identifier: String)
     case languageAssetMissing(identifier: String)
+    case languageAssetInstallationFailed(identifier: String, details: String)
     case recordingAlreadyInProgress
     case noActiveRecording
     case captureFailed(details: String)
@@ -104,6 +105,8 @@ enum BurritoError: Error, Equatable, Sendable {
             "\(identifier) is not supported by the local transcriber. Choose a supported language in Settings."
         case .languageAssetMissing(let identifier):
             "The \(identifier) transcription asset is not installed. Install it before recording, then retry."
+        case .languageAssetInstallationFailed(let identifier, let details):
+            "Burrito could not install the \(identifier) transcription asset: \(details). Check your internet connection and try again."
         case .recordingAlreadyInProgress:
             "A recording is already active. Stop it before starting another."
         case .noActiveRecording:

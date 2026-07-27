@@ -14,6 +14,7 @@
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A516A8DE5CC1A96513E93F1E /* AppIcon.icon */; };
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
+		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
@@ -57,6 +58,7 @@
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -97,6 +99,7 @@
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
+				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
 				3B76BDAAD1105FDBF200FA0E /* ContentView.swift */,
 				8932061A0CA5A58DCC622228 /* Domain.swift */,
 				4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */,
@@ -167,6 +170,14 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					19C56261F610489982D91D04 = {
+						DevelopmentTeam = YY5H9WM46P;
+						ProvisioningStyle = Automatic;
+					};
+					F63AB2717EB53A6FB99B921D = {
+						DevelopmentTeam = YY5H9WM46P;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 40329BA76BC931E45F063C99 /* Build configuration list for PBXProject "burrito" */;
@@ -208,6 +219,7 @@
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
+				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
 				F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */,
 				2D70894A600592B1DAF71C5C /* Domain.swift in Sources */,
 				41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */,
@@ -248,7 +260,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Burrito.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = YY5H9WM46P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -328,7 +343,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Burrito.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = YY5H9WM46P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -349,7 +367,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = YY5H9WM46P;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -432,7 +453,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = YY5H9WM46P;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

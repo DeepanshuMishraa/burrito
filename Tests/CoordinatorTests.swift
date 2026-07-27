@@ -25,9 +25,14 @@ private final class CaptureSpyingStub: AudioCapturing {
 
 private struct TranscriberStub: Transcribing {
     var languageResult: Result<Void, BurritoError> = .success(())
+    var installationResult: Result<Void, BurritoError> = .success(())
 
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
         languageResult
+    }
+
+    func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError> {
+        installationResult
     }
 
     func transcribe(
@@ -157,6 +162,33 @@ struct CoordinatorTests {
         #expect(capture.starts == 0)
         #expect(coordinator.lastError == .languageAssetMissing(identifier: "en-US"))
         #expect(try context.fetch(FetchDescriptor<Note>()).isEmpty)
+    }
+
+    @Test("Installing a missing language asset clears the recoverable error")
+    func languageAssetInstallation() async throws {
+        let context = try makeContext()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(
+                languageResult: .failure(.languageAssetMissing(identifier: "en-US")),
+                installationResult: .success(())
+            ),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            includesMicrophone: false,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.installMissingLanguageAsset()
+
+        #expect(coordinator.lastError == nil)
+        #expect(coordinator.isInstallingLanguageAsset == false)
     }
 
     @Test("Interrupted recording becomes recoverable on relaunch")

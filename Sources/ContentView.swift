@@ -54,6 +54,8 @@ struct ContentView: View {
 
     @State private var coordinator = AppCoordinator.live()
     @State private var permissions = PermissionAccess()
+    @State private var calendarAccess = CalendarAccess()
+    @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
     @State private var searchText = ""
@@ -171,24 +173,40 @@ struct ContentView: View {
                 }
             } else if let error = coordinator.lastError {
                 BurritoModalBackdrop {
-                    BurritoMessageDialog(
-                        title: "Burrito needs attention",
-                        message: error.recoveryMessage,
-                        confirmTitle: "Okay",
-                        isDestructive: false,
-                        cancel: nil,
-                        confirm: { coordinator.dismissFailure() }
-                    )
+                    if case .languageAssetMissing = error {
+                        BurritoMessageDialog(
+                            title: "Install transcription language",
+                            message: error.recoveryMessage,
+                            confirmTitle: "Install Language",
+                            isDestructive: false,
+                            isWorking: coordinator.isInstallingLanguageAsset,
+                            cancel: { coordinator.dismissFailure() },
+                            confirm: {
+                                Task { await coordinator.installMissingLanguageAsset() }
+                            }
+                        )
+                    } else {
+                        BurritoMessageDialog(
+                            title: "Burrito needs attention",
+                            message: error.recoveryMessage,
+                            confirmTitle: "Okay",
+                            isDestructive: false,
+                            cancel: nil,
+                            confirm: { coordinator.dismissFailure() }
+                        )
+                    }
                 }
             }
         }
         .onAppear {
             seedAndRecover()
             permissions.refresh()
+            calendarAccess.refresh()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 permissions.refresh()
+                calendarAccess.refresh()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
@@ -210,18 +228,43 @@ struct ContentView: View {
 
     private var home: some View {
         HStack(spacing: 0) {
-            sidebar
-                .frame(width: 256)
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(width: 1)
+            if isSidebarVisible {
+                sidebar
+                    .frame(width: 270)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(width: 1)
+                    .transition(.opacity)
+            }
+
             noteList
         }
+        .animation(
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? nil
+                : .easeInOut(duration: 0.2),
+            value: isSidebarVisible
+        )
         .background(BurritoTheme.canvas)
     }
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button {
+                    isSidebarVisible = false
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .buttonStyle(BurritoIconButtonStyle())
+                .accessibilityLabel("Hide sidebar")
+            }
+            .frame(height: 52)
+            .padding(.horizontal, 12)
+
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.tertiary)
@@ -243,16 +286,15 @@ struct ContentView: View {
             }
             .padding(.horizontal, 11)
             .frame(height: 34)
-            .background(BurritoTheme.controlFill, in: Capsule())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
             .padding(.horizontal, 12)
-            .padding(.top, 18)
-            .padding(.bottom, 10)
+            .padding(.bottom, 14)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     SidebarNavigationButton(
                         title: "All Notes",
-                        systemImage: "house",
+                        systemImage: "house.fill",
                         count: notes.filter { $0.deletedAt == nil }.count,
                         isSelected: sidebarSelection == .all
                     ) {
@@ -260,7 +302,7 @@ struct ContentView: View {
                     }
                     SidebarNavigationButton(
                         title: "Favorites",
-                        systemImage: "star",
+                        systemImage: "star.fill",
                         count: notes.filter { $0.deletedAt == nil && $0.isFavorite }.count,
                         isSelected: sidebarSelection == .favorites
                     ) {
@@ -268,7 +310,7 @@ struct ContentView: View {
                     }
                     SidebarNavigationButton(
                         title: "Trash",
-                        systemImage: "trash",
+                        systemImage: "trash.fill",
                         count: notes.filter { $0.deletedAt != nil }.count,
                         isSelected: sidebarSelection == .trash
                     ) {
@@ -310,40 +352,68 @@ struct ContentView: View {
                 .padding(.horizontal, 8)
             }
 
-            HStack {
-                Button("New folder", systemImage: "folder.badge.plus") {
-                    showingNewFolder = true
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Button("New folder", systemImage: "folder.badge.plus") {
+                        showingNewFolder = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityLabel("New folder")
+                    SettingsLink {
+                        Image(systemName: "gearshape")
+                    }
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityLabel("Settings")
+                    Spacer()
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("New folder")
-                SettingsLink {
-                    Image(systemName: "gearshape")
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(height: 1)
+
+                HStack(spacing: 10) {
+                    Image(nsImage: userProfile.image ?? NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 30, height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    Text(userProfile.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
                 }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("Settings")
-                Spacer()
-                Image(nsImage: userProfile.image ?? NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 26, height: 26)
-                    .clipShape(Circle())
-                Text(userProfile.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
+                .padding(12)
             }
             .foregroundStyle(.secondary)
-            .padding(12)
         }
         .background(BurritoTheme.sidebar)
     }
 
     private var noteList: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    Text(sectionTitle)
-                        .font(.system(size: 34, weight: .regular, design: .serif))
-                        .padding(.bottom, 28)
+                    if sidebarSelection == .all {
+                        Text("Coming up")
+                            .font(.system(size: 36, weight: .regular, design: .serif))
+                            .padding(.bottom, 18)
+
+                        CalendarCard(
+                            calendarAccess: calendarAccess,
+                            startRecording: { showingRecordingSetup = true },
+                            openSettings: openCalendarSettings
+                        )
+                        .padding(.bottom, 30)
+                    } else {
+                        Text(sectionTitle)
+                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .padding(.bottom, 28)
+                    }
 
                     if visibleNotes.isEmpty {
                         HomeEmptyState(
@@ -380,7 +450,8 @@ struct ContentView: View {
                 .padding(.bottom, 100)
                 .frame(maxWidth: .infinity)
             }
-
+        }
+        .overlay(alignment: .topTrailing) {
             HStack(spacing: 10) {
                 Menu {
                     Picker("Sort", selection: $sort) {
@@ -398,6 +469,20 @@ struct ContentView: View {
                 .buttonStyle(BurritoActionButtonStyle(prominent: false))
             }
             .padding(14)
+        }
+        .overlay(alignment: .topLeading) {
+            if !isSidebarVisible {
+                Button {
+                    isSidebarVisible = true
+                } label: {
+                    Image(systemName: "sidebar.right")
+                }
+                .buttonStyle(BurritoIconButtonStyle())
+                .accessibilityLabel("Show sidebar")
+                .padding(.leading, 100)
+                .padding(.top, 14)
+                .transition(.opacity)
+            }
         }
         .background(BurritoTheme.canvas)
     }
@@ -469,6 +554,12 @@ struct ContentView: View {
         selectedNoteID = nil
     }
 
+    private func openCalendarSettings() {
+        NSWorkspace.shared.open(
+            URL(fileURLWithPath: "/System/Applications/System Settings.app")
+        )
+    }
+
     private func exportMarkdown(_ note: Note) {
         let panel = NSSavePanel()
         if let markdownType = UTType(filenameExtension: "md") {
@@ -511,7 +602,10 @@ private struct PermissionGateView: View {
                         title: "Transcribe your voice",
                         subtitle: "Microphone",
                         systemImage: "mic",
-                        state: permissions.microphone
+                        state: permissions.microphone,
+                        openSettings: {
+                            permissions.openSettings(for: .microphone)
+                        }
                     ) {
                         Task { await permissions.requestMicrophone() }
                     }
@@ -520,7 +614,10 @@ private struct PermissionGateView: View {
                         title: "Transcribe computer audio",
                         subtitle: "System Audio",
                         systemImage: "speaker.wave.2",
-                        state: permissions.systemAudio
+                        state: permissions.systemAudio,
+                        openSettings: {
+                            permissions.openSettings(for: .systemAudio)
+                        }
                     ) {
                         permissions.requestSystemAudio()
                     }
@@ -529,7 +626,10 @@ private struct PermissionGateView: View {
                         title: "Turn recordings into text",
                         subtitle: "Speech Recognition",
                         systemImage: "text.bubble",
-                        state: permissions.speechRecognition
+                        state: permissions.speechRecognition,
+                        openSettings: {
+                            permissions.openSettings(for: .speechRecognition)
+                        }
                     ) {
                         Task { await permissions.requestSpeechRecognition() }
                     }
@@ -566,6 +666,7 @@ private struct PermissionRow: View {
     let subtitle: String
     let systemImage: String
     let state: PermissionAccess.State
+    let openSettings: () -> Void
     let request: () -> Void
 
     var body: some View {
@@ -597,7 +698,10 @@ private struct PermissionRow: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
             } else {
-                Button(state == .denied ? "Check again" : "Enable \(subtitle)", action: request)
+                Button(
+                    state == .denied ? "Open Settings" : "Enable \(subtitle)",
+                    action: state == .denied ? openSettings : request
+                )
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
             }
         }
@@ -720,6 +824,7 @@ private struct BurritoMessageDialog: View {
     let message: String
     let confirmTitle: String
     let isDestructive: Bool
+    var isWorking = false
     let cancel: (() -> Void)?
     let confirm: () -> Void
 
@@ -742,8 +847,17 @@ private struct BurritoMessageDialog: View {
                     Button(confirmTitle, action: confirm)
                         .buttonStyle(BurritoDestructiveButtonStyle())
                 } else {
-                    Button(confirmTitle, action: confirm)
+                    Button(action: confirm) {
+                        HStack(spacing: 8) {
+                            if isWorking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text(isWorking ? "Installing…" : confirmTitle)
+                        }
+                    }
                         .buttonStyle(BurritoActionButtonStyle(prominent: true))
+                        .disabled(isWorking)
                 }
             }
         }
@@ -803,6 +917,171 @@ private struct SidebarNavigationButton: View {
             in: RoundedRectangle(cornerRadius: 8)
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct CalendarCard: View {
+    let calendarAccess: CalendarAccess
+    let startRecording: () -> Void
+    let openSettings: () -> Void
+
+    private var today: Date { .now }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(today.formatted(.dateTime.day()))
+                    .font(.system(size: 38, weight: .regular, design: .serif))
+                Text(today.formatted(.dateTime.month(.abbreviated)))
+                    .font(.system(size: 13, weight: .semibold))
+                Text(today.formatted(.dateTime.weekday(.wide)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 150, alignment: .leading)
+            .padding(22)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(width: 1)
+
+            Group {
+                switch calendarAccess.state {
+                case .notDetermined:
+                    CalendarConnectionState(
+                        symbol: "calendar.badge.plus",
+                        title: "Bring your day into focus",
+                        detail: "Connect Calendar to see what’s coming up.",
+                        buttonTitle: "Connect Calendar"
+                    ) {
+                        Task { await calendarAccess.requestAccess() }
+                    }
+                case .requesting:
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Connecting Calendar…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .authorized:
+                    if calendarAccess.upcomingEvents.isEmpty {
+                        CalendarConnectionState(
+                            symbol: "calendar.badge.clock",
+                            title: "No upcoming events",
+                            detail: "Your next seven days are clear.",
+                            buttonTitle: nil,
+                            action: {}
+                        )
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(calendarAccess.upcomingEvents) { event in
+                                UpcomingEventRow(event: event, startRecording: startRecording)
+                                if event.id != calendarAccess.upcomingEvents.last?.id {
+                                    Rectangle()
+                                        .fill(BurritoTheme.softBorder)
+                                        .frame(height: 1)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                    }
+                case .denied:
+                    CalendarConnectionState(
+                        symbol: "calendar.badge.exclamationmark",
+                        title: "Calendar access is off",
+                        detail: "Allow Burrito in Privacy & Security → Calendars.",
+                        buttonTitle: "Open System Settings",
+                        action: openSettings
+                    )
+                case .failed(let message):
+                    CalendarConnectionState(
+                        symbol: "exclamationmark.triangle",
+                        title: "Calendar couldn’t load",
+                        detail: message,
+                        buttonTitle: "Try Again"
+                    ) {
+                        Task { await calendarAccess.requestAccess() }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 188)
+        }
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(BurritoTheme.softBorder)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct CalendarConnectionState: View {
+    let symbol: String
+    let title: String
+    let detail: String
+    let buttonTitle: String?
+    let action: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            if let buttonTitle {
+                Button(buttonTitle, action: action)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                    .padding(.top, 4)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct UpcomingEventRow: View {
+    let event: UpcomingCalendarEvent
+    let startRecording: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(event.startDate, format: .dateTime.hour().minute())
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                if !Calendar.current.isDateInToday(event.startDate) {
+                    Text(event.startDate, format: .dateTime.weekday(.abbreviated))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 58, alignment: .trailing)
+
+            Capsule()
+                .fill(BurritoTheme.accent)
+                .frame(width: 3, height: 34)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(event.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                Text(event.isAllDay ? "All day · \(event.calendarName)" : event.calendarName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button("Record", systemImage: "waveform", action: startRecording)
+                .buttonStyle(BurritoActionButtonStyle(prominent: false))
+        }
+        .frame(minHeight: 58)
     }
 }
 

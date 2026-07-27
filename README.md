@@ -7,6 +7,7 @@ Burrito records system audio with an optional microphone track, transcribes it l
 ## A calmer way to remember
 
 - Capture system audio and your microphone as separate, synchronized sources
+- See real upcoming Calendar events and start the right recording from home
 - Transcribe after recording with on-device Speech frameworks
 - Generate summaries, detailed notes, study guides, or meeting notes
 - Create custom note templates with your own instructions

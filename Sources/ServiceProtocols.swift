@@ -16,6 +16,7 @@ struct AudioActivity: Equatable, Sendable {
 
 protocol Transcribing: Sendable {
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError>
+    func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError>
     func transcribe(
         fileURL: URL,
         source: AudioSource,

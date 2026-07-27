@@ -27,6 +27,9 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_APP_SANDBOX: NO
         CODE_SIGN_ENTITLEMENTS: Burrito.entitlements
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: YY5H9WM46P
     entitlements:
       path: Burrito.entitlements
   BurritoTests:
@@ -39,6 +42,9 @@ targets:
       - target: burrito
     settings:
       base:
+        CODE_SIGN_IDENTITY: Apple Development
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: YY5H9WM46P
         PRODUCT_BUNDLE_IDENTIFIER: com.local.burrito.tests
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Burrito.app/Contents/MacOS/Burrito"

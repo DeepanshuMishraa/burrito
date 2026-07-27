@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import CoreGraphics
 import Observation
 import Speech
@@ -6,6 +7,23 @@ import Speech
 @MainActor
 @Observable
 final class PermissionAccess {
+    enum Permission {
+        case microphone
+        case systemAudio
+        case speechRecognition
+
+        fileprivate var settingsURL: URL? {
+            let anchor = switch self {
+            case .microphone: "Privacy_Microphone"
+            case .systemAudio: "Privacy_ScreenCapture"
+            case .speechRecognition: "Privacy_SpeechRecognition"
+            }
+            return URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
+            )
+        }
+    }
+
     enum State: Equatable {
         case needsAccess
         case granted
@@ -61,6 +79,11 @@ final class PermissionAccess {
         } else {
             refresh()
         }
+    }
+
+    func openSettings(for permission: Permission) {
+        guard let url = permission.settingsURL else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private nonisolated static func requestSystemSpeechAuthorization()

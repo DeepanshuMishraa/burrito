@@ -22,6 +22,35 @@ struct LocalTranscriber: Transcribing {
         }
     }
 
+    func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError> {
+        let requested = Locale(identifier: identifier)
+        guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
+            return .failure(.unsupportedLanguage(identifier: identifier))
+        }
+
+        let transcriber = SpeechTranscriber(
+            locale: supported,
+            preset: .timeIndexedProgressiveTranscription
+        )
+
+        do {
+            guard let request = try await AssetInventory.assetInstallationRequest(
+                supporting: [transcriber]
+            ) else {
+                return await verifyLanguage(identifier)
+            }
+            try await request.downloadAndInstall()
+            return await verifyLanguage(identifier)
+        } catch {
+            return .failure(
+                .languageAssetInstallationFailed(
+                    identifier: identifier,
+                    details: error.localizedDescription
+                )
+            )
+        }
+    }
+
     func transcribe(
         fileURL: URL,
         source: AudioSource,
