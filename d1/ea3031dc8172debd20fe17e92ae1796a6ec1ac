@@ -1,0 +1,37 @@
+README.md
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-36
+Sources/Settings.swift
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-319
+Sources/burritoApp.swift
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-25
+Sources/PermissionAccess.swift
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-69
+burrito.xcodeproj/project.pbxproj
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-482
+Sources/BurritoTheme.swift
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-79
+Sources/ContentView.swift
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-2032
+LICENSE
+  s_d9f5a663bd4fd7::t_cad79995e6cf0e 1-21
+Burrito.entitlements
+  s_d9f5a663bd4fd7::t_dbcaa49fad301a 1-5
+burrito.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+  s_d9f5a663bd4fd7::t_dc75c4d23f0236 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d1ea3031dc8172debd20fe17e92ae1796a6ec1ac",
+  "prompts": {},
+  "sessions": {
+    "s_d9f5a663bd4fd7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f9eca-9630-7210-b6c4-9eb938e2f1b6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
