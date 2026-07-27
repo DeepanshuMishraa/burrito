@@ -52,6 +52,34 @@ struct TranscriptChunkerTests {
         #expect(chunks.count == 3)
         #expect(chunks.flatMap(\.segments) == segments)
     }
+
+    @Test("Reserves prompt overhead when sizing transcript chunks")
+    func reservesPromptOverhead() async throws {
+        let segments = [
+            TranscriptSegment(
+                source: .system,
+                startTime: 0,
+                duration: 1,
+                text: String(repeating: "A", count: 150)
+            ),
+            TranscriptSegment(
+                source: .system,
+                startTime: 1,
+                duration: 1,
+                text: String(repeating: "B", count: 150)
+            ),
+        ]
+        let chunker = TranscriptChunker(
+            tokenMeasurer: CharacterTokenMeasurer(size: 500),
+            reservedOutputTokens: 100,
+            reservedInputTokens: 100
+        )
+
+        let chunks = try await chunker.chunks(for: segments)
+
+        #expect(chunks.count == 2)
+        #expect(chunks.flatMap(\.segments) == segments)
+    }
 }
 
 @Suite("Templates")

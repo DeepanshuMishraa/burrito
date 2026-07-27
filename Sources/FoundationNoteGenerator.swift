@@ -3,15 +3,14 @@ import FoundationModels
 
 enum GenerationPrompt {
     static let digestInstructions = "Extract only facts present in the transcript. Preserve names, decisions, examples, and action items. Do not add commentary."
+    static let digestPrefix = "Create a compact factual digest of this timestamped transcript:\n\n"
+    static let condenseInstructions = "Combine these factual digests into a shorter digest without inventing facts, omitting decisions, or duplicating information."
 
     static func finalInstructions(template: TemplateSnapshot) -> String {
         """
         Write accurate local notes from the supplied factual digest.
         Follow this template: \(template.instructions)
-        Return exactly:
-        TITLE: <short title>
-        NOTE:
-        <Markdown note>
+        Return a short TITLE: and a complete NOTE: in Markdown.
         """
     }
 }
@@ -19,14 +18,23 @@ enum GenerationPrompt {
 struct TranscriptChunker: Sendable {
     let tokenMeasurer: any PromptTokenMeasuring
     let reservedOutputTokens: Int
+    let reservedInputTokens: Int
 
-    init(tokenMeasurer: any PromptTokenMeasuring, reservedOutputTokens: Int = 1_024) {
+    init(
+        tokenMeasurer: any PromptTokenMeasuring,
+        reservedOutputTokens: Int = 1_024,
+        reservedInputTokens: Int = 0
+    ) {
         self.tokenMeasurer = tokenMeasurer
         self.reservedOutputTokens = reservedOutputTokens
+        self.reservedInputTokens = reservedInputTokens
     }
 
     func chunks(for segments: [TranscriptSegment]) async throws -> [PromptChunk] {
-        let limit = max(256, await tokenMeasurer.contextSize - reservedOutputTokens)
+        let limit = max(
+            256,
+            await tokenMeasurer.contextSize - reservedOutputTokens - reservedInputTokens
+        )
         var chunks: [PromptChunk] = []
         var current: [TranscriptSegment] = []
 
@@ -47,6 +55,15 @@ struct TranscriptChunker: Sendable {
     }
 }
 
+@Generable
+private struct GeneratedNoteResponse {
+    @Guide(description: "A short title without Markdown formatting.")
+    var title: String
+
+    @Guide(description: "The complete note formatted as Markdown.")
+    var markdown: String
+}
+
 actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
     private let model = SystemLanguageModel.default
 
@@ -59,13 +76,54 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
         return max(1, text.utf8.count / 3)
     }
 
-    func complete(instructions: String, prompt: String) async throws -> String {
+    func complete(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> String {
         let session = LanguageModelSession(model: model, instructions: instructions)
-        return try await session.respond(to: prompt).content
+        let options = GenerationOptions(
+            sampling: nil,
+            temperature: nil,
+            maximumResponseTokens: maximumResponseTokens
+        )
+        return try await session.respond(to: prompt, options: options).content
+    }
+
+    func completeNote(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> GeneratedNote {
+        let session = LanguageModelSession(model: model, instructions: instructions)
+        let options = GenerationOptions(
+            sampling: nil,
+            temperature: nil,
+            maximumResponseTokens: maximumResponseTokens
+        )
+        let response = try await session.respond(
+            to: prompt,
+            generating: GeneratedNoteResponse.self,
+            options: options
+        ).content
+        return GeneratedNote(
+            title: response.title.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+            markdown: response.markdown.trimmingCharacters(
+                in: CharacterSet.whitespacesAndNewlines
+            )
+        )
     }
 }
 
 struct FoundationNoteGenerator: NoteGenerating {
+    private enum TokenBudget {
+        static let digestOutput = 512
+        static let condensedOutput = 512
+        static let finalOutput = 1_024
+        static let safetyMargin = 256
+        static let generatedNoteSchema = 256
+    }
+
     private let model = SystemLanguageModel.default
     private let adapter: AppleModelAdapter
 
@@ -104,44 +162,70 @@ struct FoundationNoteGenerator: NoteGenerating {
         if case .failure(let error) = available { return .failure(error) }
 
         do {
-            let chunker = TranscriptChunker(tokenMeasurer: adapter)
+            let digestOverhead = try await tokenCount(
+                GenerationPrompt.digestInstructions + GenerationPrompt.digestPrefix
+            )
+            let chunker = TranscriptChunker(
+                tokenMeasurer: adapter,
+                reservedOutputTokens: TokenBudget.digestOutput,
+                reservedInputTokens: digestOverhead + TokenBudget.safetyMargin
+            )
             let chunks = try await chunker.chunks(for: segments)
             var digests: [String] = []
 
             for chunk in chunks {
                 let digest = try await adapter.complete(
                     instructions: GenerationPrompt.digestInstructions,
-                    prompt: "Create a compact factual digest of this timestamped transcript:\n\n\(chunk.text)"
+                    prompt: GenerationPrompt.digestPrefix + chunk.text,
+                    maximumResponseTokens: TokenBudget.digestOutput
                 )
                 digests.append(digest)
             }
 
-            let condensed = try await recursivelyCondense(digests)
-            let final = try await adapter.complete(
-                instructions: GenerationPrompt.finalInstructions(template: template),
-                prompt: condensed
+            let finalInstructions = GenerationPrompt.finalInstructions(template: template)
+            let finalInputLimit = try await inputLimit(
+                instructions: finalInstructions,
+                reservedOutputTokens: TokenBudget.finalOutput,
+                additionalReservedTokens: TokenBudget.generatedNoteSchema
             )
-            guard let parsed = parseFinal(final) else {
+            let condenseInputLimit = try await inputLimit(
+                instructions: GenerationPrompt.condenseInstructions,
+                reservedOutputTokens: TokenBudget.condensedOutput
+            )
+            let condensed = try await recursivelyCondense(
+                digests,
+                finalInputLimit: finalInputLimit,
+                condenseInputLimit: condenseInputLimit
+            )
+            let generated = try await adapter.completeNote(
+                instructions: finalInstructions,
+                prompt: condensed,
+                maximumResponseTokens: TokenBudget.finalOutput
+            )
+            guard !generated.title.isEmpty, !generated.markdown.isEmpty else {
                 return .failure(
-                    .generationFailed(details: "The model returned an unexpected note format.")
+                    .generationFailed(details: "The model returned an empty title or note.")
                 )
             }
-            return .success(parsed)
+            return .success(generated)
         } catch {
             return .failure(.generationFailed(details: error.localizedDescription))
         }
     }
 
-    private func recursivelyCondense(_ values: [String]) async throws -> String {
-        let limit = max(256, await adapter.contextSize - 1_024)
+    private func recursivelyCondense(
+        _ values: [String],
+        finalInputLimit: Int,
+        condenseInputLimit: Int
+    ) async throws -> String {
         var current = values
 
-        while try await adapter.tokenCount(current.joined(separator: "\n\n")) > limit {
+        while try await tokenCount(current.joined(separator: "\n\n")) > finalInputLimit {
             var next: [String] = []
             var batch: [String] = []
             for value in current {
                 let candidate = (batch + [value]).joined(separator: "\n\n")
-                if !batch.isEmpty, try await adapter.tokenCount(candidate) > limit {
+                if !batch.isEmpty, try await tokenCount(candidate) > condenseInputLimit {
                     next.append(try await condense(batch))
                     batch = [value]
                 } else {
@@ -158,19 +242,29 @@ struct FoundationNoteGenerator: NoteGenerating {
 
     private func condense(_ values: [String]) async throws -> String {
         try await adapter.complete(
-            instructions: "Combine these factual digests without inventing, omitting decisions, or duplicating facts.",
-            prompt: values.joined(separator: "\n\n")
+            instructions: GenerationPrompt.condenseInstructions,
+            prompt: values.joined(separator: "\n\n"),
+            maximumResponseTokens: TokenBudget.condensedOutput
         )
     }
 
-    private func parseFinal(_ value: String) -> GeneratedNote? {
-        guard let noteRange = value.range(of: "\nNOTE:") else { return nil }
-        let titlePart = value[..<noteRange.lowerBound]
-            .replacingOccurrences(of: "TITLE:", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = value[noteRange.upperBound...]
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !titlePart.isEmpty, !body.isEmpty else { return nil }
-        return GeneratedNote(title: titlePart, markdown: body)
+    private func inputLimit(
+        instructions: String,
+        reservedOutputTokens: Int,
+        additionalReservedTokens: Int = 0
+    ) async throws -> Int {
+        let instructionTokens = try await tokenCount(instructions)
+        return max(
+            256,
+            await adapter.contextSize
+                - reservedOutputTokens
+                - additionalReservedTokens
+                - TokenBudget.safetyMargin
+                - instructionTokens
+        )
+    }
+
+    private func tokenCount(_ text: String) async throws -> Int {
+        try await adapter.tokenCount(text)
     }
 }

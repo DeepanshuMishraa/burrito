@@ -46,5 +46,14 @@ protocol PromptTokenMeasuring: Sendable {
 }
 
 protocol TextCompleting: Sendable {
-    func complete(instructions: String, prompt: String) async throws -> String
+    func complete(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> String
+    func completeNote(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> GeneratedNote
 }
