@@ -37,8 +37,9 @@ private struct MacUserProfile {
             authority: CBIdentityAuthority.local()
         )
         let fullName = identity?.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = fullName?.isEmpty == false ? fullName ?? NSFullUserName() : NSFullUserName()
         return MacUserProfile(
-            name: fullName?.isEmpty == false ? fullName ?? NSFullUserName() : NSFullUserName(),
+            name: resolvedName.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? resolvedName,
             image: identity?.image
         )
     }

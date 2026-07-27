@@ -56,14 +56,20 @@ final class PermissionAccess {
 
     func requestSpeechRecognition() async {
         if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
-            let status = await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization {
-                    continuation.resume(returning: $0)
-                }
-            }
+            let status = await Self.requestSystemSpeechAuthorization()
             speechRecognition = status == .authorized ? .granted : .denied
         } else {
             refresh()
+        }
+    }
+
+    private nonisolated static func requestSystemSpeechAuthorization()
+        async -> SFSpeechRecognizerAuthorizationStatus
+    {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
+                continuation.resume(returning: status)
+            }
         }
     }
 }
