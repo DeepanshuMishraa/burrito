@@ -116,7 +116,7 @@ private struct BurritoSettingsView: View {
                             .frame(height: 38)
                             .background(
                                 selected == tab ? BurritoTheme.controlFill : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 9)
+                                in: Rectangle()
                             )
                     }
                     .buttonStyle(.plain)
@@ -230,7 +230,7 @@ private struct SettingsChoice: View {
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                 Text(title)
                 Spacer()
-                Circle()
+                Rectangle()
                     .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 20, height: 20)
                     .overlay {
@@ -243,9 +243,9 @@ private struct SettingsChoice: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 48)
-            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 11))
+            .background(BurritoTheme.raised, in: Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 11)
+                Rectangle()
                     .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
             }
         }
@@ -268,20 +268,20 @@ private struct SettingsToggleRow: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Capsule()
+                Rectangle()
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 42, height: 24)
                     .overlay(alignment: isOn ? .trailing : .leading) {
-                        Circle()
+                        Rectangle()
                             .fill(.white)
                             .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
                             .padding(3)
                     }
             }
             .padding(16)
-            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+            .background(BurritoTheme.raised, in: Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 12).stroke(BurritoTheme.softBorder)
+                Rectangle().stroke(BurritoTheme.softBorder)
             }
         }
         .buttonStyle(.plain)

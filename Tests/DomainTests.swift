@@ -257,14 +257,3 @@ struct TemplateTests {
         #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
     }
 }
-
-@Suite("Live transcript preview")
-struct LiveTranscriptPreviewTests {
-    @Test("Shows only the latest four normalized characters")
-    func trailingCharacters() {
-        #expect(LiveTranscriptPreview.trailingCharacters(in: "hello world") == "orld")
-        #expect(LiveTranscriptPreview.trailingCharacters(in: "one\n\n two") == " two")
-        #expect(LiveTranscriptPreview.trailingCharacters(in: "🙂 café") == "café")
-        #expect(LiveTranscriptPreview.trailingCharacters(in: "").isEmpty)
-    }
-}

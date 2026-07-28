@@ -21,11 +21,6 @@ final class ParakeetModelStore {
         refresh()
     }
 
-    var selectedBackend: TranscriptionBackend {
-        get { TranscriptionBackend.selected }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: TranscriptionBackend.storageKey) }
-    }
-
     func refresh() {
         for variant in ParakeetModelVariant.allCases {
             guard !isDownloading(variant) else { continue }
@@ -50,24 +45,12 @@ final class ParakeetModelStore {
                     )
                 }
             }
-            selectedBackend = .parakeet
             states[variant] = .installed
         } catch is CancellationError {
             states[variant] = Self.persistedState(for: variant)
         } catch {
             states[variant] = .failed(message: error.localizedDescription)
         }
-    }
-
-    func useAppleSpeech() {
-        selectedBackend = .apple
-    }
-
-    func useLocalModels() {
-        guard ParakeetModelVariant.allCases.contains(where: Self.isInstalled) else {
-            return
-        }
-        selectedBackend = .parakeet
     }
 
     nonisolated static func isInstalled(_ variant: ParakeetModelVariant) -> Bool {

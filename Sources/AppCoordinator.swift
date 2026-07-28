@@ -10,7 +10,6 @@ final class AppCoordinator {
     private(set) var activeNoteID: UUID?
     private(set) var elapsed: TimeInterval = 0
     private(set) var activity = AudioActivity.silent
-    private(set) var liveTranscript = ""
     private(set) var lastError: BurritoError?
     private(set) var isInstallingLanguageAsset = false
 
@@ -18,6 +17,7 @@ final class AppCoordinator {
     private let transcriber: any Transcribing
     private let generator: any NoteGenerating
     private let fileStore: any RecordingFileStore
+    private let feedback: any AppFeedbackProviding
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
     private var activeFiles: RecordingFiles?
     private var appendsToExistingNote = false
@@ -28,12 +28,14 @@ final class AppCoordinator {
         transcriber: any Transcribing,
         generator: any NoteGenerating,
         fileStore: any RecordingFileStore,
+        feedback: any AppFeedbackProviding = SilentAppFeedback(),
         requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization
     ) {
         self.capture = capture
         self.transcriber = transcriber
         self.generator = generator
         self.fileStore = fileStore
+        self.feedback = feedback
         self.requestSpeechAuthorization = requestSpeechAuthorization
     }
 
@@ -42,7 +44,8 @@ final class AppCoordinator {
             capture: SystemAudioCapture(),
             transcriber: LocalTranscriber(),
             generator: FoundationNoteGenerator(),
-            fileStore: LocalRecordingFileStore()
+            fileStore: LocalRecordingFileStore(),
+            feedback: BurritoAppFeedback.shared
         )
     }
 
@@ -96,9 +99,11 @@ final class AppCoordinator {
             return
         }
 
-        guard await requestSpeechAuthorization() else {
-            failBeforeRecording(.speechRecognitionPermissionDenied)
-            return
+        if transcriber.requiresSpeechAuthorization(for: languageIdentifier) {
+            guard await requestSpeechAuthorization() else {
+                failBeforeRecording(.speechRecognitionPermissionDenied)
+                return
+            }
         }
 
         let languageAvailability = await transcriber.verifyLanguage(languageIdentifier)
@@ -160,8 +165,8 @@ final class AppCoordinator {
             captureState = .recording(sessionID: sessionID, startedAt: now)
             elapsed = 0
             activity = .silent
-            liveTranscript = ""
             startTimer(startedAt: now)
+            feedback.recordingStarted()
         case .failure(let error):
             note.lifecycle = .recoverable
             note.lastErrorMessage = error.recoveryMessage
@@ -185,13 +190,13 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = nil
         activity = .silent
-        liveTranscript = ""
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
         let recordingDuration = Date.now.timeIntervalSince(startedAt)
         note.updatedAt = .now
         try? context.save()
+        feedback.recordingStopped()
 
         if case .failure(let error) = await capture.stop() {
             fail(note: note, error: error, context: context)
@@ -296,7 +301,6 @@ final class AppCoordinator {
         captureState = .idle
         elapsed = 0
         activity = .silent
-        liveTranscript = ""
     }
 
     private func finishSilentRecording(
@@ -323,7 +327,6 @@ final class AppCoordinator {
         captureState = .idle
         elapsed = 0
         activity = .silent
-        liveTranscript = ""
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
@@ -376,6 +379,9 @@ final class AppCoordinator {
             lastError = error
         }
         try? context.save()
+        if note.lifecycle == .ready {
+            feedback.noteReady(title: note.title)
+        }
     }
 
     private func appendGeneratedNotes(
@@ -437,6 +443,9 @@ final class AppCoordinator {
             lastError = error
         }
         try? context.save()
+        if note.lifecycle == .ready {
+            feedback.noteReady(title: note.title)
+        }
     }
 
     private func resolvedSuggestedTitle(
@@ -498,7 +507,6 @@ final class AppCoordinator {
     private func failBeforeRecording(_ error: BurritoError) {
         captureState = .idle
         activity = .silent
-        liveTranscript = ""
         lastError = error
     }
 
@@ -512,7 +520,6 @@ final class AppCoordinator {
         activeFiles = nil
         appendsToExistingNote = false
         activity = .silent
-        liveTranscript = ""
         timerTask?.cancel()
         timerTask = nil
     }
@@ -534,7 +541,6 @@ final class AppCoordinator {
                 guard let self else { return }
                 elapsed = Date.now.timeIntervalSince(startedAt)
                 activity = capture.activity
-                liveTranscript = capture.liveTranscript
             }
         }
     }

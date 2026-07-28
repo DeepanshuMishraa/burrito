@@ -42,8 +42,6 @@ enum BurritoTheme {
     static let sidebarWidth: CGFloat = 216
     static let listWidth: CGFloat = 340
     static let editorWidth: CGFloat = 760
-    static let cardRadius: CGFloat = 14
-
     private static func adaptive(light: NSColor, dark: NSColor) -> Color {
         Color(
             nsColor: NSColor(name: nil) { appearance in
@@ -74,7 +72,7 @@ struct BurritoPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(BurritoTheme.controlFill, in: Capsule())
+            .background(BurritoTheme.controlFill, in: Rectangle())
     }
 }
 
@@ -123,9 +121,9 @@ struct BurritoLanguagePicker: View {
             .frame(height: 44)
             .background(
                 embedded ? Color.clear : BurritoTheme.controlFill,
-                in: RoundedRectangle(cornerRadius: 9)
+                in: Rectangle()
             )
-            .contentShape(RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .popover(
@@ -143,7 +141,7 @@ struct BurritoLanguagePicker: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 7))
+                .background(BurritoTheme.controlFill, in: Rectangle())
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -188,9 +186,9 @@ struct BurritoLanguagePicker: View {
                 selection == language.identifier
                     ? BurritoTheme.controlFill
                     : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7)
+                in: Rectangle()
             )
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

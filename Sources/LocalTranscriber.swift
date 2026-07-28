@@ -108,8 +108,15 @@ struct LocalTranscriber: Transcribing {
     private let apple = AppleSpeechTranscriber()
     private let parakeet = ParakeetTranscriber.shared
 
+    func requiresSpeechAuthorization(for identifier: String) -> Bool {
+        selectedParakeetModel(for: identifier) == nil
+    }
+
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
-        await apple.verifyLanguage(identifier)
+        if selectedParakeetModel(for: identifier) != nil {
+            return .success(())
+        }
+        return await apple.verifyLanguage(identifier)
     }
 
     func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError> {
@@ -121,11 +128,7 @@ struct LocalTranscriber: Transcribing {
         source: AudioSource,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
-        guard TranscriptionBackend.selected == .parakeet,
-              let variant = ParakeetModelStore.installedModel(
-                for: languageIdentifier
-              )
-        else {
+        guard let variant = selectedParakeetModel(for: languageIdentifier) else {
             return await apple.transcribe(
                 fileURL: fileURL,
                 source: source,
@@ -158,5 +161,11 @@ struct LocalTranscriber: Transcribing {
                 )
             )
         }
+    }
+
+    private func selectedParakeetModel(
+        for languageIdentifier: String
+    ) -> ParakeetModelVariant? {
+        ParakeetModelStore.installedModel(for: languageIdentifier)
     }
 }

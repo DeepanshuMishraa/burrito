@@ -3,7 +3,6 @@ import Foundation
 @MainActor
 protocol AudioCapturing: AnyObject {
     var activity: AudioActivity { get }
-    var liveTranscript: String { get }
     var hasMeaningfulAudio: Bool { get }
     func start(
         files: RecordingFiles,
@@ -21,6 +20,7 @@ struct AudioActivity: Equatable, Sendable {
 }
 
 protocol Transcribing: Sendable {
+    func requiresSpeechAuthorization(for identifier: String) -> Bool
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError>
     func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError>
     func transcribe(
@@ -28,6 +28,12 @@ protocol Transcribing: Sendable {
         source: AudioSource,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError>
+}
+
+extension Transcribing {
+    func requiresSpeechAuthorization(for identifier: String) -> Bool {
+        true
+    }
 }
 
 protocol NoteGenerating: Sendable {

@@ -7,7 +7,6 @@ import Testing
 @MainActor
 private final class CaptureSpyingStub: AudioCapturing {
     var activity = AudioActivity.silent
-    var liveTranscript = ""
     var hasMeaningfulAudio = true
     private(set) var starts = 0
     private(set) var stops = 0
@@ -31,9 +30,31 @@ private final class CaptureSpyingStub: AudioCapturing {
     }
 }
 
+@MainActor
+private final class FeedbackSpy: AppFeedbackProviding {
+    private(set) var events: [String] = []
+
+    func recordingStarted() {
+        events.append("recordingStarted")
+    }
+
+    func recordingStopped() {
+        events.append("recordingStopped")
+    }
+
+    func noteReady(title: String) {
+        events.append("noteReady:\(title)")
+    }
+}
+
 private struct TranscriberStub: Transcribing {
     var languageResult: Result<Void, BurritoError> = .success(())
     var installationResult: Result<Void, BurritoError> = .success(())
+    var needsSpeechAuthorization = true
+
+    func requiresSpeechAuthorization(for identifier: String) -> Bool {
+        needsSpeechAuthorization
+    }
 
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
         languageResult
@@ -144,17 +165,53 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
 @MainActor
 @Suite("Recording coordinator")
 struct CoordinatorTests {
+    @Test("Local transcription starts without requesting Apple Speech access")
+    func localTranscriptionSkipsSpeechAuthorization() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let authorizationRequests = Mutex(0)
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: {
+                authorizationRequests.withLock { $0 += 1 }
+                return false
+            }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "text.alignleft",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            includesMicrophone: true,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+
+        #expect(coordinator.captureState.isRecording)
+        #expect(capture.starts == 1)
+        #expect(authorizationRequests.withLock { $0 } == 0)
+        await coordinator.stop(context: context)
+    }
+
     @Test("Repeated start is rejected and a successful stop produces a ready note")
     func startStopProtection() async throws {
         // Given
         let context = try makeContext()
         let capture = CaptureSpyingStub()
         let fileStore = FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        let feedback = FeedbackSpy()
         let coordinator = AppCoordinator(
             capture: capture,
             transcriber: TranscriberStub(),
             generator: GeneratorStub(),
             fileStore: fileStore,
+            feedback: feedback,
             requestSpeechAuthorization: { true }
         )
         let options = RecordingOptions(
@@ -172,6 +229,7 @@ struct CoordinatorTests {
         #expect(coordinator.captureState.isRecording)
         #expect(coordinator.lastError == .recordingAlreadyInProgress)
         #expect(capture.starts == 1)
+        #expect(feedback.events == ["recordingStarted"])
 
         // When
         await coordinator.stop(context: context)
@@ -184,6 +242,10 @@ struct CoordinatorTests {
         #expect(note.title == "Generated title")
         #expect(note.transcriptSegments.count == 2)
         #expect(fileStore.removeCount.withLock { $0 } == 1)
+        #expect(
+            feedback.events
+                == ["recordingStarted", "recordingStopped", "noteReady:Generated title"]
+        )
     }
 
     @Test("Continuing a note appends transcript and duration without creating another note")
@@ -297,12 +359,11 @@ struct CoordinatorTests {
         #expect(generator.titleCallCount.withLock { $0 } == 2)
     }
 
-    @Test("Recording publishes live transcript and audio activity")
+    @Test("Recording publishes live audio activity")
     func liveRecordingFeedback() async throws {
         let context = try makeContext()
         let capture = CaptureSpyingStub()
         capture.activity = AudioActivity(system: 0.72, microphone: 0.31)
-        capture.liveTranscript = "A live sentence"
         let coordinator = AppCoordinator(
             capture: capture,
             transcriber: TranscriberStub(),
@@ -325,12 +386,10 @@ struct CoordinatorTests {
         try await Task.sleep(for: .milliseconds(120))
 
         #expect(coordinator.activity == capture.activity)
-        #expect(coordinator.liveTranscript == "A live sentence")
         #expect(capture.languageIdentifiers == ["en-US"])
 
         await coordinator.stop(context: context)
         #expect(coordinator.activity == .silent)
-        #expect(coordinator.liveTranscript.isEmpty)
     }
 
     @Test("Silent recordings do not create transcripts or generated notes")

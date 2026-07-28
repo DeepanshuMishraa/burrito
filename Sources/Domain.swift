@@ -58,16 +58,6 @@ enum Transcript {
     }
 }
 
-enum LiveTranscriptPreview {
-    static func trailingCharacters(in text: String, limit: Int = 4) -> String {
-        guard limit > 0 else { return "" }
-        let normalized = text
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-        return String(normalized.suffix(limit))
-    }
-}
-
 enum CaptureState: Equatable, Sendable {
     case idle
     case preparing
@@ -282,20 +272,6 @@ struct TemplateSnapshot: Codable, Equatable, Sendable {
     var name: String
     var symbol: String
     var instructions: String
-}
-
-enum TranscriptionBackend: String, CaseIterable, Sendable {
-    case apple
-    case parakeet
-
-    static let storageKey = "transcriptionBackend"
-
-    static var selected: TranscriptionBackend {
-        guard let stored = UserDefaults.standard.string(forKey: storageKey) else {
-            return .apple
-        }
-        return TranscriptionBackend(rawValue: stored) ?? .apple
-    }
 }
 
 enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendable {

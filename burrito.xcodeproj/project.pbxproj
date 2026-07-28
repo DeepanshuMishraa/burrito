@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
+		0C0A42C544C340059B6A3E2F /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D06A59812A04C5781A5AA21 /* AppFeedback.swift */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
 		1DD68C6D9799D4BFB7E88354 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
@@ -63,6 +64,7 @@
 		78A20AF8BC980AFBBC930B6C /* burrito.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = burrito.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Scooter-loader.json"; sourceTree = "<group>"; };
 		80312D2153FF4924DF498F98 /* CoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorTests.swift; sourceTree = "<group>"; };
+		8D06A59812A04C5781A5AA21 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
 		8932061A0CA5A58DCC622228 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
@@ -120,6 +122,7 @@
 			children = (
 				00A639102CCFABB8A22A07D3 /* AppCommands.swift */,
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
+				8D06A59812A04C5781A5AA21 /* AppFeedback.swift */,
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
 				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
@@ -252,6 +255,7 @@
 			files = (
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
+				0C0A42C544C340059B6A3E2F /* AppFeedback.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
 				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
 				F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */,

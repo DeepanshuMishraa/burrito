@@ -42,6 +42,7 @@ struct ContentView: View {
     @State private var coordinator = AppCoordinator.live()
     @State private var permissions = PermissionAccess()
     @State private var calendarAccess = CalendarAccess()
+    @State private var notificationAccess = NotificationAccess.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
@@ -212,11 +213,13 @@ struct ContentView: View {
             seedAndRecover()
             permissions.refresh()
             calendarAccess.refresh()
+            Task { await notificationAccess.refresh() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 permissions.refresh()
                 calendarAccess.refresh()
+                Task { await notificationAccess.refresh() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
@@ -237,8 +240,7 @@ struct ContentView: View {
     }
 
     private func finalTranscriptionEngine(for languageIdentifier: String) -> String {
-        if TranscriptionBackend.selected == .parakeet,
-           let model = ParakeetModelStore.installedModel(for: languageIdentifier) {
+        if let model = ParakeetModelStore.installedModel(for: languageIdentifier) {
             return model.displayName
         }
         return "Apple SpeechTranscriber"
@@ -304,7 +306,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 11)
             .frame(height: 34)
-            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
+            .background(BurritoTheme.controlFill, in: Rectangle())
             .padding(.horizontal, 12)
             .padding(.bottom, 14)
 
@@ -381,6 +383,11 @@ struct ContentView: View {
             .scrollIndicators(.hidden)
 
             VStack(spacing: 0) {
+                if notificationAccess.needsPrompt {
+                    NotificationPermissionCard(access: notificationAccess)
+                        .padding(8)
+                }
+
                 Rectangle()
                     .fill(BurritoTheme.softBorder)
                     .frame(height: 1)
@@ -389,7 +396,7 @@ struct ContentView: View {
                     Image(nsImage: userProfile.image ?? NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 30, height: 30)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .clipShape(Rectangle())
                     Text(userProfile.name)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
@@ -613,10 +620,58 @@ struct ContentView: View {
     }
 }
 
+private struct NotificationPermissionCard: View {
+    @Bindable var access: NotificationAccess
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: "bell")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(BurritoTheme.accent)
+                Text("DON'T MISS A NOTE")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(
+                access.state == .denied
+                    ? "Notifications are off in System Settings."
+                    : "Know when recording starts and your note is ready."
+            )
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Task { await access.requestAccess() }
+            } label: {
+                Text(access.actionTitle)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
+                    .foregroundStyle(.primary)
+                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .overlay {
+                        Rectangle()
+                            .stroke(BurritoTheme.softBorder)
+                    }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(11)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle()
+                .stroke(BurritoTheme.softBorder)
+        }
+    }
+}
+
 private struct ModelsView: View {
     @Bindable var modelStore: ParakeetModelStore
-    @AppStorage(TranscriptionBackend.storageKey) private var backend =
-        TranscriptionBackend.apple.rawValue
 
     private var hasInstalledModels: Bool {
         ParakeetModelVariant.allCases.contains {
@@ -637,43 +692,35 @@ private struct ModelsView: View {
                         Text("Models")
                             .font(.system(size: 34, weight: .regular, design: .serif))
                             .tracking(-0.5)
-                        Text("Choose the local transcription engine Burrito uses after a recording.")
+                        Text("Burrito automatically uses the best installed model after a recording.")
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         BurritoSectionLabel(title: "Transcription engine")
-                        HStack(spacing: 0) {
-                            ModelEngineChoice(
-                                title: "Apple Speech",
-                                detail: "Built in",
-                                systemImage: "apple.logo",
-                                isSelected: backend == TranscriptionBackend.apple.rawValue,
-                                isEnabled: true
-                            ) {
-                                backend = TranscriptionBackend.apple.rawValue
-                                modelStore.useAppleSpeech()
+                        HStack(spacing: 12) {
+                            Image(systemName: hasInstalledModels ? "waveform" : "apple.logo")
+                                .foregroundStyle(BurritoTheme.accent)
+                                .frame(width: 20)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(hasInstalledModels ? "Downloaded models first" : "Apple Speech")
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(
+                                    hasInstalledModels
+                                        ? "Apple Speech handles languages without a matching model"
+                                        : "Install a model below to use it automatically"
+                                )
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
                             }
-
-                            Rectangle()
-                                .fill(BurritoTheme.softBorder)
-                                .frame(width: 1, height: 44)
-
-                            ModelEngineChoice(
-                                title: "Downloaded models",
-                                detail: hasInstalledModels ? "Available" : "Install one below",
-                                systemImage: "waveform",
-                                isSelected: backend == TranscriptionBackend.parakeet.rawValue,
-                                isEnabled: hasInstalledModels
-                            ) {
-                                backend = TranscriptionBackend.parakeet.rawValue
-                                modelStore.useLocalModels()
-                            }
+                            Spacer()
                         }
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.horizontal, 14)
+                        .frame(height: 54)
+                        .background(BurritoTheme.raised, in: Rectangle())
                         .overlay {
-                            RoundedRectangle(cornerRadius: 10)
+                            Rectangle()
                                 .stroke(BurritoTheme.softBorder.opacity(0.7))
                         }
                     }
@@ -704,9 +751,9 @@ private struct ModelsView: View {
                                 }
                             }
                         }
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .background(BurritoTheme.raised, in: Rectangle())
                         .overlay {
-                            RoundedRectangle(cornerRadius: 10)
+                            Rectangle()
                                 .stroke(BurritoTheme.softBorder.opacity(0.7))
                         }
                     }
@@ -728,46 +775,6 @@ private struct ModelsView: View {
         }
         .background(BurritoTheme.canvas)
         .onAppear { modelStore.refresh() }
-    }
-}
-
-private struct ModelEngineChoice: View {
-    let title: String
-    let detail: String
-    let systemImage: String
-    let isSelected: Bool
-    let isEnabled: Bool
-    let select: () -> Void
-
-    var body: some View {
-        Button(action: select) {
-            HStack(spacing: 11) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 12, weight: .medium))
-                    Text(detail)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(BurritoTheme.accent)
-                }
-            }
-            .padding(.horizontal, 15)
-            .frame(maxWidth: .infinity, minHeight: 60)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.48)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -842,8 +849,8 @@ private struct ModelCatalogRow: View {
                     .foregroundStyle(.secondary)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(BurritoTheme.controlFill)
-                        Capsule()
+                        Rectangle().fill(BurritoTheme.controlFill)
+                        Rectangle()
                             .fill(BurritoTheme.accent)
                             .frame(width: proxy.size.width * progress)
                     }
@@ -965,7 +972,7 @@ private struct ScooterGenerationLoader: View {
                             id: \.element
                         ) { index, item in
                             HStack(spacing: 6) {
-                                Circle()
+                                Rectangle()
                                     .fill(stageColor(at: index))
                                     .frame(width: 5, height: 5)
                                 Text(shortLabel(for: item))
@@ -1058,27 +1065,15 @@ private struct PermissionGateView: View {
                     ) {
                         permissions.requestSystemAudio()
                     }
-                    Divider().opacity(0.45)
-                    PermissionRow(
-                        title: "Turn recordings into text",
-                        subtitle: "Speech Recognition",
-                        systemImage: "text.bubble",
-                        state: permissions.speechRecognition,
-                        openSettings: {
-                            permissions.openSettings(for: .speechRecognition)
-                        }
-                    ) {
-                        Task { await permissions.requestSpeechRecognition() }
-                    }
                 }
-                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 18))
+                .background(BurritoTheme.raised, in: Rectangle())
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18)
+                    Rectangle()
                         .stroke(BurritoTheme.softBorder)
                 }
 
                 HStack {
-                    Text(permissions.allGranted ? "Everything stays on this Mac." : "Grant all three permissions to continue.")
+                    Text(permissions.allGranted ? "Everything stays on this Mac." : "Grant both permissions to continue.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()
@@ -1089,9 +1084,9 @@ private struct PermissionGateView: View {
             }
             .padding(50)
             .frame(width: 820)
-            .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 24))
+            .background(BurritoTheme.paper, in: Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 24)
+                Rectangle()
                     .stroke(BurritoTheme.softBorder)
             }
         }
@@ -1112,7 +1107,7 @@ private struct PermissionRow: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(state == .granted ? BurritoTheme.accent : .secondary)
                 .frame(width: 36, height: 36)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 10))
+                .background(BurritoTheme.controlFill, in: Rectangle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
@@ -1124,7 +1119,7 @@ private struct PermissionRow: View {
             if state == .granted {
                 HStack(spacing: 7) {
                     ZStack {
-                        Circle().fill(BurritoTheme.accent)
+                        Rectangle().fill(BurritoTheme.accent)
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
@@ -1159,11 +1154,11 @@ private struct BurritoActionButtonStyle: ButtonStyle {
             .frame(height: 38)
             .background(
                 prominent ? Color.primary : BurritoTheme.controlFill,
-                in: Capsule()
+                in: Rectangle()
             )
             .overlay {
                 if !prominent {
-                    Capsule().stroke(BurritoTheme.softBorder)
+                    Rectangle().stroke(BurritoTheme.softBorder)
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
@@ -1185,10 +1180,10 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                 configuration.isPressed
                     ? BurritoTheme.controlFill.opacity(1.35)
                     : BurritoTheme.controlFill,
-                in: RoundedRectangle(cornerRadius: 8)
+                in: Rectangle()
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
+                Rectangle()
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
@@ -1206,7 +1201,7 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .frame(height: 38)
-            .background(Color.red.opacity(0.78), in: Capsule())
+            .background(Color.red.opacity(0.78), in: Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
@@ -1220,8 +1215,8 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.secondary)
             .frame(width: 34, height: 34)
-            .background(BurritoTheme.controlFill, in: Circle())
-            .overlay { Circle().stroke(BurritoTheme.softBorder) }
+            .background(BurritoTheme.controlFill, in: Rectangle())
+            .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
     }
@@ -1241,7 +1236,7 @@ private struct SidebarToggleButton: View {
                 .frame(width: 30, height: 30)
                 .background(
                     isHovered ? BurritoTheme.controlFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 7)
+                    in: Rectangle()
                 )
         }
         .buttonStyle(.plain)
@@ -1265,7 +1260,7 @@ private struct SidebarHeaderAddButton: View {
                 .frame(width: 22, height: 22)
                 .background(
                     isHovered ? BurritoTheme.controlFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 6)
+                    in: Rectangle()
                 )
         }
         .buttonStyle(.plain)
@@ -1288,9 +1283,9 @@ private struct BurritoInlineButton: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8))
+                .background(BurritoTheme.controlFill, in: Rectangle())
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8)
+                    Rectangle()
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -1341,7 +1336,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 34, height: 34)
-                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 9))
+                    .background(BurritoTheme.accentSoft, in: Rectangle())
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(note.title)
@@ -1384,7 +1379,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
         .frame(width: 244)
         .background(BurritoTheme.raised)
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            Rectangle()
                 .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.5)
         }
         .presentationBackground(BurritoTheme.raised)
@@ -1440,10 +1435,10 @@ private struct BurritoPopoverRowLabel: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 32)
-        .contentShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(Rectangle())
         .background(
             isHovered ? BurritoTheme.controlFill : Color.clear,
-            in: RoundedRectangle(cornerRadius: 7)
+            in: Rectangle()
         )
     }
 }
@@ -1553,9 +1548,9 @@ private struct BurritoModalBackdrop<Content: View>: View {
             Color.black.opacity(0.36)
                 .ignoresSafeArea()
             content()
-                .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 20))
+                .background(BurritoTheme.paper, in: Rectangle())
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20)
+                    Rectangle()
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -1579,9 +1574,9 @@ private struct NewFolderDialog: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 13)
                 .frame(height: 42)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
+                .background(BurritoTheme.controlFill, in: Rectangle())
                 .overlay {
-                    RoundedRectangle(cornerRadius: 9)
+                    Rectangle()
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(create)
@@ -1679,7 +1674,7 @@ private struct SidebarNavigationButton: View {
             HStack(spacing: 9) {
                 Group {
                     if let markerColor {
-                        Circle()
+                        Rectangle()
                             .fill(markerColor)
                             .frame(width: 9, height: 9)
                     } else {
@@ -1705,7 +1700,7 @@ private struct SidebarNavigationButton: View {
         .buttonStyle(.plain)
         .background(
             isSelected ? BurritoTheme.controlFill : Color.clear,
-            in: RoundedRectangle(cornerRadius: 7)
+            in: Rectangle()
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -1801,10 +1796,10 @@ private struct CalendarCard: View {
         }
         .background(BurritoTheme.raised.opacity(0.58))
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            Rectangle()
                 .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(Rectangle())
     }
 }
 
@@ -1835,9 +1830,9 @@ private struct CalendarConnectionState: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BurritoTheme.controlFill.opacity(0.3), in: RoundedRectangle(cornerRadius: 9))
+        .background(BurritoTheme.controlFill.opacity(0.3), in: Rectangle())
         .overlay {
-            RoundedRectangle(cornerRadius: 9)
+            Rectangle()
                 .stroke(
                     BurritoTheme.softBorder.opacity(0.7),
                     style: StrokeStyle(lineWidth: 0.75, dash: [5, 5])
@@ -1864,7 +1859,7 @@ private struct UpcomingEventRow: View {
             }
             .frame(width: 54, alignment: .trailing)
 
-            Capsule()
+            Rectangle()
                 .fill(BurritoTheme.accent)
                 .frame(width: 3, height: 30)
 
@@ -1894,7 +1889,7 @@ private struct TimelineNoteRow: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
                 .frame(width: 32, height: 32)
-                .background(BurritoTheme.controlFill.opacity(0.8), in: RoundedRectangle(cornerRadius: 7))
+                .background(BurritoTheme.controlFill.opacity(0.8), in: Rectangle())
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
@@ -1949,7 +1944,7 @@ private struct FolderTag: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Circle()
+            Rectangle()
                 .fill(color)
                 .frame(width: 5, height: 5)
             Text(folder.name)
@@ -1959,7 +1954,7 @@ private struct FolderTag: View {
         .foregroundStyle(color)
         .padding(.horizontal, 6)
         .frame(height: 17)
-        .background(color.opacity(0.13), in: Capsule())
+        .background(color.opacity(0.13), in: Rectangle())
         .accessibilityLabel("Folder: \(folder.name)")
     }
 }
@@ -1991,7 +1986,7 @@ private struct TimelineNoteItem: View {
                     .frame(width: 30, height: 30)
                     .background(
                         showingActions ? BurritoTheme.controlFill : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 7)
+                        in: Rectangle()
                     )
             }
             .buttonStyle(.plain)
@@ -2008,7 +2003,7 @@ private struct TimelineNoteItem: View {
         .padding(.trailing, 4)
         .background(
             isHovered ? BurritoTheme.controlFill.opacity(0.34) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 8)
+            in: Rectangle()
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -2126,7 +2121,7 @@ private struct CaptureCapsule: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 ZStack {
-                    Circle()
+                    Rectangle()
                         .fill(BurritoTheme.accent)
                         .frame(width: 30, height: 30)
                     Image(systemName: "waveform")
@@ -2149,9 +2144,9 @@ private struct CaptureCapsule: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12))
+        .background(BurritoTheme.raised, in: Rectangle())
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            Rectangle()
                 .stroke(BurritoTheme.softBorder)
         }
         .accessibilityHint("Opens recording options")
@@ -2186,7 +2181,7 @@ private struct WelcomeWorkspaceView: View {
             BurritoTheme.paper.ignoresSafeArea()
             VStack(spacing: 22) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20)
+                    Rectangle()
                         .fill(BurritoTheme.accentSoft)
                         .frame(width: 86, height: 86)
                     Image(systemName: "waveform.and.mic")
@@ -2269,9 +2264,9 @@ private struct NoteRow: View {
         .padding(12)
         .background(
             isSelected ? BurritoTheme.accentSoft : Color.clear,
-            in: RoundedRectangle(cornerRadius: BurritoTheme.cardRadius)
+            in: Rectangle()
         )
-        .contentShape(RoundedRectangle(cornerRadius: BurritoTheme.cardRadius))
+        .contentShape(Rectangle())
     }
 }
 
@@ -2283,7 +2278,6 @@ private struct RecordingStatusView: View {
         ZStack(alignment: .bottom) {
             ActiveRecordingStage(
                 elapsed: coordinator.elapsed,
-                transcript: coordinator.liveTranscript,
                 systemLevel: coordinator.activity.system,
                 microphoneLevel: coordinator.activity.microphone
             )
@@ -2304,7 +2298,6 @@ private struct RecordingStatusView: View {
 private struct ActiveRecordingStage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let elapsed: TimeInterval
-    let transcript: String
     let systemLevel: Double
     let microphoneLevel: Double
 
@@ -2339,14 +2332,11 @@ private struct ActiveRecordingStage: View {
                 )
                 .padding(.top, 18)
 
-                LiveCharacterStream(text: transcript)
-                    .padding(.top, 14)
-
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 10)
+                    .padding(.top, 16)
             }
             .offset(y: -34)
         }
@@ -2376,7 +2366,7 @@ private struct LiveAudioWaveform: View {
             let phase = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: 4) {
                 ForEach(0..<barCount, id: \.self) { index in
-                    Capsule()
+                    Rectangle()
                         .fill(BurritoTheme.accent)
                         .frame(width: 2.5, height: 62)
                         .scaleEffect(
@@ -2418,42 +2408,6 @@ private struct LiveAudioWaveform: View {
     }
 }
 
-private struct LiveCharacterStream: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let text: String
-
-    private var visibleText: String {
-        let value = LiveTranscriptPreview.trailingCharacters(in: text)
-        return value.isEmpty ? "····" : value
-    }
-
-    var body: some View {
-        ZStack {
-            Text(visibleText)
-                .id(visibleText)
-                .font(.system(size: 30, weight: .regular, design: .serif))
-                .tracking(5)
-                .foregroundStyle(
-                    text.isEmpty
-                        ? Color.secondary.opacity(0.35)
-                        : Color.primary.opacity(0.82)
-                )
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .asymmetric(
-                            insertion: .opacity.combined(with: .offset(y: 7)),
-                            removal: .opacity.combined(with: .offset(y: -7))
-                        )
-                )
-        }
-        .frame(width: 220, height: 42)
-        .clipped()
-        .animation(.easeOut(duration: 0.18), value: visibleText)
-        .accessibilityHidden(true)
-    }
-}
-
 private struct RecordingControlButton: View {
     let isRecording: Bool
     let elapsed: TimeInterval
@@ -2469,63 +2423,57 @@ private struct RecordingControlButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ZStack {
                     if isRecording {
-                        Circle()
+                        Rectangle()
                             .fill(BurritoTheme.accent.opacity(0.16))
-                            .scaleEffect(1 + (audioEnergy * 0.18))
+                            .scaleEffect(1 + (audioEnergy * 0.1))
                             .opacity(0.6 + (audioEnergy * 0.4))
                     }
 
-                    Circle()
+                    Rectangle()
                         .fill(isRecording ? BurritoTheme.accent : BurritoTheme.accentSoft)
 
                     if isRecording {
-                        RoundedRectangle(cornerRadius: 2.5)
+                        Rectangle()
                             .fill(.white)
-                            .frame(width: 10, height: 10)
+                            .frame(width: 8, height: 8)
                     } else {
                         Image(systemName: "waveform")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
-                .frame(width: 34, height: 34)
+                .frame(width: 24, height: 24)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(isRecording ? "Stop recording" : "Record more")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
+                Text(isRecording ? "Stop" : "Record more")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                if isRecording {
+                    Spacer(minLength: 4)
                     Text(
-                        isRecording
-                            ? Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond))
-                            : "Continue this note"
+                        Duration.seconds(elapsed).formatted(.time(pattern: .minuteSecond))
                     )
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
                 }
-
-                Spacer(minLength: 8)
-
-                Text("⇧⌘R")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 7)
-            .frame(width: 188, height: 48)
-            .background(BurritoTheme.raised, in: Capsule())
+            .padding(.horizontal, 6)
+            .frame(width: 132, height: 34)
+            .background(BurritoTheme.raised, in: Rectangle())
             .overlay {
-                Capsule()
+                Rectangle()
                     .fill(BurritoTheme.accentSoft)
                     .opacity(isHovered ? 0.34 : 0)
             }
             .overlay {
-                Capsule()
+                Rectangle()
                     .stroke(BurritoTheme.softBorder.opacity(0.85), lineWidth: 0.75)
             }
-            .contentShape(Capsule())
+            .contentShape(Rectangle())
         }
         .buttonStyle(RecordingControlButtonStyle())
         .offset(y: isHovered ? -1 : 0)
@@ -2575,8 +2523,8 @@ private struct ProcessingRail: View {
         }
         .padding(.horizontal, 20)
         .frame(height: 62)
-        .background(BurritoTheme.raised, in: Capsule())
-        .overlay { Capsule().stroke(BurritoTheme.softBorder) }
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
         .accessibilityElement(children: .combine)
     }
 
@@ -2592,7 +2540,7 @@ private struct ProcessingRail: View {
     private var detail: String {
         switch stage {
         case .preparingAudio: "Securing the captured audio."
-        case .transcribing: "Checking the live text against the saved audio."
+        case .transcribing: "Building the transcript from the saved audio."
         case .organizing:
             isContinuation
                 ? "Keeping the existing note and extending its transcript."
@@ -2679,7 +2627,7 @@ private struct RecordingSetupView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                .background(BurritoTheme.raised, in: Rectangle())
             }
 
             VStack(spacing: 0) {
@@ -2712,9 +2660,9 @@ private struct RecordingSetupView: View {
                 )
             }
             .zIndex(2)
-            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+            .background(BurritoTheme.raised, in: Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 10)
+                Rectangle()
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
 
@@ -2907,7 +2855,7 @@ private struct RecordingLanguageMenu: View {
             .frame(height: 32)
             .background(
                 BurritoTheme.controlFill,
-                in: RoundedRectangle(cornerRadius: 7)
+                in: Rectangle()
             )
 
             ScrollView {
@@ -2950,9 +2898,9 @@ private struct RecordingDropdownSurface<Content: View>: View {
         }
         .padding(8)
         .frame(width: width)
-        .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 10))
+        .background(BurritoTheme.paper, in: Rectangle())
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
+            Rectangle()
                 .stroke(BurritoTheme.softBorder)
         }
         .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
@@ -2963,13 +2911,6 @@ private struct RecordingTranscriptionRow: View {
     let languageIdentifier: String
     @Bindable var modelStore: ParakeetModelStore
     let openModels: () -> Void
-
-    @AppStorage(TranscriptionBackend.storageKey) private var backend =
-        TranscriptionBackend.apple.rawValue
-
-    private var selectedBackend: TranscriptionBackend {
-        TranscriptionBackend(rawValue: backend) ?? .apple
-    }
 
     private var installedModel: ParakeetModelVariant? {
         ParakeetModelVariant
@@ -2988,7 +2929,7 @@ private struct RecordingTranscriptionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: selectedBackend == .parakeet ? "waveform" : "apple.logo")
+            Image(systemName: installedModel == nil ? "apple.logo" : "waveform")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
@@ -3011,7 +2952,7 @@ private struct RecordingTranscriptionRow: View {
     }
 
     private var engineTitle: String {
-        if selectedBackend == .parakeet, let installedModel {
+        if let installedModel {
             return installedModel.displayName
         }
         if canInstallModel, installedModel == nil {
@@ -3021,7 +2962,7 @@ private struct RecordingTranscriptionRow: View {
     }
 
     private var engineDetail: String {
-        if selectedBackend == .parakeet, installedModel != nil {
+        if installedModel != nil {
             return "Final pass after Stop · rebuilt directly from saved audio"
         }
         if canInstallModel, installedModel == nil {
@@ -3048,7 +2989,7 @@ private struct TemplateChoiceCard: View {
                     .frame(width: 28, height: 28)
                     .background(
                         isSelected ? BurritoTheme.accentSoft : BurritoTheme.controlFill,
-                        in: RoundedRectangle(cornerRadius: 8)
+                        in: Rectangle()
                     )
                 Text(template.name)
                     .font(.system(size: 13, weight: .medium))
@@ -3056,7 +2997,7 @@ private struct TemplateChoiceCard: View {
                 Spacer()
                 if isSelected {
                     ZStack {
-                        Circle().fill(BurritoTheme.accent)
+                        Rectangle().fill(BurritoTheme.accent)
                         Image(systemName: "checkmark")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(.white)
@@ -3070,10 +3011,10 @@ private struct TemplateChoiceCard: View {
         .buttonStyle(.plain)
         .background(
             isSelected ? BurritoTheme.accentSoft.opacity(0.55) : BurritoTheme.raised,
-            in: RoundedRectangle(cornerRadius: 12)
+            in: Rectangle()
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            Rectangle()
                 .stroke(isSelected ? BurritoTheme.accent.opacity(0.6) : BurritoTheme.softBorder)
         }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -3089,10 +3030,10 @@ private struct BurritoChoiceButton: View {
         Button(action: select) {
             HStack(spacing: 7) {
                 ZStack {
-                    Circle()
+                    Rectangle()
                         .stroke(isSelected ? BurritoTheme.accent : BurritoTheme.softBorder, lineWidth: 1.5)
                     if isSelected {
-                        Circle()
+                        Rectangle()
                             .fill(BurritoTheme.accent)
                             .padding(3)
                     }
@@ -3110,10 +3051,10 @@ private struct BurritoChoiceButton: View {
         .buttonStyle(.plain)
         .background(
             isSelected ? BurritoTheme.accentSoft.opacity(0.65) : BurritoTheme.raised,
-            in: RoundedRectangle(cornerRadius: 8)
+            in: Rectangle()
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 8)
+            Rectangle()
                 .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
         }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -3139,10 +3080,10 @@ private struct BurritoToggleRow: View {
                 }
                 Spacer()
                 ZStack(alignment: isOn ? .trailing : .leading) {
-                    Capsule()
+                    Rectangle()
                         .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                         .frame(width: 38, height: 22)
-                    Circle()
+                    Rectangle()
                         .fill(isOn ? Color.white : Color.secondary)
                         .frame(width: 16, height: 16)
                         .padding(3)
@@ -3253,7 +3194,7 @@ private struct TemplatePromptCard: View {
                 Image(systemName: template.symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                     .frame(width: 34, height: 34)
-                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
+                    .background(BurritoTheme.controlFill, in: Rectangle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
                         .font(.system(size: 15, weight: .semibold))
@@ -3276,9 +3217,9 @@ private struct TemplatePromptCard: View {
                 .textSelection(.enabled)
         }
         .padding(18)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14))
+        .background(BurritoTheme.raised, in: Rectangle())
         .overlay {
-            RoundedRectangle(cornerRadius: 14)
+            Rectangle()
                 .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
         }
     }
@@ -3318,7 +3259,7 @@ private struct MarkdownNoteContent: View {
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 11) {
-                        Circle()
+                        Rectangle()
                             .fill(BurritoTheme.accent)
                             .frame(width: 5, height: 5)
                         inlineText(item)
@@ -3336,7 +3277,7 @@ private struct MarkdownNoteContent: View {
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(BurritoTheme.accent)
                             .frame(width: 21, height: 21)
-                            .background(BurritoTheme.accentSoft, in: Circle())
+                            .background(BurritoTheme.accentSoft, in: Rectangle())
                         inlineText(item)
                             .font(.system(size: 15))
                             .lineSpacing(4)
@@ -3345,7 +3286,7 @@ private struct MarkdownNoteContent: View {
             }
         case .quote(let text):
             HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 2)
+                Rectangle()
                     .fill(BurritoTheme.accent)
                     .frame(width: 3)
                 inlineText(text)
@@ -3355,7 +3296,7 @@ private struct MarkdownNoteContent: View {
                     .padding(.vertical, 8)
             }
             .padding(.horizontal, 14)
-            .background(BurritoTheme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+            .background(BurritoTheme.accentSoft.opacity(0.55), in: Rectangle())
         case .code(let text):
             ScrollView(.horizontal) {
                 Text(text)
@@ -3365,9 +3306,9 @@ private struct MarkdownNoteContent: View {
                     .padding(16)
             }
             .scrollIndicators(.hidden)
-            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
+            .background(BurritoTheme.controlFill, in: Rectangle())
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
+                Rectangle()
                     .stroke(BurritoTheme.softBorder)
             }
         case .divider:
@@ -3516,7 +3457,6 @@ private struct NoteDetailView: View {
             if isRecordingThisNote {
                 ActiveRecordingStage(
                     elapsed: coordinator.elapsed,
-                    transcript: coordinator.liveTranscript,
                     systemLevel: coordinator.activity.system,
                     microphoneLevel: coordinator.activity.microphone
                 )
@@ -3551,12 +3491,14 @@ private struct NoteDetailView: View {
         .navigationTitle("")
         .overlay(alignment: .top) {
             HStack {
-                Button("Back to notes", systemImage: "chevron.left") {
-                    backAction()
+                if !isRecordingThisNote {
+                    Button("Back to notes", systemImage: "chevron.left") {
+                        backAction()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityHint("Returns to the notes library")
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityHint("Returns to the notes library")
                 Spacer()
                 if !isRecordingThisNote {
                     Button {
@@ -3662,7 +3604,7 @@ private struct NoteDetailView: View {
                         .font(.callout)
                         .padding(.horizontal, 18)
                         .frame(height: 44)
-                        .background(BurritoTheme.accentSoft, in: Capsule())
+                        .background(BurritoTheme.accentSoft, in: Rectangle())
                     }
 
                     RecordingControlButton(
@@ -3779,7 +3721,7 @@ private struct EditorTabButton: View {
                 Text(title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
-                Capsule()
+                Rectangle()
                     .fill(isSelected ? BurritoTheme.accent : Color.clear)
                     .frame(height: 2)
             }
@@ -3831,9 +3773,9 @@ private struct TemplateEditorView: View {
                     .font(.system(size: 14))
                     .padding(.horizontal, 13)
                     .frame(height: 42)
-                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
+                    .background(BurritoTheme.controlFill, in: Rectangle())
                     .overlay {
-                        RoundedRectangle(cornerRadius: 9)
+                        Rectangle()
                             .stroke(BurritoTheme.softBorder)
                     }
             }
@@ -3844,15 +3786,15 @@ private struct TemplateEditorView: View {
                     Image(systemName: symbol)
                         .foregroundStyle(BurritoTheme.accent)
                         .frame(width: 38, height: 38)
-                        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 9))
+                        .background(BurritoTheme.accentSoft, in: Rectangle())
                     TextField("SF Symbol name", text: $symbol)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14))
                         .padding(.horizontal, 13)
                         .frame(height: 42)
-                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 9))
+                        .background(BurritoTheme.controlFill, in: Rectangle())
                         .overlay {
-                            RoundedRectangle(cornerRadius: 9)
+                            Rectangle()
                                 .stroke(BurritoTheme.softBorder)
                         }
                 }
@@ -3866,9 +3808,9 @@ private struct TemplateEditorView: View {
                     .scrollContentBackground(.hidden)
                     .padding(12)
                     .frame(minHeight: 190)
-                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
+                    .background(BurritoTheme.controlFill, in: Rectangle())
                     .overlay {
-                        RoundedRectangle(cornerRadius: 12)
+                        Rectangle()
                             .stroke(BurritoTheme.softBorder)
                     }
             }
@@ -4013,7 +3955,7 @@ private struct TranscriptEditor: View {
                             sourceTint(for: segment.source).opacity(
                                 hoveredSegmentID == segment.id ? 0.055 : 0
                             ),
-                            in: RoundedRectangle(cornerRadius: 10)
+                            in: Rectangle()
                         )
                         .animation(.easeOut(duration: 0.14), value: hoveredSegmentID)
                         .onHover { isHovered in
@@ -4034,7 +3976,7 @@ private struct TranscriptEditor: View {
 
     private func sourceKey(title: String, tint: Color) -> some View {
         HStack(spacing: 5) {
-            Capsule()
+            Rectangle()
                 .fill(tint)
                 .frame(width: 9, height: 3)
             Text(title)
@@ -4084,7 +4026,7 @@ private struct TranscriptSignalMark: View {
     var body: some View {
         HStack(alignment: .center, spacing: 1.7) {
             ForEach(Array(heights.enumerated()), id: \.offset) { _, height in
-                Capsule()
+                Rectangle()
                     .fill(tint)
                     .frame(width: 2, height: height)
             }
