@@ -290,7 +290,7 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 38)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -410,69 +410,69 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             BurritoTheme.canvas
 
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    if sidebarSelection == .trash {
-                        Button {
-                            confirmingEmptyTrash = true
-                        } label: {
-                            Label("Empty trash", systemImage: "trash")
+            ScrollView {
+                VStack(spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if sidebarSelection == .all {
+                            Text("Coming up")
+                                .font(.burritoDisplay(size: 34, weight: .regular))
+                                .tracking(-0.5)
+                                .padding(.bottom, 16)
+
+                            CalendarCard(
+                                calendarAccess: calendarAccess,
+                                startRecording: { recordingDestination = .newNote },
+                                openSettings: openCalendarSettings
+                            )
+                            .padding(.bottom, 26)
+                        } else {
+                            Text(sectionTitle)
+                                .font(.burritoDisplay(size: 32, weight: .regular))
+                                .tracking(-0.4)
+                                .padding(.bottom, 24)
                         }
-                        .buttonStyle(HomeToolbarButtonStyle(destructive: true))
-                        .disabled(visibleNotes.isEmpty)
-                    } else {
-                        Button {
-                            recordingDestination = .newNote
-                        } label: {
-                            Label("New recording", systemImage: "plus")
-                        }
-                        .buttonStyle(HomeToolbarButtonStyle())
                     }
-                }
-                .padding(.horizontal, 18)
-                .frame(height: 52)
-                .background(BurritoTheme.canvas)
+                    .frame(maxWidth: 780, alignment: .leading)
+                    .padding(.horizontal, 38)
+                    .padding(.top, 16)
+                    .frame(maxWidth: .infinity)
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            if sidebarSelection == .all {
-                                Text("Coming up")
-                                    .font(.burritoDisplay(size: 34, weight: .regular))
-                                    .tracking(-0.5)
-                                    .padding(.bottom, 16)
-
-                                CalendarCard(
-                                    calendarAccess: calendarAccess,
-                                    startRecording: { recordingDestination = .newNote },
-                                    openSettings: openCalendarSettings
-                                )
-                                .padding(.bottom, 26)
-                            } else {
-                                Text(sectionTitle)
-                                    .font(.burritoDisplay(size: 32, weight: .regular))
-                                    .tracking(-0.4)
-                                    .padding(.bottom, 24)
-                            }
-                        }
-                        .frame(maxWidth: 780, alignment: .leading)
-                        .padding(.horizontal, 38)
-                        .padding(.top, 22)
-                        .frame(maxWidth: .infinity)
-
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            notesTimeline
-                        }
-                        .frame(maxWidth: 780, alignment: .leading)
-                        .padding(.horizontal, 38)
-                        .padding(.bottom, 100)
-                        .frame(maxWidth: .infinity)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        notesTimeline
                     }
-                    .hidesEnclosingScrollIndicators()
+                    .frame(maxWidth: 780, alignment: .leading)
+                    .padding(.horizontal, 38)
+                    .padding(.bottom, 100)
+                    .frame(maxWidth: .infinity)
                 }
-                .scrollIndicators(.hidden)
+                .hidesEnclosingScrollIndicators()
             }
+            .scrollIndicators(.hidden)
+        }
+        .overlay(alignment: .topTrailing) {
+            noteListAction
+                .padding(.top, 12)
+                .padding(.trailing, 18)
+        }
+    }
+
+    @ViewBuilder
+    private var noteListAction: some View {
+        if sidebarSelection == .trash {
+            Button {
+                confirmingEmptyTrash = true
+            } label: {
+                Label("Empty trash", systemImage: "trash")
+            }
+            .buttonStyle(HomeToolbarButtonStyle(destructive: true))
+            .disabled(visibleNotes.isEmpty)
+        } else {
+            Button {
+                recordingDestination = .newNote
+            } label: {
+                Label("New recording", systemImage: "plus")
+            }
+            .buttonStyle(HomeToolbarButtonStyle())
         }
     }
 
@@ -1259,8 +1259,8 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(destructive ? Color.red.opacity(0.82) : Color.secondary)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
             .background(
                 configuration.isPressed
                     ? BurritoTheme.controlFill.opacity(1.35)
@@ -1315,8 +1315,12 @@ private struct SidebarToggleButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 14, weight: .medium))
+            Image(
+                systemName: isExpanded
+                    ? "arrow.left.to.line.compact"
+                    : "arrow.right.to.line.compact"
+            )
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isHovered ? .primary : .secondary)
                 .frame(width: 30, height: 30)
                 .background(
