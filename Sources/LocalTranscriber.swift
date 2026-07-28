@@ -3,7 +3,7 @@ import CoreMedia
 import Foundation
 import Speech
 
-struct LocalTranscriber: Transcribing {
+private struct AppleSpeechTranscriber: Transcribing {
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
         let requested = Locale(identifier: identifier)
         guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
@@ -101,5 +101,62 @@ struct LocalTranscriber: Transcribing {
             )
         }
         return segments
+    }
+}
+
+struct LocalTranscriber: Transcribing {
+    private let apple = AppleSpeechTranscriber()
+    private let parakeet = ParakeetTranscriber.shared
+
+    func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
+        await apple.verifyLanguage(identifier)
+    }
+
+    func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError> {
+        await apple.installLanguageAsset(identifier)
+    }
+
+    func transcribe(
+        fileURL: URL,
+        source: AudioSource,
+        languageIdentifier: String
+    ) async -> Result<[TranscriptSegment], BurritoError> {
+        guard TranscriptionBackend.selected == .parakeet,
+              let variant = ParakeetModelStore.installedModel(
+                for: languageIdentifier
+              )
+        else {
+            return await apple.transcribe(
+                fileURL: fileURL,
+                source: source,
+                languageIdentifier: languageIdentifier
+            )
+        }
+
+        do {
+            let segments = try await parakeet.transcribe(
+                fileURL: fileURL,
+                source: source,
+                variant: variant,
+                languageIdentifier: languageIdentifier
+            )
+            guard !segments.isEmpty else {
+                return .failure(
+                    .transcriptionFailed(
+                        details: "\(variant.displayName) returned an empty transcript. "
+                            + "The saved audio is intact; retry processing or choose Apple Speech."
+                    )
+                )
+            }
+            return .success(segments)
+        } catch {
+            return .failure(
+                .transcriptionFailed(
+                    details: "\(variant.displayName) could not process the saved audio: "
+                        + "\(error.localizedDescription). The saved audio is intact; "
+                        + "retry processing or choose Apple Speech."
+                )
+            )
+        }
     }
 }

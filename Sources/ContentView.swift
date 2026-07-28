@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 private enum SidebarSelection: Hashable {
     case all
     case favorites
+    case models
     case trash
     case folder(UUID)
 }
@@ -41,6 +42,7 @@ struct ContentView: View {
     @State private var coordinator = AppCoordinator.live()
     @State private var permissions = PermissionAccess()
     @State private var calendarAccess = CalendarAccess()
+    @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
@@ -57,8 +59,8 @@ struct ContentView: View {
         notes.first { $0.id == selectedNoteID }
     }
 
-    private var activeProcessingStage: ProcessingStage? {
-        notes.lazy.compactMap(\.processingStage).first
+    private var activeProcessingNote: Note? {
+        notes.first { $0.processingStage != nil }
     }
 
     private var visibleNotes: [Note] {
@@ -68,6 +70,8 @@ struct ContentView: View {
                 note.deletedAt == nil
             case .favorites:
                 note.deletedAt == nil && note.isFavorite
+            case .models:
+                false
             case .trash:
                 note.deletedAt != nil
             case .folder(let id):
@@ -99,8 +103,14 @@ struct ContentView: View {
                 PermissionGateView(permissions: permissions) {
                     permissionOnboardingCompleted = true
                 }
-            } else if let activeProcessingStage {
-                ScooterGenerationLoader(stage: activeProcessingStage)
+            } else if let activeProcessingNote,
+                      let processingStage = activeProcessingNote.processingStage {
+                ScooterGenerationLoader(
+                    stage: processingStage,
+                    transcriptionEngine: finalTranscriptionEngine(
+                        for: activeProcessingNote.languageIdentifier
+                    )
+                )
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
@@ -126,7 +136,13 @@ struct ContentView: View {
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
-                continuingNote: note(for: destination)
+                continuingNote: note(for: destination),
+                modelStore: modelStore,
+                openModels: {
+                    recordingDestination = nil
+                    selectedNoteID = nil
+                    sidebarSelection = .models
+                }
             ) { options in
                 recordingDestination = nil
                 Task {
@@ -220,6 +236,14 @@ struct ContentView: View {
         }
     }
 
+    private func finalTranscriptionEngine(for languageIdentifier: String) -> String {
+        if TranscriptionBackend.selected == .parakeet,
+           let model = ParakeetModelStore.installedModel(for: languageIdentifier) {
+            return model.displayName
+        }
+        return "Apple SpeechTranscriber"
+    }
+
     private var home: some View {
         HStack(spacing: 0) {
             if isSidebarVisible {
@@ -233,7 +257,11 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            noteList
+            if sidebarSelection == .models {
+                ModelsView(modelStore: modelStore)
+            } else {
+                noteList
+            }
         }
         .animation(
             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -297,6 +325,14 @@ struct ContentView: View {
                         isSelected: sidebarSelection == .favorites
                     ) {
                         sidebarSelection = .favorites
+                    }
+                    SidebarNavigationButton(
+                        title: "Models",
+                        systemImage: "waveform",
+                        count: 0,
+                        isSelected: sidebarSelection == .models
+                    ) {
+                        sidebarSelection = .models
                     }
                     SidebarNavigationButton(
                         title: "Trash",
@@ -367,91 +403,120 @@ struct ContentView: View {
     }
 
     private var noteList: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                if sidebarSelection == .trash {
-                    Button {
-                        confirmingEmptyTrash = true
-                    } label: {
-                        Label("Empty trash", systemImage: "trash")
-                    }
-                    .buttonStyle(HomeToolbarButtonStyle(destructive: true))
-                    .disabled(visibleNotes.isEmpty)
-                } else {
-                    Button {
-                        recordingDestination = .newNote
-                    } label: {
-                        Label("New recording", systemImage: "plus")
-                    }
-                    .buttonStyle(HomeToolbarButtonStyle())
-                }
-            }
-            .padding(.horizontal, 18)
-            .frame(height: 52)
-            .background(BurritoTheme.canvas)
+        ZStack(alignment: .top) {
+            BurritoTheme.canvas
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if sidebarSelection == .all {
-                        Text("Coming up")
-                            .font(.system(size: 34, weight: .regular, design: .serif))
-                            .tracking(-0.5)
-                            .padding(.bottom, 16)
-
-                        CalendarCard(
-                            calendarAccess: calendarAccess,
-                            startRecording: { recordingDestination = .newNote },
-                            openSettings: openCalendarSettings
-                        )
-                        .padding(.bottom, 26)
-                    } else {
-                        Text(sectionTitle)
-                            .font(.system(size: 32, weight: .regular, design: .serif))
-                            .tracking(-0.4)
-                            .padding(.bottom, 24)
-                    }
-
-                    if visibleNotes.isEmpty {
-                        HomeEmptyState(
-                            isTrash: sidebarSelection == .trash,
-                            isSearching: !searchText.isEmpty
-                        ) {
-                            recordingDestination = .newNote
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    if sidebarSelection == .trash {
+                        Button {
+                            confirmingEmptyTrash = true
+                        } label: {
+                            Label("Empty trash", systemImage: "trash")
                         }
+                        .buttonStyle(HomeToolbarButtonStyle(destructive: true))
+                        .disabled(visibleNotes.isEmpty)
                     } else {
-                        ForEach(noteDays, id: \.date) { group in
-                            Text(noteGroupTitle(for: group.date))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 18)
-                                .padding(.leading, 8)
-                                .padding(.bottom, 6)
-                            ForEach(group.notes) { note in
-                                TimelineNoteItem(
-                                    note: note,
-                                    folders: folders
-                                ) {
-                                    selectedNoteID = note.id
-                                }
-                                .draggable(note.id.uuidString)
-                                .contextMenu {
-                                    noteContextMenu(note)
-                                }
+                        Button {
+                            recordingDestination = .newNote
+                        } label: {
+                            Label("New recording", systemImage: "plus")
+                        }
+                        .buttonStyle(HomeToolbarButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 52)
+                .background {
+                    if sidebarSelection != .all {
+                        BurritoTheme.canvas
+                    }
+                }
+
+                ScrollView {
+                    VStack(spacing: 0) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if sidebarSelection == .all {
+                                Text("Coming up")
+                                    .font(.system(size: 34, weight: .regular, design: .serif))
+                                    .tracking(-0.5)
+                                    .padding(.bottom, 16)
+
+                                CalendarCard(
+                                    calendarAccess: calendarAccess,
+                                    startRecording: { recordingDestination = .newNote },
+                                    openSettings: openCalendarSettings
+                                )
+                                .padding(.bottom, 26)
+                            } else {
+                                Text(sectionTitle)
+                                    .font(.system(size: 32, weight: .regular, design: .serif))
+                                    .tracking(-0.4)
+                                    .padding(.bottom, 24)
                             }
                         }
+                        .frame(maxWidth: 780, alignment: .leading)
+                        .padding(.horizontal, 38)
+                        .padding(.top, 22)
+                        .frame(maxWidth: .infinity)
+
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            notesTimeline
+                        }
+                        .frame(maxWidth: 780, alignment: .leading)
+                        .padding(.horizontal, 38)
+                        .padding(.bottom, 100)
+                        .frame(maxWidth: .infinity)
+                        .background(BurritoTheme.canvas)
+                    }
+                    .hidesEnclosingScrollIndicators()
+                }
+                .scrollIndicators(.hidden)
+            }
+            .background(alignment: .top) {
+                if sidebarSelection == .all {
+                    HomeHeroBackdrop()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 260)
+                        .clipped()
+                        .ignoresSafeArea(edges: .top)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var notesTimeline: some View {
+        if visibleNotes.isEmpty {
+            HomeEmptyState(
+                isTrash: sidebarSelection == .trash,
+                isSearching: !searchText.isEmpty
+            ) {
+                recordingDestination = .newNote
+            }
+        } else {
+            ForEach(noteDays, id: \.date) { group in
+                Text(noteGroupTitle(for: group.date))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 18)
+                    .padding(.leading, 8)
+                    .padding(.bottom, 6)
+                ForEach(group.notes) { note in
+                    TimelineNoteItem(
+                        note: note,
+                        folders: folders
+                    ) {
+                        selectedNoteID = note.id
+                    }
+                    .draggable(note.id.uuidString)
+                    .contextMenu {
+                        noteContextMenu(note)
                     }
                 }
-                .frame(maxWidth: 780, alignment: .leading)
-                .padding(.horizontal, 38)
-                .padding(.top, 22)
-                .padding(.bottom, 100)
-                .frame(maxWidth: .infinity)
-                .hidesEnclosingScrollIndicators()
             }
-            .scrollIndicators(.hidden)
         }
-        .background(BurritoTheme.canvas)
     }
 
     private func noteGroupTitle(for date: Date) -> String {
@@ -486,6 +551,7 @@ struct ContentView: View {
         switch sidebarSelection ?? .all {
         case .all: "All Notes"
         case .favorites: "Favorites"
+        case .models: "Models"
         case .trash: "Trash"
         case .folder(let id): folders.first(where: { $0.id == id })?.name ?? "Folder"
         }
@@ -561,9 +627,281 @@ struct ContentView: View {
     }
 }
 
+private struct ModelsView: View {
+    @Bindable var modelStore: ParakeetModelStore
+    @AppStorage(TranscriptionBackend.storageKey) private var backend =
+        TranscriptionBackend.apple.rawValue
+
+    private var hasInstalledModels: Bool {
+        ParakeetModelVariant.allCases.contains {
+            if case .installed = modelStore.state(for: $0) {
+                return true
+            }
+            return false
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 52)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 30) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Models")
+                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .tracking(-0.5)
+                        Text("Choose the local transcription engine Burrito uses after a recording.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "Transcription engine")
+                        HStack(spacing: 0) {
+                            ModelEngineChoice(
+                                title: "Apple Speech",
+                                detail: "Built in",
+                                systemImage: "apple.logo",
+                                isSelected: backend == TranscriptionBackend.apple.rawValue,
+                                isEnabled: true
+                            ) {
+                                backend = TranscriptionBackend.apple.rawValue
+                                modelStore.useAppleSpeech()
+                            }
+
+                            Rectangle()
+                                .fill(BurritoTheme.softBorder)
+                                .frame(width: 1, height: 44)
+
+                            ModelEngineChoice(
+                                title: "Downloaded models",
+                                detail: hasInstalledModels ? "Available" : "Install one below",
+                                systemImage: "waveform",
+                                isSelected: backend == TranscriptionBackend.parakeet.rawValue,
+                                isEnabled: hasInstalledModels
+                            ) {
+                                backend = TranscriptionBackend.parakeet.rawValue
+                                modelStore.useLocalModels()
+                            }
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(BurritoTheme.softBorder.opacity(0.7))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            BurritoSectionLabel(title: "Parakeet")
+                            Spacer()
+                            Text("Models stay on this Mac")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        }
+
+                        VStack(spacing: 0) {
+                            ForEach(
+                                Array(ParakeetModelVariant.allCases.enumerated()),
+                                id: \.element
+                            ) { index, variant in
+                                ModelCatalogRow(
+                                    variant: variant,
+                                    state: modelStore.state(for: variant)
+                                ) {
+                                    Task { await modelStore.install(variant) }
+                                }
+
+                                if index < ParakeetModelVariant.allCases.count - 1 {
+                                    Divider().padding(.leading, 20)
+                                }
+                            }
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(BurritoTheme.softBorder.opacity(0.7))
+                        }
+                    }
+
+                    Text(
+                        "Burrito chooses the best installed model for the recording language. "
+                            + "Unsupported languages continue through Apple Speech."
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: 800, alignment: .leading)
+                .padding(.horizontal, 38)
+                .padding(.top, 22)
+                .padding(.bottom, 80)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(BurritoTheme.canvas)
+        .onAppear { modelStore.refresh() }
+    }
+}
+
+private struct ModelEngineChoice: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    let isSelected: Bool
+    let isEnabled: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 11) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .medium))
+                    Text(detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(BurritoTheme.accent)
+                }
+            }
+            .padding(.horizontal, 15)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.48)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct ModelCatalogRow: View {
+    let variant: ParakeetModelVariant
+    let state: ParakeetModelState
+    let install: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(variant.displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(variant.summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 14) {
+                    ModelProperty(
+                        systemImage: "cpu",
+                        value: variant.parameterCount
+                    )
+                    ModelProperty(
+                        systemImage: "character.bubble",
+                        value: variant.languageSummary
+                    )
+                    ModelProperty(
+                        systemImage: "arrow.down.circle",
+                        value: variant.downloadSize
+                    )
+                    ModelProperty(
+                        systemImage: "lock",
+                        value: "On-device"
+                    )
+                }
+            }
+
+            Spacer(minLength: 18)
+
+            modelAction
+                .frame(minWidth: 88, alignment: .trailing)
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var modelAction: some View {
+        switch state {
+        case .notInstalled:
+            BurritoInlineButton(
+                title: "Install",
+                systemImage: "arrow.down",
+                action: install
+            )
+        case .paused(let progress):
+            VStack(alignment: .trailing, spacing: 6) {
+                BurritoInlineButton(
+                    title: "Resume",
+                    systemImage: "arrow.clockwise",
+                    action: install
+                )
+                Text("\(max(1, Int(progress * 100)))% saved")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        case .downloading(let progress):
+            VStack(alignment: .trailing, spacing: 7) {
+                Text("\(Int(progress * 100))%")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(BurritoTheme.controlFill)
+                        Capsule()
+                            .fill(BurritoTheme.accent)
+                            .frame(width: proxy.size.width * progress)
+                    }
+                }
+                .frame(width: 82, height: 3)
+            }
+            .accessibilityLabel("Installing \(variant.displayName)")
+            .accessibilityValue("\(Int(progress * 100)) percent")
+        case .installed:
+            Label("Installed", systemImage: "checkmark")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(BurritoTheme.sage)
+        case .failed(let message):
+            VStack(alignment: .trailing, spacing: 5) {
+                BurritoInlineButton(
+                    title: "Retry",
+                    systemImage: "arrow.clockwise",
+                    action: install
+                )
+                Text(message)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .frame(maxWidth: 130, alignment: .trailing)
+            }
+        }
+    }
+}
+
+private struct ModelProperty: View {
+    let systemImage: String
+    let value: String
+
+    var body: some View {
+        Label(value, systemImage: systemImage)
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+    }
+}
+
 private struct ScooterGenerationLoader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let stage: ProcessingStage
+    let transcriptionEngine: String
 
     private var stageIndex: Int {
         ProcessingStage.allCases.firstIndex(of: stage) ?? 0
@@ -580,8 +918,8 @@ private struct ScooterGenerationLoader: View {
         case .transcribing:
             (
                 "LOCAL TRANSCRIPTION · 2 OF 4",
-                "Listening back, carefully",
-                "Running a high-accuracy pass over every captured second and pinning words to time."
+                "Re-listening with \(transcriptionEngine)",
+                "Rebuilding the transcript from the saved audio—not correcting the live preview."
             )
         case .organizing:
             (
@@ -1318,6 +1656,36 @@ private struct SidebarNavigationButton: View {
     }
 }
 
+private struct HomeHeroBackdrop: View {
+    private var backdrop: NSImage? {
+        guard let url = Bundle.main.url(
+            forResource: "CalendarBackdrop",
+            withExtension: "jpg"
+        ) else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }
+
+    var body: some View {
+        ZStack {
+            BurritoTheme.canvas
+            if let backdrop {
+                Image(nsImage: backdrop)
+                    .resizable()
+                    .scaledToFill()
+                    .saturation(0.68)
+                    .contrast(1.03)
+                    .opacity(0.22)
+            }
+            BurritoTheme.canvas.opacity(0.42)
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct CalendarCard: View {
     let calendarAccess: CalendarAccess
     let startRecording: () -> Void
@@ -1406,7 +1774,7 @@ private struct CalendarCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 156)
         }
-        .background(BurritoTheme.raised.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+        .background(BurritoTheme.raised.opacity(0.58))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
@@ -2105,6 +2473,10 @@ private struct LiveTranscriptView: View {
                 Text("Listening now")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(BurritoTheme.accent)
+                Spacer()
+                Text("Live preview · Apple Speech")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
             }
             Text(text.isEmpty ? "Speak or play audio. Words will appear here." : text)
                 .font(.system(size: 15))
@@ -2191,6 +2563,8 @@ private struct RecordingSetupView: View {
     @Environment(\.dismiss) private var dismiss
     let templates: [NoteTemplate]
     let continuingNote: Note?
+    @Bindable var modelStore: ParakeetModelStore
+    let openModels: () -> Void
     let start: (RecordingOptions) -> Void
 
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
@@ -2198,7 +2572,8 @@ private struct RecordingSetupView: View {
     @AppStorage("microphoneDefault") private var includesMicrophone = false
     @AppStorage("retainAudioDefault") private var retainsAudio = false
     @State private var templateID: UUID?
-    @State private var showingTemplateDetails = false
+    @State private var openPicker: RecordingSetupPicker?
+    @State private var languageQuery = ""
 
     private var selectedTemplate: NoteTemplate? {
         templates.first { $0.id == templateID }
@@ -2215,16 +2590,17 @@ private struct RecordingSetupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(continuingNote == nil ? "New recording" : "Continue recording")
-                        .font(.system(size: 32, weight: .regular, design: .serif))
+                        .font(.system(size: 30, weight: .regular, design: .serif))
                     Text(
                         continuingNote == nil
-                            ? "How should Burrito shape these notes?"
+                            ? "Choose what Burrito should listen for."
                             : "New audio and transcript will be added to this note."
                     )
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -2247,52 +2623,25 @@ private struct RecordingSetupView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    BurritoSectionLabel(title: "Note style")
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: 10),
-                            GridItem(.flexible(), spacing: 10)
-                        ],
-                        spacing: 10
-                    ) {
-                        ForEach(templates) { template in
-                            TemplateChoiceCard(
-                                template: template,
-                                isSelected: selectedTemplate?.id == template.id
-                            ) {
-                                templateID = template.id
-                            }
-                        }
-                    }
-                }
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
             }
 
             VStack(spacing: 0) {
                 if continuingNote == nil {
-                    VStack(alignment: .leading, spacing: 9) {
-                        BurritoSectionLabel(title: "Language")
-                        LazyVGrid(
-                            columns: Array(
-                                repeating: GridItem(.flexible(), spacing: 8),
-                                count: 3
-                            ),
-                            spacing: 8
-                        ) {
-                            ForEach(languageOptions, id: \.identifier) { option in
-                                BurritoChoiceButton(
-                                    title: option.title,
-                                    isSelected: language == option.identifier
-                                ) {
-                                    language = option.identifier
-                                }
-                            }
-                        }
-                    }
-                    .padding(14)
-                    Divider().padding(.leading, 12)
+                    RecordingTemplatePicker(
+                        templates: templates,
+                        selection: $templateID,
+                        selectedTemplate: selectedTemplate,
+                        openPicker: $openPicker
+                    )
+                    .zIndex(2)
+                    Divider().padding(.leading, 14)
+                    RecordingLanguagePicker(
+                        selection: $language,
+                        openPicker: $openPicker
+                    )
+                    .zIndex(1)
+                    Divider().padding(.leading, 14)
                 }
                 BurritoToggleRow(
                     title: "Include microphone",
@@ -2306,15 +2655,23 @@ private struct RecordingSetupView: View {
                     isOn: $retainsAudio
                 )
             }
-            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 12))
+            .zIndex(2)
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(BurritoTheme.softBorder.opacity(0.7))
+            }
+
+            RecordingTranscriptionRow(
+                languageIdentifier: effectiveLanguage,
+                modelStore: modelStore,
+                openModels: openModels
+            )
+            .zIndex(1)
 
             HStack {
-                if continuingNote == nil {
-                    Button("Template details", systemImage: "text.document") {
-                        showingTemplateDetails = true
-                    }
+                Button("Cancel") { dismiss() }
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
-                }
                 Spacer()
                 Button("Start recording", systemImage: "waveform") {
                     guard let effectiveTemplate else { return }
@@ -2332,31 +2689,273 @@ private struct RecordingSetupView: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(28)
-        .frame(width: 620)
+        .padding(26)
+        .frame(width: 520)
         .background(BurritoTheme.paper)
+        .overlay(alignment: .topTrailing) {
+            recordingPickerOverlay
+                .padding(.top, 132)
+                .padding(.trailing, 26)
+        }
         .onAppear {
             if templateID == nil {
                 templateID = selectedTemplate?.id
             }
         }
-        .sheet(isPresented: $showingTemplateDetails) {
-            TemplateDetailsView(
-                templates: templates,
-                selectedTemplateID: $templateID
-            )
+    }
+
+    @ViewBuilder
+    private var recordingPickerOverlay: some View {
+        switch openPicker {
+        case .template:
+            RecordingDropdownSurface(title: "Note style") {
+                ForEach(templates) { template in
+                    BurritoPopoverRow(
+                        title: template.name,
+                        systemImage: template.symbol,
+                        isSelected: selectedTemplate?.id == template.id
+                    ) {
+                        templateID = template.id
+                        openPicker = nil
+                    }
+                }
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
+        case .language:
+            RecordingLanguageMenu(
+                selection: $language,
+                query: $languageQuery
+            ) {
+                openPicker = nil
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
+        case nil:
+            EmptyView()
+        }
+    }
+}
+
+private enum RecordingSetupPicker {
+    case template
+    case language
+}
+
+private struct RecordingTemplatePicker: View {
+    let templates: [NoteTemplate]
+    @Binding var selection: UUID?
+    let selectedTemplate: NoteTemplate?
+    @Binding var openPicker: RecordingSetupPicker?
+
+    var body: some View {
+        Button {
+            openPicker = openPicker == .template ? nil : .template
+        } label: {
+            HStack {
+                Text("Note style")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                Text(selectedTemplate?.name ?? "Choose")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.14), value: openPicker == .template)
+        .accessibilityLabel("Note style")
+        .accessibilityValue(selectedTemplate?.name ?? "Not selected")
+    }
+}
+
+private struct RecordingLanguagePicker: View {
+    @Binding var selection: String
+    @Binding var openPicker: RecordingSetupPicker?
+
+    private var selectedLanguage: TranscriptionLanguage {
+        TranscriptionLanguage.resolve(selection)
+    }
+
+    var body: some View {
+        Button {
+            openPicker = openPicker == .language ? nil : .language
+        } label: {
+            HStack {
+                Text("Language")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                Text(selectedLanguage.compactTitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.14), value: openPicker == .language)
+        .accessibilityLabel("Transcription language")
+        .accessibilityValue(selectedLanguage.title)
+    }
+}
+
+private struct RecordingLanguageMenu: View {
+    @Binding var selection: String
+    @Binding var query: String
+    let dismiss: () -> Void
+
+    private var filteredLanguages: [TranscriptionLanguage] {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return TranscriptionLanguage.supported }
+        return TranscriptionLanguage.supported.filter {
+            $0.title.localizedStandardContains(value)
         }
     }
 
-    private var languageOptions: [(identifier: String, title: String)] {
-        [
-            ("en-US", "English US"),
-            ("en-GB", "English UK"),
-            ("hi-IN", "Hindi"),
-            ("es-ES", "Spanish"),
-            ("fr-FR", "French"),
-            ("de-DE", "German"),
-        ]
+    var body: some View {
+        RecordingDropdownSurface(title: "Transcription language", width: 270) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                TextField("Find a language", text: $query)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                BurritoTheme.controlFill,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(filteredLanguages) { language in
+                        BurritoPopoverRow(
+                            title: language.title,
+                            systemImage: "character.bubble",
+                            isSelected: selection == language.identifier
+                        ) {
+                            selection = language.identifier
+                            query = ""
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .frame(height: 210)
+            .scrollIndicators(.hidden)
+            .hidesEnclosingScrollIndicators()
+        }
+    }
+}
+
+private struct RecordingDropdownSurface<Content: View>: View {
+    let title: String
+    var width: CGFloat = 240
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(0.9)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 5)
+            VStack(spacing: 3) {
+                content()
+            }
+        }
+        .padding(8)
+        .frame(width: width)
+        .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(BurritoTheme.softBorder)
+        }
+        .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
+    }
+}
+
+private struct RecordingTranscriptionRow: View {
+    let languageIdentifier: String
+    @Bindable var modelStore: ParakeetModelStore
+    let openModels: () -> Void
+
+    @AppStorage(TranscriptionBackend.storageKey) private var backend =
+        TranscriptionBackend.apple.rawValue
+
+    private var selectedBackend: TranscriptionBackend {
+        TranscriptionBackend(rawValue: backend) ?? .apple
+    }
+
+    private var installedModel: ParakeetModelVariant? {
+        ParakeetModelVariant
+            .candidates(languageIdentifier: languageIdentifier)
+            .first {
+                if case .installed = modelStore.state(for: $0) {
+                    return true
+                }
+                return false
+            }
+    }
+
+    private var canInstallModel: Bool {
+        !ParakeetModelVariant.candidates(languageIdentifier: languageIdentifier).isEmpty
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: selectedBackend == .parakeet ? "waveform" : "apple.logo")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(engineTitle)
+                    .font(.system(size: 12, weight: .medium))
+                Text(engineDetail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Button("View models", systemImage: "chevron.right", action: openModels)
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 54)
+    }
+
+    private var engineTitle: String {
+        if selectedBackend == .parakeet, let installedModel {
+            return installedModel.displayName
+        }
+        if canInstallModel, installedModel == nil {
+            return "Install a local model for better transcripts"
+        }
+        return "Apple Speech"
+    }
+
+    private var engineDetail: String {
+        if selectedBackend == .parakeet, installedModel != nil {
+            return "Final pass after Stop · rebuilt directly from saved audio"
+        }
+        if canInstallModel, installedModel == nil {
+            return "Optional · Apple Speech will continue to work"
+        }
+        if canInstallModel {
+            return "Built in · find higher-accuracy options in Models"
+        }
+        return "Built in · no additional download needed"
     }
 }
 

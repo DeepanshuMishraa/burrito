@@ -274,6 +274,265 @@ struct TemplateSnapshot: Codable, Equatable, Sendable {
     var instructions: String
 }
 
+enum TranscriptionBackend: String, CaseIterable, Sendable {
+    case apple
+    case parakeet
+
+    static let storageKey = "transcriptionBackend"
+
+    static var selected: TranscriptionBackend {
+        guard let stored = UserDefaults.standard.string(forKey: storageKey) else {
+            return .apple
+        }
+        return TranscriptionBackend(rawValue: stored) ?? .apple
+    }
+}
+
+enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendable {
+    case englishV2
+    case multilingualV3
+    case englishCompact
+    case japanese
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .englishV2: "Parakeet TDT v2"
+        case .multilingualV3: "Parakeet TDT v3"
+        case .englishCompact: "Parakeet TDT-CTC 110M"
+        case .japanese: "Parakeet Japanese"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .englishV2:
+            "The strongest long-form English model."
+        case .multilingualV3:
+            "One model for 25 European languages."
+        case .englishCompact:
+            "A smaller English model with a lighter memory footprint."
+        case .japanese:
+            "A dedicated Japanese transcription model."
+        }
+    }
+
+    var parameterCount: String {
+        switch self {
+        case .englishCompact: "110M parameters"
+        case .englishV2, .multilingualV3, .japanese: "600M parameters"
+        }
+    }
+
+    var languageSummary: String {
+        switch self {
+        case .englishV2, .englishCompact: "English only"
+        case .multilingualV3: "Multilingual · 25 languages"
+        case .japanese: "Japanese only"
+        }
+    }
+
+    var downloadSize: String {
+        switch self {
+        case .englishV2: "≈ 464 MB"
+        case .multilingualV3: "≈ 483 MB"
+        case .englishCompact: "≈ 227 MB"
+        case .japanese: "≈ 619 MB"
+        }
+    }
+
+    var downloadSizeBytes: Int64 {
+        switch self {
+        case .englishV2: 464_413_247
+        case .multilingualV3: 483_105_645
+        case .englishCompact: 227_466_209
+        case .japanese: 619_065_246
+        }
+    }
+
+    static func candidates(languageIdentifier: String) -> [ParakeetModelVariant] {
+        let languageCode = Locale(identifier: languageIdentifier).language.languageCode?.identifier
+        switch languageCode {
+        case "en":
+            return [.englishV2, .englishCompact, .multilingualV3]
+        case "bg", "hr", "cs", "da", "nl", "et", "fi", "fr", "de", "el",
+             "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "ru", "sk",
+             "sl", "es", "sv", "uk":
+            return [.multilingualV3]
+        case "ja":
+            return [.japanese]
+        default:
+            return []
+        }
+    }
+
+    static func supporting(languageIdentifier: String) -> ParakeetModelVariant? {
+        candidates(languageIdentifier: languageIdentifier).first
+    }
+}
+
+struct TranscriptionLanguage: Identifiable, Equatable, Sendable {
+    let identifier: String
+    let title: String
+    let compactTitle: String
+
+    var id: String { identifier }
+
+    static let supported = [
+        TranscriptionLanguage(
+            identifier: "bg-BG",
+            title: "Bulgarian",
+            compactTitle: "Bulgarian"
+        ),
+        TranscriptionLanguage(
+            identifier: "hr-HR",
+            title: "Croatian",
+            compactTitle: "Croatian"
+        ),
+        TranscriptionLanguage(
+            identifier: "cs-CZ",
+            title: "Czech",
+            compactTitle: "Czech"
+        ),
+        TranscriptionLanguage(
+            identifier: "da-DK",
+            title: "Danish",
+            compactTitle: "Danish"
+        ),
+        TranscriptionLanguage(
+            identifier: "nl-NL",
+            title: "Dutch",
+            compactTitle: "Dutch"
+        ),
+        TranscriptionLanguage(
+            identifier: "en-US",
+            title: "English (US)",
+            compactTitle: "English · US"
+        ),
+        TranscriptionLanguage(
+            identifier: "en-GB",
+            title: "English (UK)",
+            compactTitle: "English · UK"
+        ),
+        TranscriptionLanguage(
+            identifier: "et-EE",
+            title: "Estonian",
+            compactTitle: "Estonian"
+        ),
+        TranscriptionLanguage(
+            identifier: "fi-FI",
+            title: "Finnish",
+            compactTitle: "Finnish"
+        ),
+        TranscriptionLanguage(
+            identifier: "fr-FR",
+            title: "French",
+            compactTitle: "French"
+        ),
+        TranscriptionLanguage(
+            identifier: "de-DE",
+            title: "German",
+            compactTitle: "German"
+        ),
+        TranscriptionLanguage(
+            identifier: "el-GR",
+            title: "Greek",
+            compactTitle: "Greek"
+        ),
+        TranscriptionLanguage(
+            identifier: "hi-IN",
+            title: "Hindi",
+            compactTitle: "Hindi"
+        ),
+        TranscriptionLanguage(
+            identifier: "hu-HU",
+            title: "Hungarian",
+            compactTitle: "Hungarian"
+        ),
+        TranscriptionLanguage(
+            identifier: "it-IT",
+            title: "Italian",
+            compactTitle: "Italian"
+        ),
+        TranscriptionLanguage(
+            identifier: "ja-JP",
+            title: "Japanese",
+            compactTitle: "Japanese"
+        ),
+        TranscriptionLanguage(
+            identifier: "lv-LV",
+            title: "Latvian",
+            compactTitle: "Latvian"
+        ),
+        TranscriptionLanguage(
+            identifier: "lt-LT",
+            title: "Lithuanian",
+            compactTitle: "Lithuanian"
+        ),
+        TranscriptionLanguage(
+            identifier: "mt-MT",
+            title: "Maltese",
+            compactTitle: "Maltese"
+        ),
+        TranscriptionLanguage(
+            identifier: "pl-PL",
+            title: "Polish",
+            compactTitle: "Polish"
+        ),
+        TranscriptionLanguage(
+            identifier: "pt-PT",
+            title: "Portuguese",
+            compactTitle: "Portuguese"
+        ),
+        TranscriptionLanguage(
+            identifier: "ro-RO",
+            title: "Romanian",
+            compactTitle: "Romanian"
+        ),
+        TranscriptionLanguage(
+            identifier: "ru-RU",
+            title: "Russian",
+            compactTitle: "Russian"
+        ),
+        TranscriptionLanguage(
+            identifier: "sk-SK",
+            title: "Slovak",
+            compactTitle: "Slovak"
+        ),
+        TranscriptionLanguage(
+            identifier: "sl-SI",
+            title: "Slovenian",
+            compactTitle: "Slovenian"
+        ),
+        TranscriptionLanguage(
+            identifier: "es-ES",
+            title: "Spanish",
+            compactTitle: "Spanish"
+        ),
+        TranscriptionLanguage(
+            identifier: "sv-SE",
+            title: "Swedish",
+            compactTitle: "Swedish"
+        ),
+        TranscriptionLanguage(
+            identifier: "uk-UA",
+            title: "Ukrainian",
+            compactTitle: "Ukrainian"
+        ),
+    ]
+
+    static func resolve(_ identifier: String) -> TranscriptionLanguage {
+        supported.first { $0.identifier == identifier }
+            ?? supported.first { $0.identifier == "en-US" }
+            ?? TranscriptionLanguage(
+                identifier: "en-US",
+                title: "English (US)",
+                compactTitle: "English · US"
+            )
+    }
+}
+
 struct RecordingOptions: Equatable, Sendable {
     var template: TemplateSnapshot
     var languageIdentifier: String
@@ -304,6 +563,29 @@ struct RecordingFiles: Equatable, Sendable {
 struct GeneratedNote: Equatable, Sendable {
     var title: String
     var markdown: String
+
+    static func parseLabeledResponse(_ response: String) -> GeneratedNote? {
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let titleMarker = trimmed.range(
+            of: "TITLE:",
+            options: [.caseInsensitive]
+        ),
+        let noteMarker = trimmed.range(
+            of: "NOTE:",
+            options: [.caseInsensitive],
+            range: titleMarker.upperBound..<trimmed.endIndex
+        ) else {
+            return nil
+        }
+
+        let rawTitle = String(trimmed[titleMarker.upperBound..<noteMarker.lowerBound])
+        let markdown = String(trimmed[noteMarker.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let title = GeneratedTitle.sanitized(rawTitle), !markdown.isEmpty else {
+            return nil
+        }
+        return GeneratedNote(title: title, markdown: markdown)
+    }
 }
 
 struct PromptChunk: Equatable, Sendable {

@@ -136,23 +136,11 @@ struct TranscriptChunker: Sendable {
     }
 }
 
-@Generable
-private struct GeneratedNoteResponse {
-    @Guide(description: "A short title without Markdown formatting.")
-    var title: String
-
-    @Guide(description: "The complete note formatted as Markdown.")
-    var markdown: String
-}
-
-@Generable
-private struct GeneratedTitleResponse {
-    @Guide(description: "A standalone, specific 3–8 word noun phrase with no label, prefix, colon, quotation marks, Markdown, or ending punctuation.")
-    var title: String
-}
-
 actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
-    private let model = SystemLanguageModel.default
+    private let model = SystemLanguageModel(
+        useCase: .general,
+        guardrails: .permissiveContentTransformations
+    )
 
     var contextSize: Int { model.contextSize }
 
@@ -188,17 +176,13 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
             temperature: nil,
             maximumResponseTokens: maximumResponseTokens
         )
-        let response = try await session.respond(
-            to: prompt,
-            generating: GeneratedNoteResponse.self,
-            options: options
-        ).content
-        return GeneratedNote(
-            title: GeneratedTitle.sanitized(response.title) ?? "Additional Notes",
-            markdown: response.markdown.trimmingCharacters(
-                in: CharacterSet.whitespacesAndNewlines
+        let response = try await session.respond(to: prompt, options: options).content
+        guard let generated = GeneratedNote.parseLabeledResponse(response) else {
+            throw BurritoError.generationFailed(
+                details: "The model returned an unexpected note format."
             )
-        )
+        }
+        return generated
     }
 
     func completeTitle(
@@ -212,11 +196,7 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
             temperature: 0.2,
             maximumResponseTokens: maximumResponseTokens
         )
-        return try await session.respond(
-            to: prompt,
-            generating: GeneratedTitleResponse.self,
-            options: options
-        ).content.title
+        return try await session.respond(to: prompt, options: options).content
     }
 }
 

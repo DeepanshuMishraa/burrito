@@ -35,6 +35,32 @@ struct TranscriptTests {
     }
 }
 
+@Suite("Transcription configuration")
+struct TranscriptionConfigurationTests {
+    @Test("Parakeet routes only languages covered by its model families")
+    func routesParakeetLanguages() {
+        #expect(
+            ParakeetModelVariant.candidates(languageIdentifier: "en-US")
+                == [.englishV2, .englishCompact, .multilingualV3]
+        )
+        #expect(
+            ParakeetModelVariant.supporting(languageIdentifier: "fr-FR") == .multilingualV3
+        )
+        #expect(
+            ParakeetModelVariant.supporting(languageIdentifier: "ja-JP") == .japanese
+        )
+        #expect(
+            ParakeetModelVariant.supporting(languageIdentifier: "hi-IN") == nil
+        )
+    }
+
+    @Test("Persisted language identifiers resolve safely")
+    func resolvesTranscriptionLanguage() {
+        #expect(TranscriptionLanguage.resolve("de-DE").title == "German")
+        #expect(TranscriptionLanguage.resolve("unknown").identifier == "en-US")
+    }
+}
+
 private struct CharacterTokenMeasurer: PromptTokenMeasuring {
     let size: Int
     var contextSize: Int { get async { size } }
@@ -178,5 +204,25 @@ struct TemplateTests {
         #expect(GeneratedTitle.sanitized("New Recording: Phone Blocks") == "Phone Blocks")
         #expect(GeneratedTitle.sanitized("TITLE: Inference Runtime Design") == "Inference Runtime Design")
         #expect(GeneratedTitle.sanitized("New Recording") == nil)
+    }
+
+    @Test("Parses permissive text generation into a note")
+    func parsesGeneratedNote() {
+        let response = """
+            TITLE: Water Access and Climate Risk
+            NOTE:
+            ## Main finding
+
+            Water access is becoming less predictable.
+            """
+
+        #expect(
+            GeneratedNote.parseLabeledResponse(response)
+                == GeneratedNote(
+                    title: "Water Access and Climate Risk",
+                    markdown: "## Main finding\n\nWater access is becoming less predictable."
+                )
+        )
+        #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
     }
 }

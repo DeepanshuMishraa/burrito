@@ -77,3 +77,121 @@ struct BurritoPill: View {
             .background(BurritoTheme.controlFill, in: Capsule())
     }
 }
+
+struct BurritoLanguagePicker: View {
+    @Binding var selection: String
+    var showsLabel = true
+    var embedded = false
+
+    @State private var isPresented = false
+    @State private var query = ""
+
+    private var selectedLanguage: TranscriptionLanguage {
+        TranscriptionLanguage.resolve(selection)
+    }
+
+    private var filteredLanguages: [TranscriptionLanguage] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return TranscriptionLanguage.supported }
+        return TranscriptionLanguage.supported.filter {
+            $0.title.localizedStandardContains(trimmedQuery)
+        }
+    }
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 12) {
+                if showsLabel {
+                    Text("Language")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+
+                Spacer()
+
+                Text(selectedLanguage.compactTitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .background(
+                embedded ? Color.clear : BurritoTheme.controlFill,
+                in: RoundedRectangle(cornerRadius: 9)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .popover(
+            isPresented: $isPresented,
+            attachmentAnchor: .rect(.bounds),
+            arrowEdge: .top
+        ) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                    TextField("Find a language", text: $query)
+                        .textFieldStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 32)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 7))
+
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(filteredLanguages) { language in
+                            languageRow(language)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+            .padding(8)
+            .frame(width: 250, height: 330)
+            .background(BurritoTheme.raised)
+            .presentationBackground(BurritoTheme.raised)
+        }
+        .onChange(of: isPresented) { _, presented in
+            if !presented { query = "" }
+        }
+        .accessibilityLabel("Transcription language")
+        .accessibilityValue(selectedLanguage.title)
+    }
+
+    private func languageRow(_ language: TranscriptionLanguage) -> some View {
+        Button {
+            selection = language.identifier
+            isPresented = false
+        } label: {
+            HStack(spacing: 9) {
+                Text(language.title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.primary)
+                Spacer()
+                if selection == language.identifier {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(BurritoTheme.accent)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                selection == language.identifier
+                    ? BurritoTheme.controlFill
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+    }
+}

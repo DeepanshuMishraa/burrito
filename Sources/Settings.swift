@@ -161,18 +161,13 @@ private struct SettingsPane: View {
                 )
                 SettingsFootnote("System audio is always captured. Burrito never records screen frames.")
             case .transcription:
-                SettingsChoiceGrid {
-                    ForEach(languageOptions, id: \.id) { language in
-                        SettingsChoice(
-                            title: language.title,
-                            symbol: "character.bubble",
-                            isSelected: transcriptionLanguage == language.id
-                        ) {
-                            transcriptionLanguage = language.id
-                        }
-                    }
-                }
-                SettingsFootnote("The selected language needs an installed Speech asset.")
+                BurritoLanguagePicker(selection: $transcriptionLanguage)
+                    .frame(maxWidth: 330)
+                    .padding(.bottom, 18)
+                SettingsFootnote(
+                    "Apple Speech remains available without a download. "
+                        + "Manage optional Parakeet models from Models in the sidebar."
+                )
             case .generation:
                 SettingsChoiceGrid {
                     ForEach(BuiltInTemplate.allCases) { template in
@@ -209,16 +204,6 @@ private struct SettingsPane: View {
         }
     }
 
-    private var languageOptions: [(id: String, title: String)] {
-        [
-            ("en-US", "English (US)"),
-            ("en-GB", "English (UK)"),
-            ("hi-IN", "Hindi"),
-            ("es-ES", "Spanish"),
-            ("fr-FR", "French"),
-            ("de-DE", "German"),
-        ]
-    }
 }
 
 private struct SettingsChoiceGrid<Content: View>: View {

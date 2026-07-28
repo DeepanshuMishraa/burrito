@@ -10,16 +10,19 @@
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
-		1DD68C6D9799D4BFB7E88354 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = ECFA337F1032D11A4CC3842E /* Lottie */; };
+		1DD68C6D9799D4BFB7E88354 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
+		5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */; };
 		62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A516A8DE5CC1A96513E93F1E /* AppIcon.icon */; };
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
+		7F8F1BDB5A6B60E69DFFB9D1 /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = ECFA337F1032D11A4CC3842E /* Lottie */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
+		BE8C4CD3046F617FFB54B6D2 /* CalendarBackdrop.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2F668813C595ACD278927166 /* CalendarBackdrop.jpg */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
@@ -45,9 +48,11 @@
 /* Begin PBXFileReference section */
 		00A639102CCFABB8A22A07D3 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
 		0A2216874DB0B52B8350E522 /* DomainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainTests.swift; sourceTree = "<group>"; };
+		0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetTranscriber.swift; sourceTree = "<group>"; };
 		0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceAndStorageTests.swift; sourceTree = "<group>"; };
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
+		2F668813C595ACD278927166 /* CalendarBackdrop.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = CalendarBackdrop.jpg; sourceTree = "<group>"; };
 		3A7EDE94375DECAC98C16A4F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		3B76BDAAD1105FDBF200FA0E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
@@ -74,7 +79,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1DD68C6D9799D4BFB7E88354 /* Lottie in Frameworks */,
+				1DD68C6D9799D4BFB7E88354 /* FluidAudio in Frameworks */,
+				7F8F1BDB5A6B60E69DFFB9D1 /* Lottie in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +131,7 @@
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
+				0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */,
 				7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */,
 				728318FB3CB86222B61B8235 /* RecordingFileStore.swift */,
 				A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */,
@@ -138,6 +145,7 @@
 			isa = PBXGroup;
 			children = (
 				A516A8DE5CC1A96513E93F1E /* AppIcon.icon */,
+				2F668813C595ACD278927166 /* CalendarBackdrop.jpg */,
 				7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */,
 			);
 			path = Resources;
@@ -160,6 +168,7 @@
 			);
 			name = burrito;
 			packageProductDependencies = (
+				64DA2926F2A0EF333C410B58 /* FluidAudio */,
 				ECFA337F1032D11A4CC3842E /* Lottie */,
 			);
 			productName = burrito;
@@ -213,6 +222,7 @@
 			mainGroup = A663BA1E2DD0DA518906750A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -232,6 +242,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
+				BE8C4CD3046F617FFB54B6D2 /* CalendarBackdrop.jpg in Resources */,
 				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -253,6 +264,7 @@
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
+				5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */,
 				BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */,
 				CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */,
 				E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */,
@@ -540,9 +552,22 @@
 				minimumVersion = 4.6.1;
 			};
 		};
+		7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.15.5;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		64DA2926F2A0EF333C410B58 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
 		ECFA337F1032D11A4CC3842E /* Lottie */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */;
