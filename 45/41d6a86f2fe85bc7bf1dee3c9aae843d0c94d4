@@ -1,0 +1,19 @@
+Sources/ContentView.swift
+  s_dd0bacb6899cc2::t_3c4bca56730d6a 1326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4541d6a86f2fe85bc7bf1dee3c9aae843d0c94d4",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
