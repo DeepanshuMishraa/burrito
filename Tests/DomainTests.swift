@@ -2,6 +2,21 @@ import Foundation
 import Testing
 @testable import Burrito
 
+@Suite("Appearance")
+struct AppearanceTests {
+    @Test("Unknown stored appearance falls back to the system")
+    func unknownAppearanceFallback() {
+        #expect(BurritoAppearance.resolve("future-mode") == .system)
+    }
+
+    @Test("System appearance remains inherited")
+    func systemAppearanceIsNotForced() {
+        #expect(BurritoAppearance.system.colorScheme == nil)
+        #expect(BurritoAppearance.light.colorScheme == .light)
+        #expect(BurritoAppearance.dark.colorScheme == .dark)
+    }
+}
+
 @Suite("Transcript")
 struct TranscriptTests {
     @Test("System and microphone segments merge by timestamp and source")

@@ -94,16 +94,22 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
 private struct BurritoSettingsView: View {
     @State private var navigation = SettingsNavigation.shared
+    @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
+        BurritoAppearance.system.rawValue
 
     private var selected: SettingsTab {
         navigation.selectedTab ?? .capture
+    }
+
+    private var appearance: BurritoAppearance {
+        BurritoAppearance.resolve(appearanceRawValue)
     }
 
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Settings")
-                    .font(.system(size: 24, weight: .medium, design: .serif))
+                    .font(.burritoDisplay(size: 24, weight: .medium))
                     .padding(.bottom, 20)
 
                 ForEach(SettingsTab.allCases) { tab in
@@ -131,6 +137,7 @@ private struct BurritoSettingsView: View {
         }
         .background(BurritoTheme.canvas)
         .frame(minWidth: 640, minHeight: 480)
+        .preferredColorScheme(appearance.colorScheme)
     }
 }
 
@@ -145,7 +152,7 @@ private struct SettingsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(tab.title)
-                .font(.system(size: 30, weight: .medium, design: .serif))
+                .font(.burritoDisplay(size: 30, weight: .medium))
                 .padding(.bottom, 8)
 
             Text(subtitle)

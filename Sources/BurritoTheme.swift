@@ -1,6 +1,55 @@
 import AppKit
 import SwiftUI
 
+extension Font {
+    static func burritoDisplay(
+        size: CGFloat,
+        weight: Font.Weight = .regular
+    ) -> Font {
+        .custom("Avenir Next", fixedSize: size)
+            .weight(weight)
+    }
+}
+
+enum BurritoAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appAppearance"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .system: "circle.lefthalf.filled"
+        case .light: "sun.max"
+        case .dark: "moon"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    static func resolve(_ rawValue: String) -> BurritoAppearance {
+        BurritoAppearance(rawValue: rawValue) ?? .system
+    }
+
+}
+
 enum BurritoTheme {
     static let accent = adaptive(
         light: NSColor(calibratedRed: 0.88, green: 0.30, blue: 0.10, alpha: 1),

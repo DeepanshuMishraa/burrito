@@ -53,8 +53,14 @@ struct ContentView: View {
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
+    @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
+        BurritoAppearance.system.rawValue
     @FocusState private var searchFocused: Bool
     private let userProfile = MacUserProfile.current
+
+    private var appearance: BurritoAppearance {
+        BurritoAppearance.resolve(appearanceRawValue)
+    }
 
     private var selectedNote: Note? {
         notes.first { $0.id == selectedNoteID }
@@ -134,6 +140,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 1_020, minHeight: 640)
         .tint(BurritoTheme.accent)
+        .preferredColorScheme(appearance.colorScheme)
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -388,23 +395,13 @@ struct ContentView: View {
                         .padding(8)
                 }
 
-                Rectangle()
-                    .fill(BurritoTheme.softBorder)
-                    .frame(height: 1)
-
-                HStack(spacing: 10) {
-                    Image(nsImage: userProfile.image ?? NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 30, height: 30)
-                        .clipShape(Rectangle())
-                    Text(userProfile.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer()
-                }
-                .padding(12)
+                SidebarAccountCard(
+                    profile: userProfile,
+                    appearanceRawValue: $appearanceRawValue
+                )
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
             }
-            .foregroundStyle(.secondary)
         }
         .background(BurritoTheme.sidebar)
     }
@@ -442,7 +439,7 @@ struct ContentView: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             if sidebarSelection == .all {
                                 Text("Coming up")
-                                    .font(.system(size: 34, weight: .regular, design: .serif))
+                                    .font(.burritoDisplay(size: 34, weight: .regular))
                                     .tracking(-0.5)
                                     .padding(.bottom, 16)
 
@@ -454,7 +451,7 @@ struct ContentView: View {
                                 .padding(.bottom, 26)
                             } else {
                                 Text(sectionTitle)
-                                    .font(.system(size: 32, weight: .regular, design: .serif))
+                                    .font(.burritoDisplay(size: 32, weight: .regular))
                                     .tracking(-0.4)
                                     .padding(.bottom, 24)
                             }
@@ -491,7 +488,9 @@ struct ContentView: View {
         } else {
             ForEach(noteDays, id: \.date) { group in
                 Text(noteGroupTitle(for: group.date))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .tracking(0.7)
+                    .textCase(.uppercase)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 18)
                     .padding(.leading, 8)
@@ -620,6 +619,92 @@ struct ContentView: View {
     }
 }
 
+private struct SidebarAccountCard: View {
+    let profile: MacUserProfile
+    @Binding var appearanceRawValue: String
+
+    private var appearance: BurritoAppearance {
+        BurritoAppearance.resolve(appearanceRawValue)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("APPEARANCE")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(.tertiary)
+
+                HStack(spacing: 2) {
+                    ForEach(BurritoAppearance.allCases) { option in
+                        Button {
+                            appearanceRawValue = option.rawValue
+                        } label: {
+                            Image(systemName: option.systemImage)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(
+                                    appearance == option ? BurritoTheme.accent : .secondary
+                                )
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 28)
+                                .background(
+                                    appearance == option
+                                        ? BurritoTheme.accentSoft
+                                        : BurritoTheme.controlFill,
+                                    in: Rectangle()
+                                )
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(option.title)
+                        .accessibilityLabel("\(option.title) appearance")
+                        .accessibilityAddTraits(appearance == option ? .isSelected : [])
+                    }
+                }
+            }
+            .padding(11)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            HStack(spacing: 10) {
+                Image(nsImage: profile.image ?? NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 32, height: 32)
+                    .clipShape(Rectangle())
+                    .overlay {
+                        Rectangle()
+                            .stroke(BurritoTheme.softBorder)
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text("Local account")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer()
+
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel("Private on this Mac")
+            }
+            .padding(11)
+        }
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle()
+                .stroke(BurritoTheme.softBorder)
+        }
+    }
+}
+
 private struct NotificationPermissionCard: View {
     @Bindable var access: NotificationAccess
 
@@ -690,7 +775,7 @@ private struct ModelsView: View {
                 VStack(alignment: .leading, spacing: 30) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Models")
-                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .font(.burritoDisplay(size: 34, weight: .regular))
                             .tracking(-0.5)
                         Text("Burrito automatically uses the best installed model after a recording.")
                             .font(.system(size: 14))
@@ -955,7 +1040,7 @@ private struct ScooterGenerationLoader: View {
                         .foregroundStyle(BurritoTheme.accent.opacity(0.86))
 
                     Text(copy.title)
-                        .font(.system(size: 28, weight: .regular, design: .serif))
+                        .font(.burritoDisplay(size: 28, weight: .regular))
                         .tracking(-0.35)
                         .foregroundStyle(.primary)
 
@@ -1032,7 +1117,7 @@ private struct PermissionGateView: View {
                 BurritoSectionLabel(title: "Permissions")
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Allow Burrito to listen\nand take notes")
-                        .font(.system(size: 42, weight: .regular, design: .serif))
+                        .font(.burritoDisplay(size: 42, weight: .regular))
                         .tracking(-0.5)
                     Text("Burrito captures audio and transcribes it privately on this Mac. Nothing joins your calls and nothing is uploaded.")
                         .font(.system(size: 16))
@@ -1340,7 +1425,8 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(note.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.burritoDisplay(size: 15, weight: .medium))
+                        .tracking(-0.15)
                         .lineLimit(1)
                     Text(context)
                         .font(.system(size: 10))
@@ -1566,7 +1652,7 @@ private struct NewFolderDialog: View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 5) {
                 Text("New folder")
-                    .font(.system(size: 28, weight: .regular, design: .serif))
+                    .font(.burritoDisplay(size: 28, weight: .regular))
                 Text("Give this collection a short, useful name.")
                     .foregroundStyle(.secondary)
             }
@@ -1608,7 +1694,7 @@ private struct BurritoMessageDialog: View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(title)
-                    .font(.system(size: 28, weight: .regular, design: .serif))
+                    .font(.burritoDisplay(size: 28, weight: .regular))
                 Text(message)
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
@@ -1717,7 +1803,7 @@ private struct CalendarCard: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(today.formatted(.dateTime.day()))
-                    .font(.system(size: 34, weight: .regular, design: .serif))
+                    .font(.burritoDisplay(size: 34, weight: .regular))
                 Text(today.formatted(.dateTime.month(.abbreviated)))
                     .font(.system(size: 12, weight: .semibold))
                 Text(today.formatted(.dateTime.weekday(.wide)))
@@ -1893,7 +1979,8 @@ private struct TimelineNoteRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.burritoDisplay(size: 15, weight: .medium))
+                        .tracking(-0.1)
                         .lineLimit(1)
                     if note.isFavorite {
                         Image(systemName: "star.fill")
@@ -1902,7 +1989,8 @@ private struct TimelineNoteRow: View {
                     }
                 }
                 Text(note.processingStage?.rawValue ?? note.templateSnapshot.name)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .tracking(0.25)
                     .foregroundStyle(.tertiary)
             }
             Spacer()
@@ -1910,7 +1998,8 @@ private struct TimelineNoteRow: View {
                 FolderTag(folder: folder)
             }
             Text(note.updatedAt, style: .time)
-                .font(.system(size: 11).monospacedDigit())
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(.tertiary)
                 .frame(minWidth: 54, alignment: .trailing)
         }
@@ -2099,7 +2188,7 @@ private struct HomeEmptyState: View {
                 .foregroundStyle(.tertiary)
             VStack(spacing: 6) {
                 Text(isTrash ? "Trash is empty" : isSearching ? "No matching notes" : "Nothing captured yet")
-                    .font(.system(size: 20, weight: .regular, design: .serif))
+                    .font(.burritoDisplay(size: 20, weight: .regular))
                 Text(isSearching ? "Try a different search." : isTrash ? "Deleted notes will appear here." : "Start a recording and Burrito will organize it here.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -2226,7 +2315,7 @@ private struct NoteRow: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text(note.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.burritoDisplay(size: 15, weight: .medium))
                     .lineLimit(1)
                 Spacer()
                 if note.isFavorite {
@@ -2598,7 +2687,7 @@ private struct RecordingSetupView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(continuingNote == nil ? "New recording" : "Continue recording")
-                        .font(.system(size: 30, weight: .regular, design: .serif))
+                        .font(.burritoDisplay(size: 30, weight: .regular))
                     Text(
                         continuingNote == nil
                             ? "Choose what Burrito should listen for."
@@ -3112,7 +3201,7 @@ private struct TemplateDetailsView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Template details")
-                        .font(.system(size: 32, weight: .regular, design: .serif))
+                        .font(.burritoDisplay(size: 32, weight: .regular))
                     Text("Templates are instructions Burrito follows when it writes your note.")
                         .foregroundStyle(.secondary)
                 }
@@ -3290,7 +3379,7 @@ private struct MarkdownNoteContent: View {
                     .fill(BurritoTheme.accent)
                     .frame(width: 3)
                 inlineText(text)
-                    .font(.system(size: 15, design: .serif).italic())
+                    .font(.burritoDisplay(size: 15).italic())
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)
                     .padding(.vertical, 8)
@@ -3335,11 +3424,11 @@ private struct MarkdownNoteContent: View {
     private func headingFont(level: Int) -> Font {
         switch level {
         case 1:
-            .system(size: 28, weight: .semibold, design: .serif)
+            .burritoDisplay(size: 28, weight: .semibold)
         case 2:
-            .system(size: 21, weight: .semibold, design: .serif)
+            .burritoDisplay(size: 21, weight: .semibold)
         default:
-            .system(size: 16, weight: .semibold)
+            .burritoDisplay(size: 16, weight: .semibold)
         }
     }
 }
@@ -3370,7 +3459,7 @@ private struct NoteDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     TextField("Untitled note", text: titleBinding)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 34, weight: .regular, design: .serif))
+                        .font(.burritoDisplay(size: 34, weight: .regular))
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 8) {
@@ -3761,7 +3850,7 @@ private struct TemplateEditorView: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(template == nil ? "New template" : "Edit template")
-                    .font(.system(size: 32, weight: .regular, design: .serif))
+                    .font(.burritoDisplay(size: 32, weight: .regular))
                 Text("Describe exactly how Burrito should organize the transcript.")
                     .foregroundStyle(.secondary)
             }
@@ -3850,7 +3939,7 @@ private struct TranscriptEditor: View {
                         .frame(width: 34, height: 28)
                     VStack(spacing: 4) {
                         Text("The tape is quiet")
-                            .font(.system(size: 18, design: .serif))
+                            .font(.burritoDisplay(size: 18))
                         Text("Recorded words will gather here.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -3865,7 +3954,7 @@ private struct TranscriptEditor: View {
                             TranscriptSignalMark(tint: BurritoTheme.accent)
                                 .frame(width: 26, height: 20)
                             Text("Conversation tape")
-                                .font(.system(size: 15, weight: .medium, design: .serif))
+                                .font(.burritoDisplay(size: 15, weight: .medium))
                         }
                         Spacer()
                         HStack(spacing: 12) {
