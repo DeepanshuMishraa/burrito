@@ -1,0 +1,32 @@
+Sources/ContentView.swift
+  s_dd0bacb6899cc2::t_7d6c65ae556bc6 442,454,778,1043,1120,1428,1655,1697,1806,2191,2690,3204,3427,3429,3462,3853,3942,3957
+  s_dd0bacb6899cc2::t_988868b25e3fe2 56-57,61-64,143,398-403,622-705
+  s_dd0bacb6899cc2::t_5d6970a1e1f9ef 491-493,1429,1992-1993,2001-2002
+  s_dd0bacb6899cc2::t_cd98aba6b2da48 1982-1983,2318,3382,3431
+  s_dd0bacb6899cc2::t_daa22fe838d9fe 706-707
+Tests/DomainTests.swift
+  s_dd0bacb6899cc2::t_988868b25e3fe2 5-10,18-19
+  s_dd0bacb6899cc2::t_5d6970a1e1f9ef 11-17
+Sources/BurritoTheme.swift
+  s_dd0bacb6899cc2::t_988868b25e3fe2 14-52
+  s_dd0bacb6899cc2::t_def4edcf7c3ea7 4-13
+Sources/Settings.swift
+  s_dd0bacb6899cc2::t_5d6970a1e1f9ef 97-98,104-107,140
+  s_dd0bacb6899cc2::t_7d6c65ae556bc6 112,155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "102385bdc6d8e0c53b82319c39902370d62810a4",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
