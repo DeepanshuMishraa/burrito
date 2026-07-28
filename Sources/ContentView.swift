@@ -1323,10 +1323,7 @@ private struct SidebarToggleButton: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isHovered ? .primary : .secondary)
                 .frame(width: 30, height: 30)
-                .background(
-                    isHovered ? BurritoTheme.controlFill : Color.clear,
-                    in: Rectangle()
-                )
+                .opacity(isHovered ? 1 : 0.76)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
