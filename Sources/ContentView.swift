@@ -1322,6 +1322,75 @@ private struct BurritoPopoverPanel<Content: View>: View {
     }
 }
 
+private struct NoteActionsPopoverPanel<Content: View>: View {
+    let note: Note
+    let sectionTitle: String
+    @ViewBuilder let content: () -> Content
+
+    private var context: String {
+        if note.deletedAt != nil {
+            return "In Trash"
+        }
+        return note.folder?.name ?? note.templateSnapshot.name
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 11) {
+                Image(systemName: note.deletedAt == nil ? "note.text" : "trash")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 9))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(note.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Text(context)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if note.isFavorite, note.deletedAt == nil {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .accessibilityLabel("Favorite")
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            Text(sectionTitle.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(0.8)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.top, 9)
+                .padding(.bottom, 4)
+
+            VStack(spacing: 3) {
+                content()
+            }
+            .padding(.horizontal, 6)
+            .padding(.bottom, 7)
+        }
+        .frame(width: 244)
+        .background(BurritoTheme.raised)
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.5)
+        }
+        .presentationBackground(BurritoTheme.raised)
+    }
+}
+
 private struct BurritoPopoverRow: View {
     let title: String
     let systemImage: String
@@ -1954,7 +2023,7 @@ private struct TimelineNoteItem: View {
     @ViewBuilder
     private var noteActionsPopover: some View {
         if showingFolders {
-            BurritoPopoverPanel(title: "Add to folder") {
+            NoteActionsPopoverPanel(note: note, sectionTitle: "Choose folder") {
                 BurritoPopoverRow(title: "Back", systemImage: "chevron.left") {
                     showingFolders = false
                 }
@@ -1979,7 +2048,7 @@ private struct TimelineNoteItem: View {
                 }
             }
         } else if note.deletedAt == nil {
-            BurritoPopoverPanel {
+            NoteActionsPopoverPanel(note: note, sectionTitle: "Actions") {
                 BurritoPopoverRow(
                     title: note.isFavorite ? "Remove from favorites" : "Add to favorites",
                     systemImage: note.isFavorite ? "star.slash" : "star"
@@ -2004,7 +2073,7 @@ private struct TimelineNoteItem: View {
                 }
             }
         } else {
-            BurritoPopoverPanel {
+            NoteActionsPopoverPanel(note: note, sectionTitle: "Trash actions") {
                 BurritoPopoverRow(title: "Restore note", systemImage: "arrow.uturn.backward") {
                     note.deletedAt = nil
                     showingActions = false
@@ -2212,51 +2281,180 @@ private struct RecordingStatusView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("New recording")
-                    .font(.system(size: 34, weight: .regular, design: .serif))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    BurritoPill(
-                        title: Date.now.formatted(date: .abbreviated, time: .omitted),
-                        systemImage: "calendar"
-                    )
-                    BurritoPill(title: "Local", systemImage: "lock")
-                }
-                .padding(.top, 14)
-                Text("Write notes")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 30)
-                LiveTranscriptView(text: coordinator.liveTranscript)
-                    .padding(.top, 20)
-                Spacer(minLength: 80)
-            }
-            .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 44)
-            .padding(.top, 72)
-            .padding(.bottom, 130)
-            .frame(maxWidth: .infinity)
+            ActiveRecordingStage(
+                elapsed: coordinator.elapsed,
+                transcript: coordinator.liveTranscript,
+                systemLevel: coordinator.activity.system,
+                microphoneLevel: coordinator.activity.microphone
+            )
 
-            HStack {
-                RecordingControlButton(
-                    isRecording: true,
-                    elapsed: coordinator.elapsed,
-                    systemLevel: coordinator.activity.system,
-                    microphoneLevel: coordinator.activity.microphone,
-                    action: stop
-                )
-                Spacer()
-            }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 22)
+            RecordingControlButton(
+                isRecording: true,
+                elapsed: coordinator.elapsed,
+                systemLevel: coordinator.activity.system,
+                microphoneLevel: coordinator.activity.microphone,
+                action: stop
+            )
+            .padding(.bottom, 28)
         }
         .background(BurritoTheme.canvas)
     }
 }
 
-private struct RecordingControlButton: View {
+private struct ActiveRecordingStage: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let elapsed: TimeInterval
+    let transcript: String
+    let systemLevel: Double
+    let microphoneLevel: Double
+
+    var body: some View {
+        ZStack {
+            BurritoTheme.canvas
+
+            VStack(spacing: 0) {
+                if reduceMotion {
+                    LottieView(animation: .named("Scooter-loader"))
+                        .currentProgress(0.5)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 250, height: 220)
+                } else {
+                    LottieView(animation: .named("Scooter-loader"))
+                        .playing(loopMode: .loop)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 250, height: 220)
+                }
+
+                Text("LISTENING · ON THIS MAC")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(1.35)
+                    .foregroundStyle(BurritoTheme.accent.opacity(0.82))
+                    .padding(.top, 2)
+
+                LiveAudioWaveform(
+                    systemLevel: systemLevel,
+                    microphoneLevel: microphoneLevel
+                )
+                .padding(.top, 18)
+
+                LiveCharacterStream(text: transcript)
+                    .padding(.top, 14)
+
+                Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 10)
+            }
+            .offset(y: -34)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Recording in progress")
+        .accessibilityValue(
+            "Elapsed \(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))"
+        )
+    }
+}
+
+private struct LiveAudioWaveform: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let systemLevel: Double
+    let microphoneLevel: Double
+
+    private let barCount = 41
+
+    var body: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: 1 / 30,
+                paused: reduceMotion
+            )
+        ) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 4) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    Capsule()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 2.5, height: 62)
+                        .scaleEffect(
+                            x: 1,
+                            y: barScale(at: index, phase: phase),
+                            anchor: .center
+                        )
+                        .opacity(barOpacity(at: index))
+                }
+            }
+            .frame(width: 268, height: 68)
+        }
+        .mask {
+            LinearGradient(
+                colors: [.clear, .black, .black, .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func barScale(at index: Int, phase: TimeInterval) -> CGFloat {
+        let center = Double(barCount - 1) / 2
+        let distance = abs(Double(index) - center) / center
+        let envelope = 0.25 + (0.75 * pow(1 - distance, 1.6))
+        let sourceLevel = index.isMultiple(of: 2) ? systemLevel : microphoneLevel
+        let energy = max(max(systemLevel, microphoneLevel) * 0.55, sourceLevel)
+        let wave = reduceMotion
+            ? 0.5
+            : (sin((phase * 7.5) + (Double(index) * 0.68)) + 1) / 2
+        return 0.08 + CGFloat(min(0.92, energy * envelope * (0.62 + (wave * 0.58))))
+    }
+
+    private func barOpacity(at index: Int) -> Double {
+        let center = Double(barCount - 1) / 2
+        let distance = abs(Double(index) - center) / center
+        return 0.28 + (0.72 * (1 - distance))
+    }
+}
+
+private struct LiveCharacterStream: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let text: String
+
+    private var visibleText: String {
+        let value = LiveTranscriptPreview.trailingCharacters(in: text)
+        return value.isEmpty ? "····" : value
+    }
+
+    var body: some View {
+        ZStack {
+            Text(visibleText)
+                .id(visibleText)
+                .font(.system(size: 30, weight: .regular, design: .serif))
+                .tracking(5)
+                .foregroundStyle(
+                    text.isEmpty
+                        ? Color.secondary.opacity(0.35)
+                        : Color.primary.opacity(0.82)
+                )
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 7)),
+                            removal: .opacity.combined(with: .offset(y: -7))
+                        )
+                )
+        }
+        .frame(width: 220, height: 42)
+        .clipped()
+        .animation(.easeOut(duration: 0.18), value: visibleText)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct RecordingControlButton: View {
     let isRecording: Bool
     let elapsed: TimeInterval
     let systemLevel: Double
@@ -2264,38 +2462,76 @@ private struct RecordingControlButton: View {
     let action: () -> Void
 
     @State private var isHovered = false
-    @State private var readyPulse = false
+
+    private var audioEnergy: Double {
+        min(1, max(systemLevel, microphoneLevel))
+    }
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                if isRecording {
-                    activeControl
-                        .transition(.scale(scale: 0.72).combined(with: .opacity))
-                } else {
-                    readyControl
-                        .transition(.scale(scale: 0.72).combined(with: .opacity))
+            HStack(spacing: 10) {
+                ZStack {
+                    if isRecording {
+                        Circle()
+                            .fill(BurritoTheme.accent.opacity(0.16))
+                            .scaleEffect(1 + (audioEnergy * 0.18))
+                            .opacity(0.6 + (audioEnergy * 0.4))
+                    }
+
+                    Circle()
+                        .fill(isRecording ? BurritoTheme.accent : BurritoTheme.accentSoft)
+
+                    if isRecording {
+                        RoundedRectangle(cornerRadius: 2.5)
+                            .fill(.white)
+                            .frame(width: 10, height: 10)
+                    } else {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(BurritoTheme.accent)
+                    }
                 }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isRecording ? "Stop recording" : "Record more")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(
+                        isRecording
+                            ? Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond))
+                            : "Continue this note"
+                    )
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("⇧⌘R")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
             }
-            .frame(width: 64, height: 64)
-            .contentShape(Circle())
+            .padding(.horizontal, 7)
+            .frame(width: 188, height: 48)
+            .background(BurritoTheme.raised, in: Capsule())
+            .overlay {
+                Capsule()
+                    .fill(BurritoTheme.accentSoft)
+                    .opacity(isHovered ? 0.34 : 0)
+            }
+            .overlay {
+                Capsule()
+                    .stroke(BurritoTheme.softBorder.opacity(0.85), lineWidth: 0.75)
+            }
+            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .scaleEffect(isHovered ? 1.04 : 1)
-        .shadow(
-            color: isRecording
-                ? Color.red.opacity(isHovered ? 0.28 : 0.18)
-                : Color.black.opacity(isHovered ? 0.16 : 0.10),
-            radius: isHovered ? 16 : 11,
-            y: isHovered ? 7 : 4
-        )
-        .animation(.smooth(duration: 0.18), value: isHovered)
-        .animation(.spring(response: 0.36, dampingFraction: 0.76), value: isRecording)
+        .buttonStyle(RecordingControlButtonStyle())
+        .offset(y: isHovered ? -1 : 0)
+        .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
+        .animation(.easeOut(duration: 0.16), value: isHovered)
         .onHover { isHovered = $0 }
-        .onAppear {
-            guard !reduceMotion else { return }
-            readyPulse = true
-        }
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .help(isRecording ? "Stop recording" : "Continue recording")
         .accessibilityLabel(isRecording ? "Stop recording" : "Continue recording")
@@ -2305,150 +2541,14 @@ private struct RecordingControlButton: View {
                 : "Not recording"
         )
     }
-
-    private var readyControl: some View {
-        ZStack {
-            Circle()
-                .fill(BurritoTheme.accent.opacity(0.13))
-                .frame(width: 58, height: 58)
-                .scaleEffect(readyPulse ? 1.08 : 0.96)
-                .opacity(readyPulse ? 0.25 : 0.68)
-                .animation(
-                    .easeInOut(duration: 1.8).repeatForever(autoreverses: true),
-                    value: readyPulse
-                )
-
-            Circle()
-                .fill(BurritoTheme.raised)
-                .frame(width: 54, height: 54)
-                .overlay {
-                    Circle().stroke(BurritoTheme.softBorder)
-                }
-
-            Circle()
-                .fill(BurritoTheme.accentSoft.opacity(isHovered ? 1 : 0.72))
-                .frame(width: 38, height: 38)
-
-            HStack(alignment: .center, spacing: 2.5) {
-                ForEach(0..<5, id: \.self) { index in
-                    Capsule()
-                        .fill(BurritoTheme.accent)
-                        .frame(
-                            width: 2.5,
-                            height: readyBarHeight(at: index)
-                        )
-                }
-            }
-        }
-    }
-
-    private var activeControl: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: 1 / 30,
-                paused: reduceMotion
-            )
-        ) { timeline in
-            let phase = timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
-                Circle()
-                    .fill(Color.red.opacity(0.12 + (audioEnergy * 0.12)))
-                    .frame(width: 62, height: 62)
-                    .scaleEffect(1 + (audioEnergy * 0.10))
-
-                ForEach(0..<12, id: \.self) { index in
-                    Capsule()
-                        .fill(
-                            index.isMultiple(of: 3)
-                                ? BurritoTheme.accent
-                                : Color.red.opacity(0.58)
-                        )
-                        .frame(
-                            width: 2,
-                            height: activeRayHeight(
-                                at: index,
-                                phase: phase
-                            )
-                        )
-                        .offset(y: -29)
-                        .rotationEffect(.degrees(Double(index) * 30))
-                }
-
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [BurritoTheme.accent, .red],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        Circle().stroke(.white.opacity(0.18))
-                    }
-
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(.white)
-                    .frame(width: 13, height: 13)
-                    .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
-            }
-            .animation(.smooth(duration: 0.12), value: audioEnergy)
-        }
-    }
-
-    private var audioEnergy: Double {
-        min(1, max(systemLevel, microphoneLevel))
-    }
-
-    private func readyBarHeight(at index: Int) -> CGFloat {
-        let heights: [CGFloat] = [7, 12, 18, 12, 7]
-        let pulseScale = readyPulse && !reduceMotion
-            ? 1 + (CGFloat(index.isMultiple(of: 2) ? 0.10 : -0.08))
-            : 1
-        return heights[index] * pulseScale
-    }
-
-    private func activeRayHeight(at index: Int, phase: TimeInterval) -> CGFloat {
-        let wave = (sin((phase * 5) + Double(index) * 0.82) + 1) / 2
-        let motion = reduceMotion ? 0.5 : wave
-        let sourceLevel = index.isMultiple(of: 2) ? systemLevel : microphoneLevel
-        let level = max(audioEnergy * 0.65, sourceLevel)
-        return 3 + CGFloat((level * 7) + (motion * level * 3))
-    }
 }
 
-private struct LiveTranscriptView: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(BurritoTheme.accent)
-                    .frame(width: 7, height: 7)
-                Text("Listening now")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(BurritoTheme.accent)
-                Spacer()
-                Text("Live preview · Apple Speech")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
-            Text(text.isEmpty ? "Speak or play audio. Words will appear here." : text)
-                .font(.system(size: 15))
-                .foregroundStyle(text.isEmpty ? .tertiary : .primary)
-                .lineSpacing(5)
-                .textSelection(.enabled)
-                .contentTransition(.interpolate)
-                .animation(.smooth(duration: 0.2), value: text)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(BurritoTheme.accent.opacity(0.28))
-        }
+private struct RecordingControlButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -2648,6 +2748,18 @@ private struct RecordingSetupView: View {
         .padding(26)
         .frame(width: 520)
         .background(BurritoTheme.paper)
+        .overlay {
+            if openPicker != nil {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            openPicker = nil
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             recordingPickerOverlay
                 .padding(.top, 132)
@@ -2656,6 +2768,13 @@ private struct RecordingSetupView: View {
         .onAppear {
             if templateID == nil {
                 templateID = selectedTemplate?.id
+            }
+        }
+        .onExitCommand {
+            if openPicker != nil {
+                openPicker = nil
+            } else {
+                dismiss()
             }
         }
     }
@@ -3306,106 +3425,102 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 16) {
-                TextField("Untitled note", text: titleBinding)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 34, weight: .regular, design: .serif))
-                    .foregroundStyle(.secondary)
+            if !isRecordingThisNote {
+                VStack(alignment: .leading, spacing: 16) {
+                    TextField("Untitled note", text: titleBinding)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 34, weight: .regular, design: .serif))
+                        .foregroundStyle(.secondary)
 
-                HStack(spacing: 8) {
-                    BurritoPill(
-                        title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
-                        systemImage: "calendar"
-                    )
-                    BurritoPill(
-                        title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
-                        systemImage: "clock"
-                    )
-                    BurritoPill(
-                        title: note.templateSnapshot.name,
-                        systemImage: note.templateSnapshot.symbol
-                    )
-                    BurritoInlineButton(
-                        title: note.folder?.name ?? "Add to folder",
-                        systemImage: "folder"
-                    ) {
-                        showingFolderPopover.toggle()
-                    }
-                    .popover(
-                        isPresented: $showingFolderPopover,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        BurritoPopoverPanel(title: "Move to folder") {
-                            BurritoPopoverRow(
-                                title: "No folder",
-                                systemImage: "tray",
-                                isSelected: note.folder == nil
-                            ) {
-                                note.folder = nil
-                                showingFolderPopover = false
-                            }
-                            ForEach(folders) { folder in
+                    HStack(spacing: 8) {
+                        BurritoPill(
+                            title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
+                            systemImage: "calendar"
+                        )
+                        BurritoPill(
+                            title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
+                            systemImage: "clock"
+                        )
+                        BurritoPill(
+                            title: note.templateSnapshot.name,
+                            systemImage: note.templateSnapshot.symbol
+                        )
+                        BurritoInlineButton(
+                            title: note.folder?.name ?? "Add to folder",
+                            systemImage: "folder"
+                        ) {
+                            showingFolderPopover.toggle()
+                        }
+                        .popover(
+                            isPresented: $showingFolderPopover,
+                            attachmentAnchor: .rect(.bounds),
+                            arrowEdge: .top
+                        ) {
+                            BurritoPopoverPanel(title: "Move to folder") {
                                 BurritoPopoverRow(
-                                    title: folder.name,
-                                    systemImage: "folder",
-                                    isSelected: note.folder?.id == folder.id
+                                    title: "No folder",
+                                    systemImage: "tray",
+                                    isSelected: note.folder == nil
                                 ) {
-                                    note.folder = folder
+                                    note.folder = nil
                                     showingFolderPopover = false
+                                }
+                                ForEach(folders) { folder in
+                                    BurritoPopoverRow(
+                                        title: folder.name,
+                                        systemImage: "folder",
+                                        isSelected: note.folder?.id == folder.id
+                                    ) {
+                                        note.folder = folder
+                                        showingFolderPopover = false
+                                    }
+                                }
+                            }
+                        }
+                        BurritoInlineButton(
+                            title: "Generate again",
+                            systemImage: "arrow.clockwise"
+                        ) {
+                            requestRegeneration()
+                        }
+                        .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
+                    }
+
+                    HStack(spacing: 20) {
+                        EditorTabButton(title: "Notes", isSelected: selectedTab == 0) {
+                            selectedTab = 0
+                        }
+                        EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
+                            selectedTab = 1
+                        }
+                        Spacer()
+                        if selectedTab == 0 {
+                            BurritoInlineButton(
+                                title: isEditingMarkdown ? "Done" : "Edit",
+                                systemImage: isEditingMarkdown ? "checkmark" : "pencil"
+                            ) {
+                                withAnimation(.smooth(duration: 0.2)) {
+                                    isEditingMarkdown.toggle()
                                 }
                             }
                         }
                     }
-                    BurritoInlineButton(
-                        title: "Generate again",
-                        systemImage: "arrow.clockwise"
-                    ) {
-                        requestRegeneration()
-                    }
-                    .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
                 }
-
-                HStack(spacing: 20) {
-                    EditorTabButton(title: "Notes", isSelected: selectedTab == 0) {
-                        selectedTab = 0
-                    }
-                    EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
-                        selectedTab = 1
-                    }
-                    Spacer()
-                    if selectedTab == 0, !isRecordingThisNote {
-                        BurritoInlineButton(
-                            title: isEditingMarkdown ? "Done" : "Edit",
-                            systemImage: isEditingMarkdown ? "checkmark" : "pencil"
-                        ) {
-                            withAnimation(.smooth(duration: 0.2)) {
-                                isEditingMarkdown.toggle()
-                            }
-                        }
-                    }
-                }
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(.horizontal, 44)
+                .padding(.top, 72)
+                .frame(maxWidth: .infinity)
+                .transition(.opacity)
             }
-            .frame(maxWidth: 820, alignment: .leading)
-            .padding(.horizontal, 44)
-            .padding(.top, 72)
-            .frame(maxWidth: .infinity)
 
             if isRecordingThisNote {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        if !note.markdownBody.isEmpty {
-                            MarkdownNoteContent(markdown: note.markdownBody)
-                        }
-                        LiveTranscriptView(text: coordinator.liveTranscript)
-                    }
-                    .frame(maxWidth: 820, alignment: .leading)
-                    .padding(.horizontal, 44)
-                    .padding(.vertical, 28)
-                    .hidesEnclosingScrollIndicators()
-                }
-                .defaultScrollAnchor(.bottom)
-                .scrollIndicators(.hidden)
+                ActiveRecordingStage(
+                    elapsed: coordinator.elapsed,
+                    transcript: coordinator.liveTranscript,
+                    systemLevel: coordinator.activity.system,
+                    microphoneLevel: coordinator.activity.microphone
+                )
+                .transition(.opacity)
             } else if selectedTab == 0 {
                 if isEditingMarkdown {
                     TextEditor(text: notesBinding)
@@ -3443,71 +3558,73 @@ private struct NoteDetailView: View {
                 .buttonStyle(BurritoIconButtonStyle())
                 .accessibilityHint("Returns to the notes library")
                 Spacer()
-                Button {
-                    copyMarkdown()
-                } label: {
-                    Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
-                        .contentTransition(.symbolEffect(.replace))
-                        .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
-                }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel(didCopyNotes ? "Notes copied" : "Copy notes")
-                .help(didCopyNotes ? "Copied" : "Copy notes")
-                Button {
-                    exportAction()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("Export Markdown")
-                .help("Export Markdown")
-                Button {
-                    showingMorePopover.toggle()
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .rotationEffect(.degrees(90))
-                }
-                .buttonStyle(BurritoIconButtonStyle())
-                .accessibilityLabel("More actions")
-                .popover(
-                    isPresented: $showingMorePopover,
-                    attachmentAnchor: .rect(.bounds),
-                    arrowEdge: .top
-                ) {
-                    BurritoPopoverPanel {
-                        ShareLink(item: note.markdownBody) {
-                            BurritoPopoverRowLabel(
-                                title: "Share",
-                                systemImage: "paperplane"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        if let path = note.systemAudioRelativePath {
-                            BurritoPopoverDivider()
-                            BurritoPopoverRow(
-                                title: "Play system audio",
-                                systemImage: "play.fill"
-                            ) {
-                                play(fileStore.url(forRelativePath: path))
-                                showingMorePopover = false
+                if !isRecordingThisNote {
+                    Button {
+                        copyMarkdown()
+                    } label: {
+                        Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
+                            .contentTransition(.symbolEffect(.replace))
+                            .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
+                    }
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityLabel(didCopyNotes ? "Notes copied" : "Copy notes")
+                    .help(didCopyNotes ? "Copied" : "Copy notes")
+                    Button {
+                        exportAction()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityLabel("Export Markdown")
+                    .help("Export Markdown")
+                    Button {
+                        showingMorePopover.toggle()
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .rotationEffect(.degrees(90))
+                    }
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityLabel("More actions")
+                    .popover(
+                        isPresented: $showingMorePopover,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        BurritoPopoverPanel {
+                            ShareLink(item: note.markdownBody) {
+                                BurritoPopoverRowLabel(
+                                    title: "Share",
+                                    systemImage: "paperplane"
+                                )
                             }
-                        }
-                        if let path = note.microphoneAudioRelativePath {
-                            BurritoPopoverRow(
-                                title: "Play microphone",
-                                systemImage: "mic.fill"
-                            ) {
-                                play(fileStore.url(forRelativePath: path))
-                                showingMorePopover = false
+                            .buttonStyle(.plain)
+                            if let path = note.systemAudioRelativePath {
+                                BurritoPopoverDivider()
+                                BurritoPopoverRow(
+                                    title: "Play system audio",
+                                    systemImage: "play.fill"
+                                ) {
+                                    play(fileStore.url(forRelativePath: path))
+                                    showingMorePopover = false
+                                }
                             }
-                        }
-                        if player?.isPlaying == true {
-                            BurritoPopoverRow(
-                                title: "Stop audio",
-                                systemImage: "stop.fill"
-                            ) {
-                                player?.stop()
-                                showingMorePopover = false
+                            if let path = note.microphoneAudioRelativePath {
+                                BurritoPopoverRow(
+                                    title: "Play microphone",
+                                    systemImage: "mic.fill"
+                                ) {
+                                    play(fileStore.url(forRelativePath: path))
+                                    showingMorePopover = false
+                                }
+                            }
+                            if player?.isPlaying == true {
+                                BurritoPopoverRow(
+                                    title: "Stop audio",
+                                    systemImage: "stop.fill"
+                                ) {
+                                    player?.stop()
+                                    showingMorePopover = false
+                                }
                             }
                         }
                     }
@@ -3518,16 +3635,13 @@ private struct NoteDetailView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
                 if isRecordingThisNote {
-                    HStack {
-                        RecordingControlButton(
-                            isRecording: true,
-                            elapsed: coordinator.elapsed,
-                            systemLevel: coordinator.activity.system,
-                            microphoneLevel: coordinator.activity.microphone
-                        ) {
-                            Task { await coordinator.stop(context: modelContext) }
-                        }
-                        Spacer()
+                    RecordingControlButton(
+                        isRecording: true,
+                        elapsed: coordinator.elapsed,
+                        systemLevel: coordinator.activity.system,
+                        microphoneLevel: coordinator.activity.microphone
+                    ) {
+                        Task { await coordinator.stop(context: modelContext) }
                     }
                 } else if let stage = note.processingStage {
                     ProcessingRail(
@@ -3551,18 +3665,16 @@ private struct NoteDetailView: View {
                         .background(BurritoTheme.accentSoft, in: Capsule())
                     }
 
-                    HStack {
-                        RecordingControlButton(
-                            isRecording: false,
-                            elapsed: 0,
-                            systemLevel: 0,
-                            microphoneLevel: 0,
-                            action: newRecordingAction
-                        )
-                        Spacer()
-                    }
+                    RecordingControlButton(
+                        isRecording: false,
+                        elapsed: 0,
+                        systemLevel: 0,
+                        microphoneLevel: 0,
+                        action: newRecordingAction
+                    )
                 }
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
         }

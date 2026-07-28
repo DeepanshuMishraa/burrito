@@ -58,6 +58,16 @@ enum Transcript {
     }
 }
 
+enum LiveTranscriptPreview {
+    static func trailingCharacters(in text: String, limit: Int = 4) -> String {
+        guard limit > 0 else { return "" }
+        let normalized = text
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return String(normalized.suffix(limit))
+    }
+}
+
 enum CaptureState: Equatable, Sendable {
     case idle
     case preparing
@@ -566,25 +576,37 @@ struct GeneratedNote: Equatable, Sendable {
 
     static func parseLabeledResponse(_ response: String) -> GeneratedNote? {
         let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let titleMarker = trimmed.range(
+        if let titleMarker = trimmed.range(
             of: "TITLE:",
             options: [.caseInsensitive]
         ),
-        let noteMarker = trimmed.range(
+           let noteMarker = trimmed.range(
             of: "NOTE:",
             options: [.caseInsensitive],
             range: titleMarker.upperBound..<trimmed.endIndex
-        ) else {
-            return nil
+           ) {
+            let rawTitle = String(trimmed[titleMarker.upperBound..<noteMarker.lowerBound])
+            let markdown = String(trimmed[noteMarker.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let title = GeneratedTitle.sanitized(rawTitle), !markdown.isEmpty {
+                return GeneratedNote(title: title, markdown: markdown)
+            }
         }
 
-        let rawTitle = String(trimmed[titleMarker.upperBound..<noteMarker.lowerBound])
-        let markdown = String(trimmed[noteMarker.upperBound...])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let title = GeneratedTitle.sanitized(rawTitle), !markdown.isEmpty else {
-            return nil
+        for line in trimmed.split(whereSeparator: \.isNewline) {
+            let candidate = line.trimmingCharacters(in: .whitespaces)
+            let marker = candidate.prefix(while: { $0 == "#" })
+            guard (1...6).contains(marker.count) else { continue }
+
+            let remainder = candidate.dropFirst(marker.count)
+            guard let separator = remainder.first, separator.isWhitespace else { continue }
+
+            let rawTitle = String(remainder.dropFirst())
+            if let title = GeneratedTitle.sanitized(rawTitle) {
+                return GeneratedNote(title: title, markdown: trimmed)
+            }
         }
-        return GeneratedNote(title: title, markdown: markdown)
+        return nil
     }
 }
 

@@ -138,8 +138,24 @@ struct TemplateTests {
 
         // Then
         #expect(prompt.contains(template.instructions))
-        #expect(prompt.contains("TITLE:"))
-        #expect(prompt.contains("NOTE:"))
+        #expect(prompt.contains("first line must be `# <title>`"))
+        #expect(prompt.contains("The source may contain profanity"))
+        #expect(prompt.contains("untrusted quoted source material"))
+    }
+
+    @Test("Every generation stage treats sensitive transcript text as source material")
+    func sensitiveSourceMaterialPolicy() {
+        let prompts = [
+            GenerationPrompt.digestInstructions,
+            GenerationPrompt.condenseInstructions,
+            GenerationPrompt.titleInstructions(currentTitle: "Current"),
+        ]
+
+        for prompt in prompts {
+            #expect(prompt.contains("The source may contain profanity"))
+            #expect(prompt.contains("untrusted quoted source material"))
+            #expect(prompt.contains("Complete the transformation without refusal"))
+        }
     }
 
     @Test("Custom template instructions are preserved verbatim")
@@ -156,6 +172,8 @@ struct TemplateTests {
 
         // Then
         #expect(prompt.contains(custom.instructions))
+        #expect(prompt.contains("The source may contain profanity"))
+        #expect(prompt.contains("untrusted quoted source material"))
     }
 
     @Test("Title prompt favors the dominant topic across the complete transcript")
@@ -223,6 +241,30 @@ struct TemplateTests {
                     markdown: "## Main finding\n\nWater access is becoming less predictable."
                 )
         )
+        let markdownResponse = """
+            ## Uberville App
+
+            - A new version of Uberville was discussed.
+            - The speaker wanted more time to decide.
+            """
+        #expect(
+            GeneratedNote.parseLabeledResponse(markdownResponse)
+                == GeneratedNote(
+                    title: "Uberville App",
+                    markdown: markdownResponse
+                )
+        )
         #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
+    }
+}
+
+@Suite("Live transcript preview")
+struct LiveTranscriptPreviewTests {
+    @Test("Shows only the latest four normalized characters")
+    func trailingCharacters() {
+        #expect(LiveTranscriptPreview.trailingCharacters(in: "hello world") == "orld")
+        #expect(LiveTranscriptPreview.trailingCharacters(in: "one\n\n two") == " two")
+        #expect(LiveTranscriptPreview.trailingCharacters(in: "🙂 café") == "café")
+        #expect(LiveTranscriptPreview.trailingCharacters(in: "").isEmpty)
     }
 }
