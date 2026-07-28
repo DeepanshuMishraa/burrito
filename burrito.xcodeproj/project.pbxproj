@@ -22,7 +22,6 @@
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
-		BE8C4CD3046F617FFB54B6D2 /* CalendarBackdrop.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2F668813C595ACD278927166 /* CalendarBackdrop.jpg */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
@@ -52,7 +51,6 @@
 		0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceAndStorageTests.swift; sourceTree = "<group>"; };
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
-		2F668813C595ACD278927166 /* CalendarBackdrop.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = CalendarBackdrop.jpg; sourceTree = "<group>"; };
 		3A7EDE94375DECAC98C16A4F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		3B76BDAAD1105FDBF200FA0E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
@@ -145,7 +143,6 @@
 			isa = PBXGroup;
 			children = (
 				A516A8DE5CC1A96513E93F1E /* AppIcon.icon */,
-				2F668813C595ACD278927166 /* CalendarBackdrop.jpg */,
 				7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */,
 			);
 			path = Resources;
@@ -242,7 +239,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
-				BE8C4CD3046F617FFB54B6D2 /* CalendarBackdrop.jpg in Resources */,
 				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

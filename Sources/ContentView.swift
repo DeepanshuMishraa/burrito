@@ -428,11 +428,7 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 52)
-                .background {
-                    if sidebarSelection != .all {
-                        BurritoTheme.canvas
-                    }
-                }
+                .background(BurritoTheme.canvas)
 
                 ScrollView {
                     VStack(spacing: 0) {
@@ -468,20 +464,10 @@ struct ContentView: View {
                         .padding(.horizontal, 38)
                         .padding(.bottom, 100)
                         .frame(maxWidth: .infinity)
-                        .background(BurritoTheme.canvas)
                     }
                     .hidesEnclosingScrollIndicators()
                 }
                 .scrollIndicators(.hidden)
-            }
-            .background(alignment: .top) {
-                if sidebarSelection == .all {
-                    HomeHeroBackdrop()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 260)
-                        .clipped()
-                        .ignoresSafeArea(edges: .top)
-                }
             }
         }
     }
@@ -1653,36 +1639,6 @@ private struct SidebarNavigationButton: View {
             in: RoundedRectangle(cornerRadius: 7)
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-private struct HomeHeroBackdrop: View {
-    private var backdrop: NSImage? {
-        guard let url = Bundle.main.url(
-            forResource: "CalendarBackdrop",
-            withExtension: "jpg"
-        ) else {
-            return nil
-        }
-        return NSImage(contentsOf: url)
-    }
-
-    var body: some View {
-        ZStack {
-            BurritoTheme.canvas
-            if let backdrop {
-                Image(nsImage: backdrop)
-                    .resizable()
-                    .scaledToFill()
-                    .saturation(0.68)
-                    .contrast(1.03)
-                    .opacity(0.22)
-            }
-            BurritoTheme.canvas.opacity(0.42)
-        }
-        .clipped()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 
