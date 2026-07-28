@@ -1,0 +1,53 @@
+burrito.xcodeproj/project.pbxproj
+  s_dd0bacb6899cc2::t_167d2ca30d23b2 12,67,125,258
+Sources/ContentView.swift
+  s_dd0bacb6899cc2::t_866435f1f846f0 623-669
+  s_dd0bacb6899cc2::t_990dd6910faa12 2543
+  s_dd0bacb6899cc2::t_69c03fc9bacf0c 45,216,222,387-390
+  s_dd0bacb6899cc2::t_4cf7f01895dbd9 386
+  s_dd0bacb6899cc2::t_bd07823b323956 309,399,721,723,754,756,852-853,975,1069,1071,1087,1089,1110,1122,1157,1161,1183,1186,1204,1218-1219,1239,1263,1286,1288,1339,1382,1438,1441,1551,1553,1577,1579,1677,1703,1799,1802,1833,1835,1862,1892,1947,1957,1989,2006,2124,2147,2149,2184,2267,2269,2369,2526-2527,2630,2663,2665,2858,2901,2903,2992,3000,3014,3017,3033,3036,3054,3057,3083,3086,3197,3220,3222,3262,3280,3289,3299,3309,3311,3607,3724,3776,3778,3789,3795,3797,3811,3813,3958,3979,4029
+  s_dd0bacb6899cc2::t_167d2ca30d23b2 3494-3500
+  s_dd0bacb6899cc2::t_8156b9f6a31470 1076,2339,2426,2429,2431,2435,2439,2441,2444,2448,2450-2455,2457,2464-2466,2468,2473,2476
+  s_dd0bacb6899cc2::t_e5cd24e263c7cf 243,695,702-715,717,719-720,2932,2955,2965
+  s_dd0bacb6899cc2::t_d2972a9d263888 670-672
+Tests/CoordinatorTests.swift
+  s_dd0bacb6899cc2::t_d841359d337922 362
+  s_dd0bacb6899cc2::t_559708f35bc370 53-57,168-201
+  s_dd0bacb6899cc2::t_6d9c3bb37b954c 33-49,208,214,232,245-248
+Sources/SystemAudioCapture.swift
+  s_dd0bacb6899cc2::t_eff961c4315b39 25,68,150,168,171
+Sources/LocalTranscriber.swift
+  s_dd0bacb6899cc2::t_d841359d337922 111-114,116-118,131,165-168,170
+  s_dd0bacb6899cc2::t_8156b9f6a31470 169
+  s_dd0bacb6899cc2::t_697f3a54a39ad8 119
+Sources/AppCoordinator.swift
+  s_dd0bacb6899cc2::t_167d2ca30d23b2 20,31,38,47-48,169,199,382-384,446-448
+  s_dd0bacb6899cc2::t_d841359d337922 102-106
+Sources/AppFeedback.swift
+  s_dd0bacb6899cc2::t_69c03fc9bacf0c 2,6-28,30-42,44-72
+  s_dd0bacb6899cc2::t_167d2ca30d23b2 1,3-5,73-149
+  s_dd0bacb6899cc2::t_57faec8765d9de 29,43
+Sources/ServiceProtocols.swift
+  s_dd0bacb6899cc2::t_d841359d337922 23,33-36
+  s_dd0bacb6899cc2::t_6130e057ca39f5 37-38
+Sources/BurritoTheme.swift
+  s_dd0bacb6899cc2::t_bd07823b323956 75,124,126,144,189,191
+Sources/Settings.swift
+  s_dd0bacb6899cc2::t_bd07823b323956 119,233,246,248,271,275,282,284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5f5ad7e2fed2b65fa1010573b66be02073890552",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
