@@ -22,7 +22,9 @@ function AppComparison() {
     >
       <div className="comparison-frame relative isolate overflow-hidden">
         <img
-          src="/burrito-light.png"
+          src="/burrito-light.webp"
+          srcSet="/burrito-light-1132.webp 1132w, /burrito-light.webp 2264w"
+          sizes="(max-width: 1150px) calc(100vw - 16px), 1408px"
           width="2264"
           height="1568"
           alt="Burrito in light mode"
@@ -38,7 +40,9 @@ function AppComparison() {
           style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
         >
           <img
-            src="/burrito-dark.png"
+            src="/burrito-dark.webp"
+            srcSet="/burrito-dark-1132.webp 1132w, /burrito-dark.webp 2264w"
+            sizes="(max-width: 1150px) calc(100vw - 16px), 1408px"
             width="2264"
             height="1568"
             alt=""

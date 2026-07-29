@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { repositoryUrl, SiteNavbar } from "./SiteNavbar";
 
-const siteUrl = "https://deepanshumishraa.github.io/burrito";
+const siteUrl = "https://burrito-1l2.pages.dev";
 const maintainerEmail = "dipxsy@duck.com";
 
 type LegalPageProps = {
@@ -189,6 +189,12 @@ export function PrivacyPolicy() {
           The website’s hosting provider may process ordinary web-server information,
           such as IP address, browser type, requested URL, and request time, to deliver
           and secure the site. The provider’s own privacy terms govern that processing.
+        </p>
+        <p>
+          The website loads the Geist typeface from Google Fonts. When your browser
+          requests the font files, Google may receive standard network information,
+          including your IP address and browser details, under Google’s own privacy
+          terms.
         </p>
       </section>
 

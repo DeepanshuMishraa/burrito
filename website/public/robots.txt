@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://deepanshumishraa.github.io/burrito/sitemap.xml
+Sitemap: https://burrito-1l2.pages.dev/sitemap.xml
