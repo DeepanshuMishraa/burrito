@@ -2,9 +2,16 @@ import AppKit
 import SwiftUI
 import SwiftData
 
+@MainActor
 private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
+    private let updater = BurritoUpdateManager.shared
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         _ = BurritoAppFeedback.shared
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        updater.start()
     }
 }
 

@@ -200,12 +200,12 @@ final class AppCoordinator {
         let recordingDuration = Date.now.timeIntervalSince(startedAt)
         note.updatedAt = .now
         try? context.save()
-        feedback.recordingStopped()
 
         if case .failure(let error) = await capture.stop() {
             fail(note: note, error: error, context: context)
             return
         }
+        feedback.recordingStopped()
 
         guard capture.hasMeaningfulAudio else {
             finishSilentRecording(note: note, files: files, context: context)

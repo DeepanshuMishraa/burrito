@@ -44,6 +44,7 @@ struct ContentView: View {
     @State private var permissions = PermissionAccess()
     @State private var calendarAccess = CalendarAccess()
     @State private var notificationAccess = NotificationAccess.shared
+    @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
@@ -233,6 +234,9 @@ struct ContentView: View {
             calendarAccess.refresh()
             Task { await notificationAccess.refresh() }
         }
+        .task {
+            await updater.checkIfDue()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 permissions.refresh()
@@ -412,6 +416,11 @@ struct ContentView: View {
             .scrollIndicators(.hidden)
 
             VStack(spacing: 0) {
+                if updater.availableUpdate != nil {
+                    UpdateAvailableCard(updater: updater)
+                        .padding(8)
+                }
+
                 if notificationAccess.needsPrompt {
                     NotificationPermissionCard(access: notificationAccess)
                         .padding(8)
@@ -419,7 +428,8 @@ struct ContentView: View {
 
                 SidebarAccountCard(
                     profile: userProfile,
-                    appearanceRawValue: $appearanceRawValue
+                    appearanceRawValue: $appearanceRawValue,
+                    updater: updater
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
@@ -1090,6 +1100,8 @@ private struct CommandPaletteRowButtonStyle: ButtonStyle {
 private struct SidebarAccountCard: View {
     let profile: MacUserProfile
     @Binding var appearanceRawValue: String
+    @Bindable var updater: BurritoUpdateManager
+    @State private var isProfilePresented = false
 
     private var appearance: BurritoAppearance {
         BurritoAppearance.resolve(appearanceRawValue)
@@ -1136,40 +1148,200 @@ private struct SidebarAccountCard: View {
                 .fill(BurritoTheme.softBorder)
                 .frame(height: 1)
 
-            HStack(spacing: 10) {
-                Image(nsImage: profile.image ?? NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 32, height: 32)
-                    .clipShape(Rectangle())
-                    .overlay {
-                        Rectangle()
-                            .stroke(BurritoTheme.softBorder)
+            Button {
+                isProfilePresented.toggle()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(nsImage: profile.image ?? NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .clipShape(Rectangle())
+                        .overlay {
+                            Rectangle()
+                                .stroke(BurritoTheme.softBorder)
+                        }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(profile.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text("Local account")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(profile.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text("Local account")
-                        .font(.system(size: 10))
+                    Spacer()
+
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Account and updates")
                 }
-
-                Spacer()
-
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityLabel("Private on this Mac")
+                .padding(11)
+                .contentShape(Rectangle())
             }
-            .padding(11)
+            .buttonStyle(.plain)
+            .popover(
+                isPresented: $isProfilePresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .trailing
+            ) {
+                AccountPopover(profile: profile, updater: updater)
+            }
         }
         .background(BurritoTheme.raised, in: Rectangle())
         .overlay {
             Rectangle()
                 .stroke(BurritoTheme.softBorder)
         }
+    }
+}
+
+private struct AccountPopover: View {
+    let profile: MacUserProfile
+    @Bindable var updater: BurritoUpdateManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: profile.image ?? NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 34, height: 34)
+                    .clipShape(Rectangle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Private on this Mac")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(14)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Burrito \(updater.currentVersion)")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(updateDetail)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    if updater.isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                if updater.availableUpdate != nil {
+                    Button(primaryActionTitle) {
+                        Task { await updater.performPrimaryAction() }
+                    }
+                    .buttonStyle(UpdateActionButtonStyle())
+                } else {
+                    Button("Check for Updates") {
+                        Task { await updater.checkForUpdates() }
+                    }
+                    .buttonStyle(UpdateActionButtonStyle())
+                    .disabled(updater.isChecking)
+                }
+            }
+            .padding(14)
+        }
+        .frame(width: 250)
+        .background(BurritoTheme.raised)
+        .presentationBackground(BurritoTheme.raised)
+    }
+
+    private var primaryActionTitle: String {
+        "Update Now"
+    }
+
+    private var updateDetail: String {
+        switch updater.status {
+        case .idle:
+            "Updates are checked daily."
+        case .checking:
+            "Checking GitHub Releases…"
+        case .upToDate:
+            "You’re using the latest version."
+        case .available(let update):
+            "Version \(update.version) is ready."
+        case .failed(let failure):
+            "\(failure.message) \(failure.recovery)"
+        }
+    }
+}
+
+private struct UpdateAvailableCard: View {
+    @Bindable var updater: BurritoUpdateManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(BurritoTheme.accent)
+                Text("UPDATE AVAILABLE")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let update = updater.availableUpdate {
+                Text("Burrito \(update.version) is ready to install.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button(actionTitle) {
+                Task { await updater.performPrimaryAction() }
+            }
+            .buttonStyle(UpdateActionButtonStyle())
+        }
+        .padding(11)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle()
+                .stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private var actionTitle: String {
+        "Update Now"
+    }
+}
+
+private struct UpdateActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 10, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 28)
+            .foregroundStyle(.primary)
+            .background(
+                configuration.isPressed
+                    ? BurritoTheme.accentSoft
+                    : BurritoTheme.controlFill,
+                in: Rectangle()
+            )
+            .overlay {
+                Rectangle()
+                    .stroke(BurritoTheme.softBorder)
+            }
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

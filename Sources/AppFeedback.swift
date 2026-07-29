@@ -125,7 +125,7 @@ final class BurritoAppFeedback: NSObject, AppFeedbackProviding {
     )
     private let notificationCenter = UNUserNotificationCenter.current()
     private let startSound = NSSound(named: NSSound.Name("Pop"))
-    private let stopSound = NSSound(named: NSSound.Name("Tink"))
+    private let stopSound = NSSound(named: NSSound.Name("Pop"))
 
     private override init() {
         super.init()

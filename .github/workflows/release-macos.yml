@@ -1,0 +1,127 @@
+name: Build macOS release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build, sign, and publish update
+    runs-on: macos-26
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Resolve release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "Release tag must look like 1.2.3 or v1.2.3."
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build Burrito
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          xcodebuild \
+            -project burrito.xcodeproj \
+            -scheme burrito \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/BurritoDerivedData" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Create disk images
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
+          STAGE="$RUNNER_TEMP/BurritoDMG"
+          codesign --force --deep --sign - "$APP"
+          mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/Burrito.app"
+          hdiutil create \
+            -volname Burrito \
+            -srcfolder "$STAGE" \
+            -format UDZO \
+            "$RUNNER_TEMP/burrito-$VERSION.dmg"
+          cp "$RUNNER_TEMP/burrito-$VERSION.dmg" "$RUNNER_TEMP/Burrito.dmg"
+
+      - name: Sign update and create appcast
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.version.outputs.value }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "SPARKLE_PRIVATE_KEY is not configured."
+            exit 1
+          fi
+
+          SIGN_UPDATE="$(find "$RUNNER_TEMP/BurritoDerivedData/SourcePackages/artifacts" \
+            -path '*/Sparkle/bin/sign_update' -type f -print -quit)"
+          if [[ -z "$SIGN_UPDATE" ]]; then
+            echo "Sparkle sign_update was not found in resolved package artifacts."
+            exit 1
+          fi
+
+          DMG="$RUNNER_TEMP/burrito-$VERSION.dmg"
+          SIGNATURE="$(printf '%s' "$SPARKLE_PRIVATE_KEY" |
+            "$SIGN_UPDATE" --ed-key-file - "$DMG")"
+          PUBLISHED_AT="$(date -R)"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/burrito-${VERSION}.dmg"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+
+          {
+            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>'
+            printf '%s\n' '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
+            printf '%s\n' '  <channel>'
+            printf '%s\n' '    <title>Burrito updates</title>'
+            printf '%s\n' '    <description>Stable Burrito releases.</description>'
+            printf '%s\n' '    <language>en</language>'
+            printf '%s\n' '    <item>'
+            printf '      <title>Burrito %s</title>\n' "$VERSION"
+            printf '      <link>%s</link>\n' "$RELEASE_URL"
+            printf '      <pubDate>%s</pubDate>\n' "$PUBLISHED_AT"
+            printf '      <sparkle:version>%s</sparkle:version>\n' "$BUILD_NUMBER"
+            printf '      <sparkle:shortVersionString>%s</sparkle:shortVersionString>\n' "$VERSION"
+            printf '%s\n' '      <sparkle:minimumSystemVersion>26.0.0</sparkle:minimumSystemVersion>'
+            printf '%s\n' '      <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>'
+            printf '      <enclosure url="%s" type="application/octet-stream" %s />\n' \
+              "$DOWNLOAD_URL" "$SIGNATURE"
+            printf '%s\n' '    </item>'
+            printf '%s\n' '  </channel>'
+            printf '%s\n' '</rss>'
+          } > "$RUNNER_TEMP/appcast.xml"
+
+      - name: Attach release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "$RUNNER_TEMP/burrito-$VERSION.dmg" \
+            "$RUNNER_TEMP/Burrito.dmg" \
+            "$RUNNER_TEMP/appcast.xml" \
+            --clobber
