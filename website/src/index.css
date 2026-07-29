@@ -97,6 +97,12 @@ a {
     );
 }
 
+.granola-mark {
+  transform-origin: 50% 64%;
+  transition: transform 260ms var(--ease-out-expo);
+  will-change: transform;
+}
+
 .comparison-shell {
   position: relative;
   z-index: 10;
@@ -743,6 +749,10 @@ a {
     transform: rotate(-5deg) scale(1.04);
   }
 
+  .granola-mark:hover {
+    transform: translateY(-0.04em) rotate(-7deg) scale(1.035);
+  }
+
   .nav-download:hover {
     transform: translateY(-1px);
     background: #2855df;
@@ -778,6 +788,7 @@ a {
   color: rgb(25 25 24 / 58%);
   font-size: 1rem;
   line-height: 1.75;
+  overflow-wrap: anywhere;
 }
 
 .legal-copy p + p {
@@ -803,8 +814,33 @@ a {
 }
 
 @media (max-width: 40rem) {
+  .hero-section {
+    min-height: auto;
+    padding-top: 7rem;
+  }
+
+  .hero-section h1 {
+    font-size: clamp(3.35rem, 15vw, 4rem);
+    line-height: 1.02;
+  }
+
+  .hero-section h1 img {
+    width: 0.58em;
+    height: 0.58em;
+  }
+
   .hero-cloud-image {
     object-position: 55% top;
+  }
+
+  .comparison-shell {
+    overflow: hidden;
+  }
+
+  .comparison-frame img {
+    width: 150%;
+    max-width: none;
+    transform: translateX(-16.667%);
   }
 
   .landing-section {
@@ -885,12 +921,65 @@ a {
   .legal-layout {
     gap: 3rem;
   }
+
+  .nav-download {
+    min-height: 2.5rem;
+  }
+
+  .closing-section footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (min-width: 40.001rem) and (max-width: 64rem) {
+  .statement-copy {
+    gap: 3.5rem;
+  }
+
   .system-grid,
   .privacy-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .privacy-intro {
+    gap: 2.5rem;
+  }
+}
+
+@media (max-width: 52rem) {
+  .statement-copy,
+  .faq-layout,
+  .legal-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .statement-copy,
+  .faq-layout {
+    gap: 2.5rem;
+  }
+
+  .statement-copy p {
+    margin-left: 0;
+  }
+
+  .legal-layout {
+    gap: 3rem;
+  }
+}
+
+@media (max-width: 23.5rem) {
+  .hero-section h1 {
+    font-size: 3.1rem;
+  }
+
+  .hero-section > div:nth-of-type(2) {
+    width: calc(100% - 1rem);
+  }
+
+  .feature-copy,
+  .workflow-panel {
+    padding: 1.25rem;
   }
 }
 

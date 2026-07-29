@@ -163,7 +163,7 @@ function App() {
                   height="240"
                   alt=""
                   aria-hidden="true"
-                  className="relative top-[0.06em] size-[0.62em] rounded-[0.16em]"
+                  className="granola-mark relative top-[0.06em] size-[0.62em] rounded-[0.16em]"
                 />
                 <span className="sr-only">Granola</span>
                 alternative.
