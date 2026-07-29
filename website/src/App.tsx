@@ -128,6 +128,7 @@ function App() {
                   aria-hidden="true"
                   className="relative top-[0.07em] size-[0.72em] rounded-[0.16em]"
                 />
+                <span className="sr-only">Granola</span>
                 alternative.
               </span>
             </h1>
