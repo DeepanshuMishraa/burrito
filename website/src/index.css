@@ -2,6 +2,7 @@
 
 @theme {
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque", "Geist", sans-serif;
   --color-canvas: #f4f3ef;
   --color-ink: #191918;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -50,6 +51,64 @@ a {
 .comparison-frame:has(.comparison-range:focus-visible) {
   outline: 2px solid var(--color-ink);
   outline-offset: 3px;
+}
+
+.hero-section {
+  --dither-dot: rgb(25 25 24 / 16%);
+  --dither-accent: rgb(178 76 35 / 12%);
+}
+
+.hero-dither {
+  position: absolute;
+  z-index: -1;
+  top: -5rem;
+  left: 50%;
+  width: 100vw;
+  height: clamp(42rem, 82vh, 60rem);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.hero-dither::before,
+.hero-dither::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+
+.hero-dither::before {
+  background-image: radial-gradient(
+    circle,
+    var(--dither-dot) 0 1.05px,
+    transparent 1.3px
+  );
+  background-size: 7px 7px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(0 0 0 / 42%) 12%,
+    #000 28%,
+    rgb(0 0 0 / 76%) 68%,
+    transparent 100%
+  );
+}
+
+.hero-dither::after {
+  background-image: radial-gradient(
+    circle,
+    var(--dither-accent) 0 0.95px,
+    transparent 1.15px
+  );
+  background-position: 3.5px 3.5px;
+  background-size: 7px 7px;
+  mask-image: repeating-radial-gradient(
+    ellipse 62% 54% at 50% 42%,
+    transparent 0 7%,
+    rgb(0 0 0 / 22%) 7.5%,
+    #000 9.5%,
+    rgb(0 0 0 / 22%) 11.5%,
+    transparent 12% 19%
+  );
 }
 
 .primary-action {
@@ -111,12 +170,14 @@ a {
 }
 
 .comparison-handle {
+  top: calc(50% - 1.125rem);
+  left: calc(50% - 0.75rem);
   transition: transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
   will-change: transform;
 }
 
 .comparison-frame:has(.comparison-range:active) .comparison-handle {
-  transform: translate(-50%, -50%) scale(0.96);
+  transform: scale(0.96);
   transition-duration: 90ms;
 }
 
@@ -141,7 +202,7 @@ a {
   }
 
   .comparison-frame:has(.comparison-range:hover) .comparison-handle {
-    transform: translate(-50%, -50%) scale(1.06);
+    transform: scale(1.06);
   }
 }
 
@@ -184,6 +245,19 @@ a {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 40rem) {
+  .hero-dither {
+    top: -3rem;
+    width: 100vw;
+    height: 38rem;
+  }
+
+  .hero-dither::before,
+  .hero-dither::after {
+    background-size: 6px 6px;
   }
 }
 

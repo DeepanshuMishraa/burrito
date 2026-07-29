@@ -57,7 +57,7 @@ function AppComparison() {
           className={`pointer-events-none absolute inset-y-[4%] z-10 w-px bg-white/75 shadow-[0_0_0_1px_rgb(0_0_0/0.12)] transition-[left] ${movementClass}`}
           style={{ left: `${position}%` }}
         >
-          <span className="comparison-handle absolute top-1/2 left-1/2 flex h-9 w-6 -translate-1/2 items-center justify-center rounded-full border border-black/12 bg-white/92 backdrop-blur-sm">
+          <span className="comparison-handle absolute flex h-9 w-6 items-center justify-center rounded-full border border-black/12 bg-white/92 backdrop-blur-sm">
             <i className="h-3 w-px bg-black/25" />
             <i className="ml-1 h-3 w-px bg-black/25" />
           </span>
@@ -110,12 +110,14 @@ function App() {
       <main id="main">
         <section
           aria-labelledby="hero-title"
-          className="pt-[clamp(2.5rem,5vh,4.25rem)] text-center"
+          className="hero-section relative isolate pt-[clamp(2.5rem,5vh,4.25rem)] text-center"
         >
-          <div className="mx-auto w-[min(calc(100%_-_2rem),78rem)]">
+          <div className="hero-dither" aria-hidden="true" />
+
+          <div className="relative z-10 mx-auto w-[min(calc(100%_-_2rem),78rem)]">
             <h1
               id="hero-title"
-              className="reveal mx-auto text-[clamp(3.2rem,6vw,5.9rem)] leading-[0.98] font-semibold tracking-[-0.038em]"
+              className="reveal mx-auto font-display text-[clamp(3.2rem,6vw,5.9rem)] leading-[0.94] font-[650] tracking-[-0.052em]"
               style={reveal("60ms")}
             >
               <span className="block">The open-source</span>
