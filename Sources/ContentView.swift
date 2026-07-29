@@ -10,6 +10,7 @@ private enum SidebarSelection: Hashable {
     case all
     case favorites
     case models
+    case templates
     case trash
     case folder(UUID)
 }
@@ -47,7 +48,8 @@ struct ContentView: View {
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
-    @State private var searchText = ""
+    @State private var isCommandPalettePresented = false
+    @State private var commandPaletteQuery = ""
     @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
@@ -55,7 +57,6 @@ struct ContentView: View {
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
-    @FocusState private var searchFocused: Bool
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
@@ -79,16 +80,14 @@ struct ContentView: View {
                 note.deletedAt == nil && note.isFavorite
             case .models:
                 false
+            case .templates:
+                false
             case .trash:
                 note.deletedAt != nil
             case .folder(let id):
                 note.deletedAt == nil && note.folder?.id == id
             }
-            let matchesSearch = searchText.isEmpty
-                || note.title.localizedStandardContains(searchText)
-                || note.markdownBody.localizedStandardContains(searchText)
-                || Transcript.rendered(note.transcriptSegments).localizedStandardContains(searchText)
-            return isInSection && matchesSearch
+            return isInSection
         }
 
         return filtered.sorted { $0.updatedAt > $1.updatedAt }
@@ -164,7 +163,20 @@ struct ContentView: View {
             }
         }
         .overlay {
-            if showingNewFolder {
+            if isCommandPalettePresented {
+                CommandPaletteView(
+                    query: $commandPaletteQuery,
+                    notes: notes.filter { $0.deletedAt == nil },
+                    isSidebarVisible: isSidebarVisible,
+                    dismiss: dismissCommandPalette,
+                    selectCommand: performPaletteCommand,
+                    selectNote: { noteID in
+                        dismissCommandPalette()
+                        selectedNoteID = noteID
+                    }
+                )
+                .transition(commandPaletteTransition)
+            } else if showingNewFolder {
                 BurritoModalBackdrop {
                     NewFolderDialog(
                         name: $newFolderName,
@@ -238,8 +250,8 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewFolder)) { _ in
             showingNewFolder = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .burritoFind)) { _ in
-            searchFocused = true
+        .onReceive(NotificationCenter.default.publisher(for: .burritoCommandPalette)) { _ in
+            presentCommandPalette()
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoExportMarkdown)) { _ in
             if let selectedNote { exportMarkdown(selectedNote) }
@@ -268,6 +280,8 @@ struct ContentView: View {
 
             if sidebarSelection == .models {
                 ModelsView(modelStore: modelStore)
+            } else if sidebarSelection == .templates {
+                TemplatesView(templates: templates)
             } else {
                 noteList
             }
@@ -292,30 +306,31 @@ struct ContentView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 38)
 
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.tertiary)
-                TextField("Search", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .focused($searchFocused)
-                Text("⌘K")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.tertiary)
+            Button(action: presentCommandPalette) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.tertiary)
+                    Text("Search")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("⌘K")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
+                .padding(.horizontal, 11)
+                .frame(height: 34)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 11)
-            .frame(height: 34)
+            .buttonStyle(.plain)
             .background(BurritoTheme.controlFill, in: Rectangle())
+            .overlay {
+                Rectangle()
+                    .stroke(BurritoTheme.softBorder.opacity(0.7))
+            }
             .padding(.horizontal, 12)
             .padding(.bottom, 14)
+            .accessibilityLabel("Search notes and commands")
+            .accessibilityHint("Opens the command palette")
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
@@ -342,6 +357,14 @@ struct ContentView: View {
                         isSelected: sidebarSelection == .models
                     ) {
                         sidebarSelection = .models
+                    }
+                    SidebarNavigationButton(
+                        title: "Templates",
+                        systemImage: "doc.text",
+                        count: templates.count,
+                        isSelected: sidebarSelection == .templates
+                    ) {
+                        sidebarSelection = .templates
                     }
                     SidebarNavigationButton(
                         title: "Trash",
@@ -481,7 +504,7 @@ struct ContentView: View {
         if visibleNotes.isEmpty {
             HomeEmptyState(
                 isTrash: sidebarSelection == .trash,
-                isSearching: !searchText.isEmpty
+                isSearching: false
             ) {
                 recordingDestination = .newNote
             }
@@ -544,6 +567,7 @@ struct ContentView: View {
         case .all: "All Notes"
         case .favorites: "Favorites"
         case .models: "Models"
+        case .templates: "Templates"
         case .trash: "Trash"
         case .folder(let id): folders.first(where: { $0.id == id })?.name ?? "Folder"
         }
@@ -565,6 +589,73 @@ struct ContentView: View {
             recordingDestination = selectedNote.map {
                 .appendToNote(id: $0.id)
             } ?? .newNote
+        }
+    }
+
+    private func presentCommandPalette() {
+        commandPaletteQuery = ""
+        withAnimation(
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? .easeOut(duration: 0.12)
+                : .easeOut(duration: 0.18)
+        ) {
+            isCommandPalettePresented = true
+        }
+    }
+
+    private func dismissCommandPalette() {
+        commandPaletteQuery = ""
+        withAnimation(
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? .easeOut(duration: 0.1)
+                : .easeIn(duration: 0.13)
+        ) {
+            isCommandPalettePresented = false
+        }
+    }
+
+    private var commandPaletteTransition: AnyTransition {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            return .opacity
+        }
+        return .modifier(
+            active: CommandPalettePresentationModifier(
+                opacity: 0,
+                scale: 0.985,
+                verticalOffset: -8
+            ),
+            identity: CommandPalettePresentationModifier(
+                opacity: 1,
+                scale: 1,
+                verticalOffset: 0
+            )
+        )
+    }
+
+    private func performPaletteCommand(_ command: BurritoPaletteCommand) {
+        dismissCommandPalette()
+
+        switch command {
+        case .newRecording:
+            recordingDestination = .newNote
+        case .newFolder:
+            showingNewFolder = true
+        case .allNotes:
+            selectedNoteID = nil
+            sidebarSelection = .all
+        case .favorites:
+            selectedNoteID = nil
+            sidebarSelection = .favorites
+        case .models:
+            selectedNoteID = nil
+            sidebarSelection = .models
+        case .templates:
+            selectedNoteID = nil
+            sidebarSelection = .templates
+        case .toggleSidebar:
+            isSidebarVisible.toggle()
+        case .settings:
+            SettingsWindowController.show()
         }
     }
 
@@ -616,6 +707,378 @@ struct ContentView: View {
             let alert = NSAlert(error: error)
             alert.runModal()
         }
+    }
+}
+
+private enum BurritoPaletteCommand: String, CaseIterable, Identifiable {
+    case newRecording
+    case newFolder
+    case allNotes
+    case favorites
+    case models
+    case templates
+    case toggleSidebar
+    case settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newRecording: "New recording"
+        case .newFolder: "New folder"
+        case .allNotes: "Go to All Notes"
+        case .favorites: "Go to Favorites"
+        case .models: "Manage transcription models"
+        case .templates: "Manage note templates"
+        case .toggleSidebar: "Toggle sidebar"
+        case .settings: "Open Settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .newRecording: "waveform"
+        case .newFolder: "folder.badge.plus"
+        case .allNotes: "house"
+        case .favorites: "star"
+        case .models: "waveform.badge.magnifyingglass"
+        case .templates: "doc.text"
+        case .toggleSidebar: "sidebar.left"
+        case .settings: "gearshape"
+        }
+    }
+
+    var shortcut: String? {
+        switch self {
+        case .newRecording: "⌘N"
+        case .newFolder: "⇧⌘N"
+        case .settings: "⌘,"
+        case .allNotes, .favorites, .models, .templates, .toggleSidebar: nil
+        }
+    }
+
+    fileprivate func matches(_ query: String) -> Bool {
+        title.localizedStandardContains(query)
+            || rawValue.localizedStandardContains(query)
+    }
+}
+
+private struct CommandPalettePresentationModifier: ViewModifier {
+    let opacity: Double
+    let scale: CGFloat
+    let verticalOffset: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(opacity)
+            .scaleEffect(scale, anchor: .top)
+            .offset(y: verticalOffset)
+    }
+}
+
+private struct CommandPaletteView: View {
+    private enum ResultID: Hashable {
+        case command(BurritoPaletteCommand)
+        case note(UUID)
+    }
+
+    @Binding var query: String
+    let notes: [Note]
+    let isSidebarVisible: Bool
+    let dismiss: () -> Void
+    let selectCommand: (BurritoPaletteCommand) -> Void
+    let selectNote: (UUID) -> Void
+
+    @FocusState private var queryFocused: Bool
+    @State private var selectedResult: ResultID?
+    @Namespace private var selectionAnimation
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var matchingCommands: [BurritoPaletteCommand] {
+        guard !normalizedQuery.isEmpty else {
+            return BurritoPaletteCommand.allCases
+        }
+        return BurritoPaletteCommand.allCases.filter { $0.matches(normalizedQuery) }
+    }
+
+    private var matchingNotes: [Note] {
+        let candidates = notes.sorted { $0.updatedAt > $1.updatedAt }
+        guard !normalizedQuery.isEmpty else {
+            return Array(candidates.prefix(4))
+        }
+        return Array(
+            candidates.filter {
+                $0.title.localizedStandardContains(normalizedQuery)
+                    || $0.markdownBody.localizedStandardContains(normalizedQuery)
+                    || Transcript.rendered($0.transcriptSegments)
+                        .localizedStandardContains(normalizedQuery)
+            }
+            .prefix(8)
+        )
+    }
+
+    private var hasResults: Bool {
+        !matchingCommands.isEmpty || !matchingNotes.isEmpty
+    }
+
+    private var resultIDs: [ResultID] {
+        matchingCommands.map(ResultID.command)
+            + matchingNotes.map { ResultID.note($0.id) }
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.38)
+                .ignoresSafeArea()
+                .onTapGesture(perform: dismiss)
+
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(BurritoTheme.accent)
+
+                    TextField("Search notes and commands", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 16, weight: .regular))
+                        .focused($queryFocused)
+                        .onSubmit(performFirstResult)
+                        .onKeyPress(.downArrow) {
+                            moveSelection(by: 1)
+                            return .handled
+                        }
+                        .onKeyPress(.upArrow) {
+                            moveSelection(by: -1)
+                            return .handled
+                        }
+
+                    Text("ESC")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 7)
+                        .frame(height: 22)
+                        .background(BurritoTheme.controlFill, in: Rectangle())
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 58)
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(height: 1)
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if !matchingCommands.isEmpty {
+                                paletteSectionTitle("Commands")
+                                ForEach(matchingCommands) { command in
+                                    commandRow(command)
+                                        .id(ResultID.command(command))
+                                }
+                            }
+
+                            if !matchingNotes.isEmpty {
+                                paletteSectionTitle(
+                                    normalizedQuery.isEmpty ? "Recent notes" : "Notes"
+                                )
+                                ForEach(matchingNotes) { note in
+                                    noteRow(note)
+                                        .id(ResultID.note(note.id))
+                                }
+                            }
+
+                            if !hasResults {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 20, weight: .light))
+                                        .foregroundStyle(.tertiary)
+                                    Text("Nothing found")
+                                        .font(.system(size: 13, weight: .regular))
+                                    Text("Try a note title or command.")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 42)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .scrollIndicators(.hidden)
+                    .hidesEnclosingScrollIndicators()
+                    .onChange(of: selectedResult) { _, result in
+                        guard let result else { return }
+                        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                            proxy.scrollTo(result, anchor: .center)
+                        } else {
+                            withAnimation(.easeOut(duration: 0.14)) {
+                                proxy.scrollTo(result, anchor: .center)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 390)
+            }
+            .frame(width: 560)
+            .background(BurritoTheme.paper, in: Rectangle())
+            .overlay {
+                Rectangle()
+                    .stroke(BurritoTheme.softBorder)
+            }
+            .shadow(color: .black.opacity(0.28), radius: 28, y: 16)
+        }
+        .task {
+            selectedResult = resultIDs.first
+            await Task.yield()
+            queryFocused = true
+        }
+        .onChange(of: query) {
+            selectedResult = resultIDs.first
+        }
+        .onExitCommand(perform: dismiss)
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private func paletteSectionTitle(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .tracking(0.8)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+    }
+
+    private func commandRow(_ command: BurritoPaletteCommand) -> some View {
+        Button {
+            selectCommand(command)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: command.systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(BurritoTheme.controlFill, in: Rectangle())
+
+                Text(command == .toggleSidebar
+                    ? (isSidebarVisible ? "Hide sidebar" : "Show sidebar")
+                    : command.title
+                )
+                .font(.system(size: 13, weight: .regular))
+
+                Spacer()
+
+                if let shortcut = command.shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(
+            CommandPaletteRowButtonStyle()
+        )
+        .background {
+            if selectedResult == .command(command) {
+                selectionHighlight
+            }
+        }
+        .padding(.horizontal, 6)
+    }
+
+    private func noteRow(_ note: Note) -> some View {
+        Button {
+            selectNote(note.id)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: note.templateSymbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(BurritoTheme.controlFill, in: Rectangle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(note.title)
+                        .font(.system(size: 13, weight: .regular))
+                        .lineLimit(1)
+                    Text(note.templateName)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer()
+
+                Text(PaletteNoteAge.label(updatedAt: note.updatedAt))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(
+            CommandPaletteRowButtonStyle()
+        )
+        .background {
+            if selectedResult == .note(note.id) {
+                selectionHighlight
+            }
+        }
+        .padding(.horizontal, 6)
+    }
+
+    private var selectionHighlight: some View {
+        Rectangle()
+            .fill(BurritoTheme.accentSoft)
+            .matchedGeometryEffect(id: "command-palette-selection", in: selectionAnimation)
+    }
+
+    private func performFirstResult() {
+        let result = selectedResult ?? resultIDs.first
+        switch result {
+        case .command(let command):
+            selectCommand(command)
+        case .note(let noteID):
+            selectNote(noteID)
+        case nil:
+            break
+        }
+    }
+
+    private func moveSelection(by offset: Int) {
+        guard !resultIDs.isEmpty else {
+            selectedResult = nil
+            return
+        }
+
+        let currentIndex = selectedResult.flatMap(resultIDs.firstIndex) ?? 0
+        let nextIndex = (currentIndex + offset + resultIDs.count) % resultIDs.count
+        updateSelection(resultIDs[nextIndex])
+    }
+
+    private func updateSelection(_ result: ResultID) {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            selectedResult = result
+        } else {
+            withAnimation(.easeInOut(duration: 0.1)) {
+                selectedResult = result
+            }
+        }
+    }
+}
+
+private struct CommandPaletteRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
@@ -721,9 +1184,7 @@ private struct NotificationPermissionCard: View {
             }
 
             Text(
-                access.state == .denied
-                    ? "Notifications are off in System Settings."
-                    : "Know when recording starts and your note is ready."
+                message
             )
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
@@ -751,6 +1212,19 @@ private struct NotificationPermissionCard: View {
         .overlay {
             Rectangle()
                 .stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private var message: String {
+        switch access.state {
+        case .needsAlertStyle:
+            "Choose Banners or Alerts in System Settings."
+        case .denied:
+            "Notifications are off in System Settings."
+        case .deliveryFailed:
+            "macOS could not deliver the last notification."
+        case .unknown, .needsAccess, .granted:
+            "Know when recording starts and your note is ready."
         }
     }
 }
@@ -3188,69 +3662,106 @@ private struct BurritoToggleRow: View {
     }
 }
 
-private struct TemplateDetailsView: View {
-    @Environment(\.dismiss) private var dismiss
+private struct TemplatesView: View {
     @Environment(\.modelContext) private var modelContext
     let templates: [NoteTemplate]
-    @Binding var selectedTemplateID: UUID?
 
+    @State private var selectedTemplateID: UUID?
     @State private var showingEditor = false
     @State private var editingTemplateID: UUID?
+    @State private var deletingTemplateID: UUID?
+
+    private var selectedTemplate: NoteTemplate? {
+        templates.first { $0.id == selectedTemplateID } ?? templates.first
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top) {
+            Color.clear.frame(height: 52)
+
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Template details")
-                        .font(.burritoDisplay(size: 32, weight: .regular))
-                    Text("Templates are instructions Burrito follows when it writes your note.")
+                    Text("Templates")
+                        .font(.burritoDisplay(size: 34, weight: .regular))
+                        .tracking(-0.5)
+                    Text("Shape how Burrito turns a transcript into a finished note.")
+                        .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Done") { dismiss() }
-                    .buttonStyle(BurritoActionButtonStyle(prominent: true))
-            }
-            .padding(28)
-
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(templates) { template in
-                        TemplatePromptCard(
-                            template: template,
-                            isSelected: selectedTemplateID == template.id,
-                            select: { selectedTemplateID = template.id },
-                            edit: template.isBuiltIn ? nil : {
-                                editingTemplateID = template.id
-                                showingEditor = true
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 18)
-            }
-
-            HStack {
                 Button("New template", systemImage: "plus") {
                     editingTemplateID = nil
                     showingEditor = true
                 }
-                .buttonStyle(BurritoActionButtonStyle(prominent: false))
-                Spacer()
-                Text("\(templates.count) templates")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .buttonStyle(HomeToolbarButtonStyle())
             }
-            .padding(22)
+            .padding(.horizontal, 38)
+            .padding(.bottom, 22)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            HStack(spacing: 0) {
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        BurritoSectionLabel(title: "Library")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+
+                    ForEach(templates) { template in
+                            TemplateListRow(
+                            template: template,
+                            isSelected: selectedTemplateID == template.id,
+                                select: { selectedTemplateID = template.id }
+                        )
+                    }
+                }
+                    .padding(8)
+                }
+                .scrollIndicators(.hidden)
+                .frame(width: 230)
+                .background(BurritoTheme.sidebar.opacity(0.45))
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(width: 1)
+
+                if let template = selectedTemplate {
+                    TemplatePromptDetail(
+                        template: template,
+                        edit: {
+                            editingTemplateID = template.id
+                            showingEditor = true
+                        },
+                        delete: template.isBuiltIn ? nil : {
+                            deletingTemplateID = template.id
+                        }
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "No templates",
+                        systemImage: "doc.text",
+                        description: Text("Create a template to define a note format.")
+                    )
+                }
+            }
         }
-        .frame(width: 720, height: 620)
-        .background(BurritoTheme.paper)
+        .background(BurritoTheme.canvas)
+        .onAppear {
+            selectedTemplateID = selectedTemplate?.id
+        }
+        .onChange(of: templates.map(\.id)) {
+            if selectedTemplateID.flatMap({ id in templates.first { $0.id == id } }) == nil {
+                selectedTemplateID = templates.first?.id
+            }
+        }
         .sheet(isPresented: $showingEditor) {
             TemplateEditorView(
                 template: templates.first { $0.id == editingTemplateID }
             ) { name, symbol, instructions in
-                if let template = templates.first(where: { $0.id == editingTemplateID }),
-                   !template.isBuiltIn {
+                if let template = templates.first(where: { $0.id == editingTemplateID }) {
                     template.name = name
                     template.symbol = symbol
                     template.instructions = instructions
@@ -3269,49 +3780,142 @@ private struct TemplateDetailsView: View {
                 editingTemplateID = nil
             }
         }
+        .overlay {
+            if let template = templates.first(where: { $0.id == deletingTemplateID }) {
+                BurritoModalBackdrop {
+                    BurritoMessageDialog(
+                        title: "Delete \(template.name)?",
+                        message: "This custom template will be permanently deleted. Existing notes will keep their saved template instructions.",
+                        confirmTitle: "Delete Template",
+                        isDestructive: true,
+                        cancel: { deletingTemplateID = nil },
+                        confirm: {
+                            modelContext.delete(template)
+                            try? modelContext.save()
+                            deletingTemplateID = nil
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
-private struct TemplatePromptCard: View {
+private struct TemplateListRow: View {
     let template: NoteTemplate
     let isSelected: Bool
     let select: () -> Void
-    let edit: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        Button(action: select) {
             HStack(spacing: 11) {
                 Image(systemName: template.symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 30, height: 30)
                     .background(BurritoTheme.controlFill, in: Rectangle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
                     Text(template.isBuiltIn ? "Built in" : "Custom")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
-                if let edit {
-                    Button("Edit", action: edit)
-                        .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                if isSelected {
+                    Rectangle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 3, height: 18)
                 }
-                Button(isSelected ? "Selected" : "Use template", action: select)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: isSelected))
             }
-            Text(template.instructions)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineSpacing(4)
-                .textSelection(.enabled)
+            .padding(.horizontal, 10)
+            .frame(height: 48)
+            .contentShape(Rectangle())
         }
-        .padding(18)
-        .background(BurritoTheme.raised, in: Rectangle())
-        .overlay {
-            Rectangle()
-                .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
+        .buttonStyle(.plain)
+        .background(isSelected ? BurritoTheme.accentSoft.opacity(0.62) : Color.clear)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct TemplatePromptDetail: View {
+    let template: NoteTemplate
+    let edit: () -> Void
+    let delete: (() -> Void)?
+
+    private var systemPrompt: String {
+        GenerationPrompt.finalInstructions(template: template.snapshot)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(alignment: .center, spacing: 14) {
+                    Image(systemName: template.symbol)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 44, height: 44)
+                        .background(BurritoTheme.accentSoft, in: Rectangle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(template.name)
+                            .font(.burritoDisplay(size: 25, weight: .medium))
+                        Text(template.isBuiltIn ? "Built-in template" : "Custom template")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Spacer()
+
+                    if let delete {
+                        Button("Delete", systemImage: "trash", action: delete)
+                            .buttonStyle(HomeToolbarButtonStyle(destructive: true))
+                    }
+                    Button("Edit", systemImage: "pencil", action: edit)
+                        .buttonStyle(HomeToolbarButtonStyle())
+                }
+
+                VStack(alignment: .leading, spacing: 9) {
+                    BurritoSectionLabel(title: "Template instructions")
+                    Text(template.instructions)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(BurritoTheme.raised, in: Rectangle())
+                        .overlay {
+                            Rectangle().stroke(BurritoTheme.softBorder)
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        BurritoSectionLabel(title: "Complete system prompt")
+                        Spacer()
+                        Text("Read only")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(systemPrompt)
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(BurritoTheme.raised, in: Rectangle())
+                        .overlay {
+                            Rectangle().stroke(BurritoTheme.softBorder)
+                        }
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(30)
+            .frame(maxWidth: .infinity)
         }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -3872,22 +4476,7 @@ private struct TemplateEditorView: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 BurritoSectionLabel(title: "Symbol")
-                HStack(spacing: 10) {
-                    Image(systemName: symbol)
-                        .foregroundStyle(BurritoTheme.accent)
-                        .frame(width: 38, height: 38)
-                        .background(BurritoTheme.accentSoft, in: Rectangle())
-                    TextField("SF Symbol name", text: $symbol)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14))
-                        .padding(.horizontal, 13)
-                        .frame(height: 42)
-                        .background(BurritoTheme.controlFill, in: Rectangle())
-                        .overlay {
-                            Rectangle()
-                                .stroke(BurritoTheme.softBorder)
-                        }
-                }
+                TemplateSymbolPicker(selection: $symbol)
             }
 
             VStack(alignment: .leading, spacing: 9) {
@@ -3925,6 +4514,130 @@ private struct TemplateEditorView: View {
         .padding(28)
         .frame(width: 600)
         .background(BurritoTheme.paper)
+    }
+}
+
+private struct TemplateSymbolPicker: View {
+    @Binding var selection: String
+    @State private var query = ""
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(minimum: 70), spacing: 4),
+        count: 6
+    )
+
+    private var symbols: [TemplateSymbolOption] {
+        TemplateSymbolOption.matching(query)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: selection)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .accessibilityHidden(true)
+
+                Text(TemplateSymbolOption.title(for: selection))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+
+                Spacer()
+
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                    TextField("Search symbols", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear symbol search")
+                    }
+                }
+                .padding(.horizontal, 9)
+                .frame(width: 220, height: 30)
+                .background(BurritoTheme.controlFill, in: Rectangle())
+            }
+            .padding(10)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            ScrollView {
+                if symbols.isEmpty {
+                    VStack(spacing: 5) {
+                        Text("No symbols found")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Try a broader word such as work, study, or meeting.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 34)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 4) {
+                        ForEach(symbols) { option in
+                            Button {
+                                selection = option.systemName
+                            } label: {
+                                VStack(spacing: 5) {
+                                    Image(systemName: option.systemName)
+                                        .font(.system(size: 15, weight: .medium))
+                                    Text(option.title)
+                                        .font(.system(size: 9, weight: .medium))
+                                        .lineLimit(1)
+                                }
+                                .foregroundStyle(
+                                    selection == option.systemName
+                                        ? BurritoTheme.accent
+                                        : Color.secondary
+                                )
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .background(
+                                selection == option.systemName
+                                    ? BurritoTheme.accentSoft
+                                    : Color.clear,
+                                in: Rectangle()
+                            )
+                            .overlay {
+                                if selection == option.systemName {
+                                    Rectangle()
+                                        .stroke(BurritoTheme.accent.opacity(0.45))
+                                }
+                            }
+                            .help(option.title)
+                            .accessibilityLabel(option.title)
+                            .accessibilityAddTraits(
+                                selection == option.systemName ? .isSelected : []
+                            )
+                        }
+                    }
+                    .padding(6)
+                }
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: 162)
+        }
+        .background(BurritoTheme.controlFill.opacity(0.55), in: Rectangle())
+        .overlay {
+            Rectangle()
+                .stroke(BurritoTheme.softBorder)
+        }
     }
 }
 

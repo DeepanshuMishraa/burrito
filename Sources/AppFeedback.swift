@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import OSLog
 import UserNotifications
 
 @MainActor
@@ -8,7 +9,9 @@ final class NotificationAccess {
     enum State: Equatable {
         case unknown
         case needsAccess
+        case needsAlertStyle
         case denied
+        case deliveryFailed
         case granted
     }
 
@@ -22,35 +25,64 @@ final class NotificationAccess {
     }
 
     var needsPrompt: Bool {
-        state == .needsAccess || state == .denied
+        switch state {
+        case .unknown, .granted: false
+        case .needsAccess, .needsAlertStyle, .denied, .deliveryFailed: true
+        }
     }
 
     var actionTitle: String {
-        state == .denied ? "Open settings" : "Allow notifications"
+        state == .needsAccess ? "Allow notifications" : "Open settings"
+    }
+
+    var canDeliverAlerts: Bool {
+        state == .granted
     }
 
     func refresh() async {
         let settings = await notificationCenter.notificationSettings()
-        state = switch settings.authorizationStatus {
-        case .notDetermined: .needsAccess
-        case .denied: .denied
-        case .authorized, .provisional, .ephemeral: .granted
-        @unknown default: .denied
-        }
+        state = Self.resolveState(
+            authorizationStatus: settings.authorizationStatus,
+            alertSetting: settings.alertSetting,
+            alertStyle: settings.alertStyle
+        )
     }
 
     func requestAccess() async {
-        if state == .denied {
+        if state == .denied || state == .needsAlertStyle || state == .deliveryFailed {
             openSystemSettings()
             return
         }
 
         do {
-            _ = try await notificationCenter.requestAuthorization(options: [.alert])
+            _ = try await notificationCenter.requestAuthorization(options: [.alert, .sound])
         } catch {
-            // Refresh exposes the system's resulting state in the sidebar.
+            state = .deliveryFailed
         }
         await refresh()
+    }
+
+    func markDeliveryFailed() {
+        state = .deliveryFailed
+    }
+
+    nonisolated static func resolveState(
+        authorizationStatus: UNAuthorizationStatus,
+        alertSetting: UNNotificationSetting,
+        alertStyle: UNAlertStyle
+    ) -> State {
+        switch authorizationStatus {
+        case .notDetermined:
+            return .needsAccess
+        case .denied:
+            return .denied
+        case .authorized, .provisional, .ephemeral:
+            return alertSetting == .enabled && alertStyle != .none
+                ? .granted
+                : .needsAlertStyle
+        @unknown default:
+            return .denied
+        }
     }
 
     private func openSystemSettings() {
@@ -87,6 +119,10 @@ final class SilentAppFeedback: AppFeedbackProviding {
 final class BurritoAppFeedback: NSObject, AppFeedbackProviding {
     static let shared = BurritoAppFeedback()
 
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.local.burrito",
+        category: "Notifications"
+    )
     private let notificationCenter = UNUserNotificationCenter.current()
     private let startSound = NSSound(named: NSSound.Name("Pop"))
     private let stopSound = NSSound(named: NSSound.Name("Tink"))
@@ -127,13 +163,32 @@ final class BurritoAppFeedback: NSObject, AppFeedbackProviding {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        content.interruptionLevel = .active
 
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
             trigger: nil
         )
-        notificationCenter.add(request)
+        Task {
+            let access = NotificationAccess.shared
+            await access.refresh()
+            guard access.canDeliverAlerts else {
+                Self.logger.notice(
+                    "Notification not scheduled because visible alerts are disabled."
+                )
+                return
+            }
+
+            do {
+                try await notificationCenter.add(request)
+            } catch {
+                Self.logger.error(
+                    "Could not schedule notification: \(error.localizedDescription, privacy: .public)"
+                )
+                access.markDeliveryFailed()
+            }
+        }
     }
 }
 

@@ -274,6 +274,136 @@ struct TemplateSnapshot: Codable, Equatable, Sendable {
     var instructions: String
 }
 
+struct TemplateSymbolOption: Identifiable, Equatable, Sendable {
+    let systemName: String
+    let title: String
+    let keywords: String
+
+    var id: String { systemName }
+
+    static let all: [TemplateSymbolOption] = [
+        option("note.text", "Note", "writing document"),
+        option("text.alignleft", "Summary", "overview paragraph"),
+        option("doc.text", "Document", "file report"),
+        option("list.bullet", "List", "bullets outline"),
+        option("checklist", "Checklist", "tasks todo"),
+        option("square.and.pencil", "Writing", "edit compose"),
+        option("highlighter", "Highlights", "important marker"),
+        option("quote.bubble", "Quotes", "speech citation"),
+        option("bubble.left.and.bubble.right", "Conversation", "discussion chat"),
+        option("message", "Messages", "chat conversation"),
+        option("waveform", "Audio", "recording sound"),
+        option("mic", "Microphone", "recording voice"),
+        option("phone", "Phone call", "call conversation"),
+        option("video", "Video call", "camera meeting"),
+        option("person.2", "Meeting", "people discussion"),
+        option("person.3", "Team", "group meeting"),
+        option("person.crop.circle", "Interview", "person profile"),
+        option("briefcase", "Work", "business job"),
+        option("building.2", "Company", "office organization"),
+        option("handshake", "Partnership", "deal agreement sales"),
+        option("megaphone", "Marketing", "announcement campaign"),
+        option("cart", "Sales", "shopping commerce"),
+        option("dollarsign.circle", "Finance", "money budget"),
+        option("creditcard", "Payments", "billing purchase"),
+        option("lightbulb", "Idea", "insight concept"),
+        option("brain.head.profile", "Thinking", "learning knowledge"),
+        option("graduationcap", "Study", "education learning school"),
+        option("book.closed", "Book", "reading study"),
+        option("books.vertical", "Library", "reading reference"),
+        option("bookmark", "Reference", "saved reading"),
+        option("questionmark.circle", "Questions", "help unknown"),
+        option("exclamationmark.triangle", "Warning", "risk caution"),
+        option("flag", "Goal", "milestone objective"),
+        option("target", "Target", "goal objective"),
+        option("checkmark.circle", "Tasks", "done action items"),
+        option("calendar", "Schedule", "date event plan"),
+        option("clock", "Timeline", "time history"),
+        option("hourglass", "Deadline", "time waiting"),
+        option("chart.bar", "Analytics", "metrics data"),
+        option("chart.line.uptrend.xyaxis", "Growth", "trend analytics"),
+        option("chart.pie", "Report", "data analytics"),
+        option("tablecells", "Table", "grid spreadsheet"),
+        option("folder", "Project", "files organization"),
+        option("tray", "Inbox", "incoming capture"),
+        option("archivebox", "Archive", "storage history"),
+        option("shippingbox", "Product", "package delivery"),
+        option("gearshape", "Process", "settings workflow"),
+        option("wrench.and.screwdriver", "Tools", "maintenance engineering"),
+        option("hammer", "Build", "construction engineering"),
+        option("terminal", "Terminal", "command code developer"),
+        option("chevron.left.forwardslash.chevron.right", "Code", "programming developer"),
+        option("cpu", "Technology", "processor hardware"),
+        option("server.rack", "Infrastructure", "server cloud systems"),
+        option("cylinder", "Database", "data storage"),
+        option("network", "Systems", "architecture connected"),
+        option("lock.shield", "Security", "protection privacy"),
+        option("key", "Access", "security authentication"),
+        option("shield", "Protection", "security privacy"),
+        option("eye", "Observation", "research review"),
+        option("magnifyingglass", "Research", "search investigate"),
+        option("link", "Connection", "relationship collaboration"),
+        option("paperclip", "Attachments", "files documents"),
+        option("tag", "Category", "label organization"),
+        option("number", "Numbers", "data count"),
+        option("function", "Formula", "math calculation"),
+        option("sum", "Mathematics", "numbers calculation"),
+        option("atom", "Science", "research physics"),
+        option("heart", "Health", "wellness care"),
+        option("cross.case", "Medicine", "health clinical"),
+        option("leaf", "Environment", "nature sustainability"),
+        option("globe", "World", "international web"),
+        option("map", "Map", "location travel"),
+        option("location", "Location", "place travel"),
+        option("airplane", "Travel", "flight trip"),
+        option("car", "Transport", "vehicle travel"),
+        option("fork.knife", "Food", "restaurant meal"),
+        option("cup.and.saucer", "Coffee", "break cafe"),
+        option("music.note", "Music", "audio song"),
+        option("film", "Media", "video movie"),
+        option("camera", "Photography", "photo image"),
+        option("paintpalette", "Design", "creative art"),
+        option("sparkles", "Creative", "magic polish"),
+        option("wand.and.stars", "AI", "magic generate"),
+        option("bolt", "Energy", "fast power"),
+        option("flame", "Priority", "hot urgent"),
+        option("star", "Favorite", "important featured"),
+        option("trophy", "Achievement", "win success"),
+    ]
+
+    static func matching(_ query: String) -> [TemplateSymbolOption] {
+        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return all }
+        return all.filter {
+            $0.title.localizedStandardContains(value)
+                || $0.keywords.localizedStandardContains(value)
+                || $0.systemName.localizedStandardContains(value)
+        }
+    }
+
+    static func title(for systemName: String) -> String {
+        all.first { $0.systemName == systemName }?.title ?? "Selected symbol"
+    }
+
+    private static func option(
+        _ systemName: String,
+        _ title: String,
+        _ keywords: String
+    ) -> TemplateSymbolOption {
+        TemplateSymbolOption(systemName: systemName, title: title, keywords: keywords)
+    }
+}
+
+enum PaletteNoteAge {
+    static func label(updatedAt: Date, now: Date = .now) -> String {
+        let elapsed = max(0, now.timeIntervalSince(updatedAt))
+        let hours = Int(elapsed / 3_600)
+        guard hours > 0 else { return "Now" }
+        guard hours < 24 else { return "\(hours / 24)d" }
+        return "\(hours)h"
+    }
+}
+
 enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendable {
     case englishV2
     case multilingualV3

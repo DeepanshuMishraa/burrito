@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UserNotifications
 @testable import Burrito
 
 @Suite("Appearance")
@@ -14,6 +15,27 @@ struct AppearanceTests {
         #expect(BurritoAppearance.system.colorScheme == nil)
         #expect(BurritoAppearance.light.colorScheme == .light)
         #expect(BurritoAppearance.dark.colorScheme == .dark)
+    }
+}
+
+@Suite("Notification access")
+struct NotificationAccessTests {
+    @Test("Authorization without a banner style still needs settings")
+    func requiresVisibleAlertStyle() {
+        #expect(
+            NotificationAccess.resolveState(
+                authorizationStatus: .authorized,
+                alertSetting: .enabled,
+                alertStyle: .none
+            ) == .needsAlertStyle
+        )
+        #expect(
+            NotificationAccess.resolveState(
+                authorizationStatus: .authorized,
+                alertSetting: .enabled,
+                alertStyle: .banner
+            ) == .granted
+        )
     }
 }
 
@@ -136,6 +158,17 @@ struct TranscriptChunkerTests {
 
 @Suite("Templates")
 struct TemplateTests {
+    @Test("Template symbols are searchable by plain-language concepts")
+    func searchesTemplateSymbols() {
+        #expect(TemplateSymbolOption.matching("meeting").contains {
+            $0.systemName == "person.2"
+        })
+        #expect(TemplateSymbolOption.matching("database").contains {
+            $0.systemName == "cylinder"
+        })
+        #expect(TemplateSymbolOption.matching("  ").count == TemplateSymbolOption.all.count)
+    }
+
     @Test(
         "Every built-in template contributes its instructions to the final prompt",
         arguments: BuiltInTemplate.allCases
@@ -270,5 +303,32 @@ struct TemplateTests {
                 )
         )
         #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
+    }
+}
+
+@Suite("Command palette")
+struct CommandPaletteTests {
+    @Test("Note ages use coarse hours and days without minutes")
+    func formatsNoteAge() {
+        let now = Date(timeIntervalSince1970: 200_000)
+
+        #expect(
+            PaletteNoteAge.label(
+                updatedAt: now.addingTimeInterval(-45 * 60),
+                now: now
+            ) == "Now"
+        )
+        #expect(
+            PaletteNoteAge.label(
+                updatedAt: now.addingTimeInterval(-5 * 3_600),
+                now: now
+            ) == "5h"
+        )
+        #expect(
+            PaletteNoteAge.label(
+                updatedAt: now.addingTimeInterval(-3 * 24 * 3_600),
+                now: now
+            ) == "3d"
+        )
     }
 }

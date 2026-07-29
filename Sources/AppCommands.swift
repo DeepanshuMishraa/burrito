@@ -5,7 +5,7 @@ extension Notification.Name {
     static let burritoNewRecording = Notification.Name("burrito.new-recording")
     static let burritoToggleRecording = Notification.Name("burrito.toggle-recording")
     static let burritoNewFolder = Notification.Name("burrito.new-folder")
-    static let burritoFind = Notification.Name("burrito.find")
+    static let burritoCommandPalette = Notification.Name("burrito.command-palette")
     static let burritoExportMarkdown = Notification.Name("burrito.export-markdown")
 }
 
@@ -45,8 +45,13 @@ struct BurritoCommands: Commands {
         }
 
         CommandGroup(after: .textEditing) {
-            Button("Find") {
-                NotificationCenter.default.post(name: .burritoFind, object: nil)
+            Button("Command Palette…") {
+                NotificationCenter.default.post(name: .burritoCommandPalette, object: nil)
+            }
+            .keyboardShortcut("k", modifiers: .command)
+
+            Button("Find Notes…") {
+                NotificationCenter.default.post(name: .burritoCommandPalette, object: nil)
             }
             .keyboardShortcut("f", modifiers: .command)
         }
