@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   FolderSecurityIcon,
   Mic02Icon,
@@ -6,6 +6,7 @@ import {
   UserBlock02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { bind } from "cuelume";
 import { AppleMark } from "./AppleMark";
 import { GithubMark } from "./GithubMark";
 import { PrivacyPolicy, TermsOfService } from "./LegalPages";
@@ -82,6 +83,8 @@ function FaqItem({ answer, id, question }: FaqItemProps) {
         type="button"
         aria-expanded={isOpen}
         aria-controls={id}
+        data-cuelume-hover="whisper"
+        data-cuelume-toggle="sparkle"
         onClick={() => setIsOpen((current) => !current)}
       >
         <span>{question}</span>
@@ -121,6 +124,10 @@ function CloudBackdrop({ priority = false }: { priority?: boolean }) {
 }
 
 function App() {
+  useEffect(() => {
+    bind();
+  }, []);
+
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
 
   if (path === "/privacy") {
@@ -184,6 +191,8 @@ function App() {
             >
               <a
                 href={downloadUrl}
+                data-cuelume-hover="whisper"
+                data-cuelume-toggle="sparkle"
                 className="primary-action inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-action px-4 text-sm font-medium text-white sm:w-auto"
               >
                 <AppleMark className="h-4 w-3.5" />
@@ -193,6 +202,8 @@ function App() {
                 href={repositoryUrl}
                 target="_blank"
                 rel="noreferrer"
+                data-cuelume-hover="whisper"
+                data-cuelume-toggle="sparkle"
                 className="secondary-button inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-ink/12 bg-white/88 px-4 text-sm font-medium text-ink/68 sm:w-auto"
               >
                 <GithubMark className="mr-2 size-4" />
@@ -453,6 +464,8 @@ function App() {
             </h2>
             <a
               href={downloadUrl}
+              data-cuelume-hover="whisper"
+              data-cuelume-toggle="sparkle"
               className="primary-action mt-8 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-action px-4 text-sm font-medium text-white"
             >
               <AppleMark className="h-4 w-3.5" />

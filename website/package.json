@@ -12,6 +12,7 @@
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.2.3",
     "@hugeicons/react": "^1.1.9",
+    "cuelume": "^0.2.1",
     "react": "latest",
     "react-dom": "latest"
   },

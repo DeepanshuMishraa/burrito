@@ -47,6 +47,8 @@ export function SiteNavbar() {
             href={repositoryUrl}
             target="_blank"
             rel="noreferrer"
+            data-cuelume-hover="whisper"
+            data-cuelume-toggle="sparkle"
             className="nav-secondary hidden min-h-8 items-center rounded-lg border border-ink/12 bg-white/82 px-3 text-ink/65 sm:inline-flex"
           >
             <GithubMark className="mr-1.5 size-3.5" />
@@ -54,6 +56,8 @@ export function SiteNavbar() {
           </a>
           <a
             href={downloadUrl}
+            data-cuelume-hover="whisper"
+            data-cuelume-toggle="sparkle"
             className="nav-download inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-action px-3 text-white"
           >
             <AppleMark className="h-3.5 w-3" />
