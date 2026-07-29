@@ -6,7 +6,7 @@ protocol AudioCapturing: AnyObject {
     var hasMeaningfulAudio: Bool { get }
     func start(
         files: RecordingFiles,
-        includesMicrophone: Bool,
+        mode: RecordingMode,
         languageIdentifier: String
     ) async -> Result<Void, BurritoError>
     func stop() async -> Result<Void, BurritoError>
@@ -51,7 +51,7 @@ protocol NoteGenerating: Sendable {
 }
 
 protocol RecordingFileStore: Sendable {
-    func createSession(id: UUID, includesMicrophone: Bool) -> Result<RecordingFiles, BurritoError>
+    func createSession(id: UUID, mode: RecordingMode) -> Result<RecordingFiles, BurritoError>
     func relativePath(for url: URL) -> String
     func url(forRelativePath path: String) -> URL
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError>

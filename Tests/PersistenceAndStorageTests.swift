@@ -92,15 +92,15 @@ struct PersistenceTests {
 
 @Suite("Recording storage")
 struct RecordingStorageTests {
-    @Test("Successful cleanup removes both tracks")
+    @Test("Successful cleanup removes the selected audio source")
     func removesAudio() throws {
         // Given
         let root = FileManager.default.temporaryDirectory
             .appending(path: "BurritoTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LocalRecordingFileStore(root: root)
-        let files = try store.createSession(id: UUID(), includesMicrophone: true).get()
-        try Data("system".utf8).write(to: files.systemAudioURL)
+        let files = try store.createSession(id: UUID(), mode: .meeting).get()
+        #expect(files.systemAudioURL == nil)
         let microphoneURL = try #require(files.microphoneAudioURL)
         try Data("microphone".utf8).write(to: microphoneURL)
 
@@ -108,7 +108,6 @@ struct RecordingStorageTests {
         try store.removeAudio(for: files).get()
 
         // Then
-        #expect(!FileManager.default.fileExists(atPath: files.systemAudioURL.path()))
         #expect(!FileManager.default.fileExists(atPath: microphoneURL.path()))
     }
 }

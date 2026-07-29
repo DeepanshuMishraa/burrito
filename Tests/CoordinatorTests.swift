@@ -11,16 +11,18 @@ private final class CaptureSpyingStub: AudioCapturing {
     private(set) var starts = 0
     private(set) var stops = 0
     private(set) var languageIdentifiers: [String] = []
+    private(set) var modes: [RecordingMode] = []
     var startResult: Result<Void, BurritoError> = .success(())
     var stopResult: Result<Void, BurritoError> = .success(())
 
     func start(
         files: RecordingFiles,
-        includesMicrophone: Bool,
+        mode: RecordingMode,
         languageIdentifier: String
     ) async -> Result<Void, BurritoError> {
         starts += 1
         languageIdentifiers.append(languageIdentifier)
+        modes.append(mode)
         return startResult
     }
 
@@ -143,12 +145,12 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
         self.root = root
     }
 
-    func createSession(id: UUID, includesMicrophone: Bool) -> Result<RecordingFiles, BurritoError> {
+    func createSession(id: UUID, mode: RecordingMode) -> Result<RecordingFiles, BurritoError> {
         .success(
             RecordingFiles(
                 sessionID: id,
-                systemAudioURL: root.appending(path: "system.m4a"),
-                microphoneAudioURL: includesMicrophone ? root.appending(path: "microphone.m4a") : nil
+                systemAudioURL: mode == .listenAlong ? root.appending(path: "system.m4a") : nil,
+                microphoneAudioURL: mode == .meeting ? root.appending(path: "microphone.m4a") : nil
             )
         )
     }
@@ -187,7 +189,7 @@ struct CoordinatorTests {
                 instructions: "Summarize."
             ),
             languageIdentifier: "en-US",
-            includesMicrophone: true,
+            mode: .meeting,
             retainsAudio: false
         )
 
@@ -217,7 +219,7 @@ struct CoordinatorTests {
         let options = RecordingOptions(
             template: TemplateSnapshot(name: "Summary", symbol: "text.alignleft", instructions: "Summarize."),
             languageIdentifier: "en-US",
-            includesMicrophone: true,
+            mode: .meeting,
             retainsAudio: false
         )
 
@@ -240,7 +242,7 @@ struct CoordinatorTests {
         #expect(capture.stops == 1)
         #expect(note.lifecycle == .ready)
         #expect(note.title == "Generated title")
-        #expect(note.transcriptSegments.count == 2)
+        #expect(note.transcriptSegments.count == 1)
         #expect(fileStore.removeCount.withLock { $0 } == 1)
         #expect(
             feedback.events
@@ -268,13 +270,15 @@ struct CoordinatorTests {
                 symbol: "doc",
                 instructions: "Summarize."
             ),
+            recordingMode: .meeting,
             retainsAudio: false
         )
         note.duration = 10
         context.insert(note)
         try context.save()
+        let capture = CaptureSpyingStub()
         let coordinator = AppCoordinator(
-            capture: CaptureSpyingStub(),
+            capture: capture,
             transcriber: TranscriberStub(),
             generator: GeneratorStub(),
             fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
@@ -283,7 +287,7 @@ struct CoordinatorTests {
         let options = RecordingOptions(
             template: note.templateSnapshot,
             languageIdentifier: note.languageIdentifier,
-            includesMicrophone: false,
+            mode: .listenAlong,
             retainsAudio: false
         )
 
@@ -293,11 +297,12 @@ struct CoordinatorTests {
             context: context
         )
         #expect(coordinator.activeNoteID == note.id)
+        #expect(capture.modes == [.meeting])
         await coordinator.stop(context: context)
 
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 1)
-        #expect(note.transcriptSegments.map(\.text) == ["Existing text", "System text"])
+        #expect(note.transcriptSegments.map(\.text) == ["Existing text", "Microphone text"])
         #expect(note.transcriptSegments.last?.startTime == 4)
         #expect(note.duration >= 10)
         #expect(note.title == "Generated title")
@@ -347,7 +352,7 @@ struct CoordinatorTests {
             options: RecordingOptions(
                 template: note.templateSnapshot,
                 languageIdentifier: note.languageIdentifier,
-                includesMicrophone: false,
+                mode: .listenAlong,
                 retainsAudio: false
             ),
             destination: .appendToNote(id: note.id),
@@ -378,7 +383,7 @@ struct CoordinatorTests {
                 instructions: "Summarize."
             ),
             languageIdentifier: "en-US",
-            includesMicrophone: true,
+            mode: .meeting,
             retainsAudio: false
         )
 
@@ -412,7 +417,7 @@ struct CoordinatorTests {
                 instructions: "Summarize."
             ),
             languageIdentifier: "en-US",
-            includesMicrophone: false,
+            mode: .listenAlong,
             retainsAudio: false
         )
 
@@ -444,7 +449,7 @@ struct CoordinatorTests {
         let options = RecordingOptions(
             template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
             languageIdentifier: "en-US",
-            includesMicrophone: false,
+            mode: .listenAlong,
             retainsAudio: false
         )
 
@@ -473,7 +478,7 @@ struct CoordinatorTests {
         let options = RecordingOptions(
             template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
             languageIdentifier: "en-US",
-            includesMicrophone: false,
+            mode: .listenAlong,
             retainsAudio: false
         )
 

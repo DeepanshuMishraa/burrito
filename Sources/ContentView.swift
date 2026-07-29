@@ -126,7 +126,7 @@ struct ContentView: View {
                     exportAction: { exportMarkdown(selectedNote) },
                     backAction: { selectedNoteID = nil },
                     newRecordingAction: {
-                        recordingDestination = .appendToNote(id: selectedNote.id)
+                        continueRecording(selectedNote)
                     }
                 )
             } else if coordinator.captureState.isRecording {
@@ -143,7 +143,6 @@ struct ContentView: View {
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
-                continuingNote: note(for: destination),
                 modelStore: modelStore,
                 openModels: {
                     recordingDestination = nil
@@ -585,10 +584,21 @@ struct ContentView: View {
     private func toggleRecording() {
         if coordinator.captureState.isRecording {
             Task { await coordinator.stop(context: modelContext) }
+        } else if let selectedNote {
+            continueRecording(selectedNote)
         } else {
-            recordingDestination = selectedNote.map {
-                .appendToNote(id: $0.id)
-            } ?? .newNote
+            recordingDestination = .newNote
+        }
+    }
+
+    private func continueRecording(_ note: Note) {
+        Task {
+            await coordinator.start(
+                options: note.continuationRecordingOptions,
+                destination: .appendToNote(id: note.id),
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
         }
     }
 
@@ -657,11 +667,6 @@ struct ContentView: View {
         case .settings:
             SettingsWindowController.show()
         }
-    }
-
-    private func note(for destination: RecordingDestination) -> Note? {
-        guard case .appendToNote(let id) = destination else { return nil }
-        return notes.first { $0.id == id }
     }
 
     private func createFolder() {
@@ -3130,14 +3135,14 @@ private struct ActivityMeter: View {
 private struct RecordingSetupView: View {
     @Environment(\.dismiss) private var dismiss
     let templates: [NoteTemplate]
-    let continuingNote: Note?
     @Bindable var modelStore: ParakeetModelStore
     let openModels: () -> Void
     let start: (RecordingOptions) -> Void
 
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var language = "en-US"
-    @AppStorage("microphoneDefault") private var includesMicrophone = false
+    @AppStorage("recordingModeDefault") private var recordingModeRawValue =
+        RecordingMode.listenAlong.rawValue
     @AppStorage("retainAudioDefault") private var retainsAudio = false
     @State private var templateID: UUID?
     @State private var openPicker: RecordingSetupPicker?
@@ -3150,24 +3155,25 @@ private struct RecordingSetupView: View {
     }
 
     private var effectiveTemplate: TemplateSnapshot? {
-        continuingNote?.templateSnapshot ?? selectedTemplate?.snapshot
+        selectedTemplate?.snapshot
     }
 
     private var effectiveLanguage: String {
-        continuingNote?.languageIdentifier ?? language
+        language
+    }
+
+    private var recordingMode: RecordingMode {
+        get { RecordingMode(rawValue: recordingModeRawValue) ?? .listenAlong }
+        nonmutating set { recordingModeRawValue = newValue.rawValue }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(continuingNote == nil ? "New recording" : "Continue recording")
+                    Text("New recording")
                         .font(.burritoDisplay(size: 30, weight: .regular))
-                    Text(
-                        continuingNote == nil
-                            ? "Choose what Burrito should listen for."
-                            : "New audio and transcript will be added to this note."
-                    )
+                    Text("Choose what Burrito should listen for.")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -3178,44 +3184,22 @@ private struct RecordingSetupView: View {
                     .keyboardShortcut(.cancelAction)
             }
 
-            if let continuingNote {
-                VStack(alignment: .leading, spacing: 8) {
-                    BurritoSectionLabel(title: "Extending")
-                    Text(continuingNote.title)
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(
-                        "\(continuingNote.templateSnapshot.name) · \(continuingNote.languageIdentifier)"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(BurritoTheme.raised, in: Rectangle())
-            }
-
             VStack(spacing: 0) {
-                if continuingNote == nil {
-                    RecordingTemplatePicker(
-                        templates: templates,
-                        selection: $templateID,
-                        selectedTemplate: selectedTemplate,
-                        openPicker: $openPicker
-                    )
-                    .zIndex(2)
-                    Divider().padding(.leading, 14)
-                    RecordingLanguagePicker(
-                        selection: $language,
-                        openPicker: $openPicker
-                    )
-                    .zIndex(1)
-                    Divider().padding(.leading, 14)
-                }
-                BurritoToggleRow(
-                    title: "Include microphone",
-                    subtitle: "Capture your voice as a separate track",
-                    isOn: $includesMicrophone
+                RecordingTemplatePicker(
+                    templates: templates,
+                    selection: $templateID,
+                    selectedTemplate: selectedTemplate,
+                    openPicker: $openPicker
                 )
+                .zIndex(2)
+                Divider().padding(.leading, 12)
+                RecordingLanguagePicker(
+                    selection: $language,
+                    openPicker: $openPicker
+                )
+                .zIndex(1)
+                Divider().padding(.leading, 12)
+                RecordingModePicker(selection: recordingModeBinding)
                 Divider().padding(.leading, 12)
                 BurritoToggleRow(
                     title: "Keep audio",
@@ -3247,7 +3231,7 @@ private struct RecordingSetupView: View {
                         RecordingOptions(
                             template: effectiveTemplate,
                             languageIdentifier: effectiveLanguage,
-                            includesMicrophone: includesMicrophone,
+                            mode: recordingMode,
                             retainsAudio: retainsAudio
                         )
                     )
@@ -3291,6 +3275,13 @@ private struct RecordingSetupView: View {
         }
     }
 
+    private var recordingModeBinding: Binding<RecordingMode> {
+        Binding(
+            get: { recordingMode },
+            set: { recordingMode = $0 }
+        )
+    }
+
     @ViewBuilder
     private var recordingPickerOverlay: some View {
         switch openPicker {
@@ -3319,6 +3310,67 @@ private struct RecordingSetupView: View {
         case nil:
             EmptyView()
         }
+    }
+}
+
+private struct RecordingModePicker: View {
+    @Binding var selection: RecordingMode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Audio source")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(RecordingMode.allCases) { mode in
+                    Button {
+                        selection = mode
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: mode.symbol)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(
+                                    selection == mode ? BurritoTheme.accent : .secondary
+                                )
+                                .frame(width: 22)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(mode.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                Text(mode.description)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(
+                        selection == mode
+                            ? BurritoTheme.accentSoft.opacity(0.6)
+                            : BurritoTheme.controlFill,
+                        in: Rectangle()
+                    )
+                    .overlay {
+                        Rectangle()
+                            .stroke(
+                                selection == mode
+                                    ? BurritoTheme.accent.opacity(0.65)
+                                    : BurritoTheme.softBorder
+                            )
+                    }
+                    .accessibilityAddTraits(selection == mode ? .isSelected : [])
+                }
+            }
+        }
+        .padding(14)
     }
 }
 

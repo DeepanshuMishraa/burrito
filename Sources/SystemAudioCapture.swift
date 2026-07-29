@@ -21,7 +21,7 @@ final class SystemAudioCapture: AudioCapturing {
 
     func start(
         files: RecordingFiles,
-        includesMicrophone: Bool,
+        mode: RecordingMode,
         languageIdentifier _: String
     ) async -> Result<Void, BurritoError> {
         guard !isActive else { return .failure(.recordingAlreadyInProgress) }
@@ -31,7 +31,7 @@ final class SystemAudioCapture: AudioCapturing {
             return .failure(.screenRecordingPermissionDenied)
         }
 
-        if includesMicrophone {
+        if mode == .meeting {
             let allowed = await microphoneAccess()
             guard allowed else { return .failure(.microphonePermissionDenied) }
         }
@@ -54,11 +54,11 @@ final class SystemAudioCapture: AudioCapturing {
                 exceptingWindows: []
             )
             let configuration = SCStreamConfiguration()
-            configuration.capturesAudio = true
+            configuration.capturesAudio = mode == .listenAlong
             configuration.excludesCurrentProcessAudio = true
             configuration.sampleRate = 48_000
             configuration.channelCount = 2
-            configuration.captureMicrophone = includesMicrophone
+            configuration.captureMicrophone = mode == .meeting
             configuration.width = 2
             configuration.height = 2
             configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
@@ -72,7 +72,7 @@ final class SystemAudioCapture: AudioCapturing {
                 type: .audio,
                 sampleHandlerQueue: CaptureOutput.queue
             )
-            if includesMicrophone {
+            if mode == .meeting {
                 try newStream.addStreamOutput(
                     newOutput,
                     type: .microphone,
@@ -129,7 +129,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     static let queue = DispatchQueue(label: "com.local.burrito.audio-capture")
 
     let hasMicrophone: Bool
-    private let systemWriter: AudioSampleWriter
+    private let systemWriter: AudioSampleWriter?
     private let microphoneWriter: AudioSampleWriter?
     private let lock = NSLock()
     private var streamError: Error?
@@ -148,7 +148,9 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     }
 
     init(files: RecordingFiles) throws {
-        self.systemWriter = try AudioSampleWriter(url: files.systemAudioURL, channelCount: 2)
+        self.systemWriter = try files.systemAudioURL.map {
+            try AudioSampleWriter(url: $0, channelCount: 2)
+        }
         self.microphoneWriter = try files.microphoneAudioURL.map {
             try AudioSampleWriter(url: $0, channelCount: 1)
         }
@@ -164,7 +166,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         guard sampleBuffer.isValid, CMSampleBufferDataIsReady(sampleBuffer) else { return }
         switch type {
         case .audio:
-            systemWriter.append(sampleBuffer)
+            systemWriter?.append(sampleBuffer)
             consume(sampleBuffer, source: .system)
         case .microphone:
             microphoneWriter?.append(sampleBuffer)
@@ -183,7 +185,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     func finish() async throws {
         let captureError = lock.withLock { streamError }
         if let captureError { throw captureError }
-        try await systemWriter.finish()
+        try await systemWriter?.finish()
         try await microphoneWriter?.finish()
     }
 

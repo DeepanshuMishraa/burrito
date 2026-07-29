@@ -12,15 +12,17 @@ struct LocalRecordingFileStore: RecordingFileStore {
         self.root = root
     }
 
-    func createSession(id: UUID, includesMicrophone: Bool) -> Result<RecordingFiles, BurritoError> {
+    func createSession(id: UUID, mode: RecordingMode) -> Result<RecordingFiles, BurritoError> {
         let directory = root.appending(path: id.uuidString, directoryHint: .isDirectory)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             return .success(
                 RecordingFiles(
                     sessionID: id,
-                    systemAudioURL: directory.appending(path: "system.m4a"),
-                    microphoneAudioURL: includesMicrophone
+                    systemAudioURL: mode == .listenAlong
+                        ? directory.appending(path: "system.m4a")
+                        : nil,
+                    microphoneAudioURL: mode == .meeting
                         ? directory.appending(path: "microphone.m4a")
                         : nil
                 )

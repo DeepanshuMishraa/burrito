@@ -649,10 +649,38 @@ struct TranscriptionLanguage: Identifiable, Equatable, Sendable {
     }
 }
 
+enum RecordingMode: String, CaseIterable, Identifiable, Sendable {
+    case listenAlong
+    case meeting
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .listenAlong: "Listen along"
+        case .meeting: "Meeting mode"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .listenAlong: "Capture audio playing on this Mac."
+        case .meeting: "Capture the room through your microphone."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .listenAlong: "macbook.and.iphone"
+        case .meeting: "person.2.wave.2"
+        }
+    }
+}
+
 struct RecordingOptions: Equatable, Sendable {
     var template: TemplateSnapshot
     var languageIdentifier: String
-    var includesMicrophone: Bool
+    var mode: RecordingMode
     var retainsAudio: Bool
 }
 
@@ -672,7 +700,7 @@ enum RecordingDestination: Equatable, Identifiable, Sendable {
 
 struct RecordingFiles: Equatable, Sendable {
     var sessionID: UUID
-    var systemAudioURL: URL
+    var systemAudioURL: URL?
     var microphoneAudioURL: URL?
 }
 

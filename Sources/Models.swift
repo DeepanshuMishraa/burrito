@@ -68,6 +68,7 @@ final class Note {
     var deletedAt: Date?
     var systemAudioRelativePath: String?
     var microphoneAudioRelativePath: String?
+    var recordingModeRawValue: String?
     var retainsAudio: Bool
     var transcriptRevision: Int
     var generatedFromTranscriptRevision: Int
@@ -84,6 +85,7 @@ final class Note {
         createdAt: Date = .now,
         languageIdentifier: String,
         template: TemplateSnapshot,
+        recordingMode: RecordingMode = .listenAlong,
         retainsAudio: Bool
     ) {
         self.id = id
@@ -104,6 +106,7 @@ final class Note {
         self.deletedAt = nil
         self.systemAudioRelativePath = nil
         self.microphoneAudioRelativePath = nil
+        self.recordingModeRawValue = recordingMode.rawValue
         self.retainsAudio = retainsAudio
         self.transcriptRevision = 0
         self.generatedFromTranscriptRevision = 0
@@ -129,6 +132,20 @@ final class Note {
 
     var templateSnapshot: TemplateSnapshot {
         TemplateSnapshot(name: templateName, symbol: templateSymbol, instructions: templateInstructions)
+    }
+
+    var recordingMode: RecordingMode {
+        get { recordingModeRawValue.flatMap(RecordingMode.init(rawValue:)) ?? .listenAlong }
+        set { recordingModeRawValue = newValue.rawValue }
+    }
+
+    var continuationRecordingOptions: RecordingOptions {
+        RecordingOptions(
+            template: templateSnapshot,
+            languageIdentifier: languageIdentifier,
+            mode: recordingMode,
+            retainsAudio: retainsAudio
+        )
     }
 
     var notesMayBeOutdated: Bool {

@@ -90,6 +90,7 @@ final class AppCoordinator {
             return
         }
         let languageIdentifier = existingNote?.languageIdentifier ?? options.languageIdentifier
+        let recordingMode = existingNote?.recordingMode ?? options.mode
 
         let modelAvailability = await generator.availability(
             languageIdentifier: languageIdentifier
@@ -115,7 +116,7 @@ final class AppCoordinator {
         let sessionID = UUID()
         guard case .success(let files) = fileStore.createSession(
             id: sessionID,
-            includesMicrophone: options.includesMicrophone
+            mode: recordingMode
         ) else {
             failBeforeRecording(.storageFailed(details: "The recording directory could not be created."))
             return
@@ -136,9 +137,12 @@ final class AppCoordinator {
                 createdAt: now,
                 languageIdentifier: options.languageIdentifier,
                 template: options.template,
+                recordingMode: recordingMode,
                 retainsAudio: options.retainsAudio
             )
-            newNote.systemAudioRelativePath = fileStore.relativePath(for: files.systemAudioURL)
+            newNote.systemAudioRelativePath = files.systemAudioURL.map(
+                fileStore.relativePath(for:)
+            )
             newNote.microphoneAudioRelativePath = files.microphoneAudioURL.map(
                 fileStore.relativePath(for:)
             )
@@ -155,7 +159,7 @@ final class AppCoordinator {
 
         switch await capture.start(
             files: files,
-            includesMicrophone: options.includesMicrophone,
+            mode: recordingMode,
             languageIdentifier: languageIdentifier
         ) {
         case .success:
@@ -214,16 +218,20 @@ final class AppCoordinator {
         note.processingStage = .transcribing
         try? context.save()
 
-        let systemResult = await transcriber.transcribe(
-            fileURL: files.systemAudioURL,
-            source: .system,
-            languageIdentifier: note.languageIdentifier
-        )
-        guard case .success(let systemSegments) = systemResult else {
-            if case .failure(let error) = systemResult {
-                fail(note: note, error: error, context: context)
+        var systemSegments: [TranscriptSegment] = []
+        if let systemURL = files.systemAudioURL {
+            let systemResult = await transcriber.transcribe(
+                fileURL: systemURL,
+                source: .system,
+                languageIdentifier: note.languageIdentifier
+            )
+            guard case .success(let segments) = systemResult else {
+                if case .failure(let error) = systemResult {
+                    fail(note: note, error: error, context: context)
+                }
+                return
             }
-            return
+            systemSegments = segments
         }
 
         var microphoneSegments: [TranscriptSegment] = []
@@ -273,7 +281,9 @@ final class AppCoordinator {
         try? context.save()
 
         if note.retainsAudio {
-            note.systemAudioRelativePath = fileStore.relativePath(for: files.systemAudioURL)
+            note.systemAudioRelativePath = files.systemAudioURL.map(
+                fileStore.relativePath(for:)
+            )
             note.microphoneAudioRelativePath = files.microphoneAudioURL.map(
                 fileStore.relativePath(for:)
             )
