@@ -146,7 +146,7 @@ function App() {
             >
               <a
                 href={downloadUrl}
-                className="inline-flex min-h-12 w-full items-center justify-center bg-ink px-7 text-sm font-semibold text-canvas transition-opacity duration-150 hover:opacity-75 sm:w-auto"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-ink px-7 text-sm font-semibold text-canvas transition-opacity duration-150 hover:opacity-75 sm:w-auto"
               >
                 Download for macOS
               </a>
