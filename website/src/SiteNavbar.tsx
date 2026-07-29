@@ -1,9 +1,10 @@
 import { AppleMark } from "./AppleMark";
 import { BurritoMark } from "./BurritoMark";
+import { DownloadLink, downloadUrl } from "./DownloadLink";
 import { GithubMark } from "./GithubMark";
 
 export const repositoryUrl = "https://github.com/DeepanshuMishraa/burrito";
-export const downloadUrl = `${repositoryUrl}/releases/latest/download/Burrito.dmg`;
+export { downloadUrl };
 
 export function SiteNavbar() {
   return (
@@ -54,15 +55,14 @@ export function SiteNavbar() {
             <GithubMark className="mr-1.5 size-3.5" />
             GitHub
           </a>
-          <a
-            href={downloadUrl}
+          <DownloadLink
             data-cuelume-hover="whisper"
             data-cuelume-toggle="sparkle"
             className="nav-download inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-action px-3 text-white"
           >
             <AppleMark className="h-3.5 w-3" />
             Download
-          </a>
+          </DownloadLink>
         </div>
       </nav>
     </header>

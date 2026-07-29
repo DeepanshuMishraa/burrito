@@ -8,9 +8,10 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { bind } from "cuelume";
 import { AppleMark } from "./AppleMark";
+import { DownloadLink } from "./DownloadLink";
 import { GithubMark } from "./GithubMark";
 import { PrivacyPolicy, TermsOfService } from "./LegalPages";
-import { downloadUrl, repositoryUrl, SiteNavbar } from "./SiteNavbar";
+import { repositoryUrl, SiteNavbar } from "./SiteNavbar";
 
 type RevealStyle = CSSProperties & { "--delay": string; };
 
@@ -189,15 +190,14 @@ function App() {
               className="reveal mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row"
               style={reveal("180ms")}
             >
-              <a
-                href={downloadUrl}
+              <DownloadLink
                 data-cuelume-hover="whisper"
                 data-cuelume-toggle="sparkle"
                 className="primary-action inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-action px-4 text-sm font-medium text-white sm:w-auto"
               >
                 <AppleMark className="h-4 w-3.5" />
                 Download for macOS
-              </a>
+              </DownloadLink>
               <a
                 href={repositoryUrl}
                 target="_blank"
@@ -462,15 +462,14 @@ function App() {
             <h2 className="font-display text-[clamp(3.3rem,6vw,5.5rem)] leading-[0.92] tracking-[-0.04em]">
               Useful notes, without the recording cloud.
             </h2>
-            <a
-              href={downloadUrl}
+            <DownloadLink
               data-cuelume-hover="whisper"
               data-cuelume-toggle="sparkle"
               className="primary-action mt-8 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-action px-4 text-sm font-medium text-white"
             >
               <AppleMark className="h-4 w-3.5" />
               Download for macOS
-            </a>
+            </DownloadLink>
           </div>
           <footer className="relative z-10 mx-auto flex w-[min(calc(100%_-_2rem),82rem)] flex-wrap items-center justify-between gap-4 border-t border-ink/12 py-6 text-xs text-ink/48">
             <span>© 2026 Burrito. Open source under MIT.</span>

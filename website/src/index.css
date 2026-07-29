@@ -190,6 +190,196 @@ a {
   transform: scale(0.97);
 }
 
+.download-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(calc(100% - 2rem), 34rem);
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid rgb(25 25 24 / 14%);
+  border-radius: 1.25rem;
+  color: var(--color-ink);
+  background: #f8f7f3;
+  box-shadow:
+    0 2px 5px rgb(25 25 24 / 8%),
+    0 28px 72px rgb(25 25 24 / 20%);
+  opacity: 0;
+  transform: translateY(0.5rem) scale(0.98);
+  transition:
+    opacity 160ms ease-out,
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    overlay 160ms allow-discrete,
+    display 160ms allow-discrete;
+  will-change: transform, opacity;
+}
+
+.download-dialog[open] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@starting-style {
+  .download-dialog[open] {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+}
+
+.download-dialog::backdrop {
+  background: rgb(25 25 24 / 38%);
+  backdrop-filter: blur(5px);
+  opacity: 1;
+  transition:
+    opacity 160ms ease-out,
+    overlay 160ms allow-discrete,
+    display 160ms allow-discrete;
+}
+
+@starting-style {
+  .download-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download-dialog,
+  .download-dialog::backdrop {
+    transition-duration: 1ms;
+  }
+
+  .download-dialog,
+  .download-dialog[open] {
+    transform: none;
+  }
+}
+
+.download-dialog-content {
+  position: relative;
+  padding: clamp(1.5rem, 5vw, 2.25rem);
+}
+
+.download-dialog-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  color: rgb(25 25 24 / 48%);
+  background: rgb(25 25 24 / 6%);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms var(--ease-out-expo);
+}
+
+.download-dialog-kicker {
+  margin: 0 0 0.85rem;
+  color: rgb(25 25 24 / 46%);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.download-dialog h2 {
+  max-width: 25rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 7vw, 2.65rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.download-dialog h2 + p {
+  max-width: 28rem;
+  margin: 1.15rem 0 0;
+  color: rgb(25 25 24 / 58%);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.download-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 1.5rem;
+  border: 1px solid rgb(25 25 24 / 12%);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: rgb(25 25 24 / 4%);
+}
+
+.download-command code {
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  color: rgb(25 25 24 / 72%);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+.download-command code::-webkit-scrollbar {
+  display: none;
+}
+
+.download-command button {
+  min-width: 4.5rem;
+  padding: 0 0.9rem;
+  border: 0;
+  border-left: 1px solid rgb(25 25 24 / 10%);
+  color: rgb(25 25 24 / 62%);
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.download-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+}
+
+.download-dialog-actions > button,
+.download-dialog-actions > a {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-radius: 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out-expo),
+    background-color 160ms ease;
+}
+
+.download-dialog-actions > button {
+  border: 1px solid rgb(25 25 24 / 12%);
+  color: rgb(25 25 24 / 62%);
+  background: transparent;
+}
+
+.download-dialog-actions > a {
+  color: white;
+  background: var(--color-action);
+}
+
 .landing-section {
   width: min(calc(100% - 2rem), 72rem);
   margin-inline: auto;
@@ -761,6 +951,26 @@ a {
     box-shadow: 0 4px 12px rgb(47 95 240 / 20%);
   }
 
+  .download-dialog-close:hover {
+    color: var(--color-ink);
+    background: rgb(25 25 24 / 10%);
+    transform: rotate(4deg);
+  }
+
+  .download-command button:hover {
+    color: var(--color-ink);
+    background: rgb(25 25 24 / 5%);
+  }
+
+  .download-dialog-actions > button:hover {
+    background: rgb(25 25 24 / 5%);
+  }
+
+  .download-dialog-actions > a:hover {
+    background: #2855df;
+    transform: translateY(-1px);
+  }
+
   .secondary-button:hover,
   .nav-secondary:hover {
     transform: translateY(-1px);
@@ -948,6 +1158,16 @@ a {
     min-height: 2rem;
     padding-inline: 0.75rem;
     font-size: 0.72rem;
+  }
+
+  .download-dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .download-dialog-actions > button,
+  .download-dialog-actions > a {
+    width: 100%;
   }
 
   .closing-section footer {
