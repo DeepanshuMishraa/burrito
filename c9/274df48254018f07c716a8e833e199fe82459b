@@ -1,0 +1,43 @@
+Sources/ServiceProtocols.swift
+  s_dd0bacb6899cc2::t_dd6ec246830cf8 9,54
+Sources/RecordingFileStore.swift
+  s_dd0bacb6899cc2::t_dd6ec246830cf8 15,22-25
+Sources/SystemAudioCapture.swift
+  s_dd0bacb6899cc2::t_9c49f7d2592cad 24,34,57,61,75,132,151-153,169,188
+Sources/Models.swift
+  s_dd0bacb6899cc2::t_dd6ec246830cf8 71,88,109,137-149
+  s_dd0bacb6899cc2::t_213970e14303e3 150
+Sources/Domain.swift
+  s_dd0bacb6899cc2::t_dd6ec246830cf8 652-679,683,703
+Tests/PersistenceAndStorageTests.swift
+  s_dd0bacb6899cc2::t_cb3a0dc4bd8688 95,103
+  s_dd0bacb6899cc2::t_b50ebcf5d60bdc 102
+Sources/ContentView.swift
+  s_dd0bacb6899cc2::t_ebde03a07a0faa 3283,3316-3376
+  s_dd0bacb6899cc2::t_8a350458064765 129,587-588,590-601,3144-3145,3158,3162-3167,3174,3176,3188-3192,3194-3202,3234,3278-3282
+  s_dd0bacb6899cc2::t_20f195015fbcec 3284
+Tests/CoordinatorTests.swift
+  s_dd0bacb6899cc2::t_cb3a0dc4bd8688 152,245
+  s_dd0bacb6899cc2::t_42ef6f271ecbc2 305
+  s_dd0bacb6899cc2::t_72e2f7d604e26c 14,25,273,279,281,300
+  s_dd0bacb6899cc2::t_b50ebcf5d60bdc 20,148,153,192,222,290,355,386,420,452,481
+Sources/AppCoordinator.swift
+  s_dd0bacb6899cc2::t_72e2f7d604e26c 93,119,140,162
+  s_dd0bacb6899cc2::t_9c49f7d2592cad 143-145,221-232,234,284-286
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c9274df48254018f07c716a8e833e199fe82459b",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
