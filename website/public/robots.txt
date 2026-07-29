@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://deepanshumishraa.github.io/burrito/sitemap.xml
