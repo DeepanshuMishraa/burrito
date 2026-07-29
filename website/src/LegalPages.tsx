@@ -62,25 +62,27 @@ function LegalPage({
 
       <SiteNavbar />
 
-      <main
-        id="policy"
-        className="mx-auto w-[min(calc(100%_-_2rem),72rem)] pt-[clamp(3rem,8vh,6rem)] pb-24 sm:w-[min(calc(100%_-_3rem),72rem)]"
-      >
-        <header className="border-t border-ink/15 pt-8 sm:pt-12">
-          <p className="mb-5 text-xs font-semibold tracking-[0.12em] text-ink/40 uppercase">
-            Legal
-          </p>
-          <h1 className="max-w-[11ch] text-[clamp(3.6rem,7vw,6.5rem)] leading-[0.98] font-semibold tracking-[-0.038em]">
-            {title}
-          </h1>
-          <p className="mt-7 max-w-[44rem] text-[clamp(1.05rem,1.5vw,1.2rem)] leading-[1.65] text-ink/55">
-            {summary}
-          </p>
-          <p className="mt-5 text-xs text-ink/35">Effective July 29, 2026</p>
+      <main id="policy" className="legal-page pb-24">
+        <header className="legal-hero">
+          <div className="legal-shell">
+            <p className="mb-5 text-[0.68rem] font-semibold tracking-[0.14em] text-ink/45 uppercase">
+              Burrito · Legal
+            </p>
+            <h1 className="max-w-[11ch] font-display text-[clamp(4rem,8vw,7rem)] leading-[0.94] font-normal tracking-[-0.04em]">
+              {title}
+            </h1>
+            <div className="legal-hero-summary">
+              <p>{summary}</p>
+              <span>Effective July 29, 2026</span>
+            </div>
+          </div>
         </header>
 
-        <div className="mt-16 grid gap-12 border-t border-ink/15 pt-10 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-20">
+        <div className="legal-shell legal-layout">
           <aside className="h-fit text-sm leading-6 text-ink/45 lg:sticky lg:top-8">
+            <p className="mb-4 text-[0.67rem] font-semibold tracking-[0.12em] text-ink/35 uppercase">
+              About this document
+            </p>
             <p>
               Burrito is an open-source, local-first macOS application maintained
               through its public GitHub repository.
@@ -96,18 +98,20 @@ function LegalPage({
           <article className="legal-copy max-w-[46rem]">{children}</article>
         </div>
 
-        <aside className="mt-16 border-t border-ink/15 pt-7 text-sm leading-6 text-ink/45">
-          This document is provided for transparency and should be reviewed by
-          qualified counsel before a public release. Jurisdiction-specific clauses,
-          liability limits, and regulatory obligations require legal review.
-        </aside>
+        <div className="legal-shell">
+          <aside className="mt-16 border-t border-ink/15 pt-7 text-sm leading-6 text-ink/45">
+            This document is provided for transparency and should be reviewed by
+            qualified counsel before a public release. Jurisdiction-specific clauses,
+            liability limits, and regulatory obligations require legal review.
+          </aside>
 
-        <footer className="mt-16 flex flex-wrap gap-6 border-t border-ink/15 pt-7 text-sm">
-          <a href="/">Home</a>
-          <a href="/privacy/">Privacy</a>
-          <a href="/terms/">Terms</a>
-          <a href={repositoryUrl}>GitHub</a>
-        </footer>
+          <footer className="mt-16 flex flex-wrap gap-6 border-t border-ink/15 pt-7 text-sm">
+            <a href="/">Home</a>
+            <a href="/privacy/">Privacy</a>
+            <a href="/terms/">Terms</a>
+            <a href={repositoryUrl}>GitHub</a>
+          </footer>
+        </div>
       </main>
     </div>
   );
@@ -191,7 +195,7 @@ export function PrivacyPolicy() {
           and secure the site. The provider’s own privacy terms govern that processing.
         </p>
         <p>
-          The website loads the Geist typeface from Google Fonts. When your browser
+          The website loads the Inter typeface from Google Fonts. When your browser
           requests the font files, Google may receive standard network information,
           including your IP address and browser details, under Google’s own privacy
           terms.
