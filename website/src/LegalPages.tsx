@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { repositoryUrl, SiteNavbar } from "./SiteNavbar";
 
-const siteUrl = "https://burrito-1l2.pages.dev";
+const siteUrl = "https://burrito.dipxsy.app";
 const maintainerEmail = "dipxsy@duck.com";
 
 type LegalPageProps = {

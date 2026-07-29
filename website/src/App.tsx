@@ -57,7 +57,7 @@ function AppComparison() {
           className={`pointer-events-none absolute inset-y-[4%] z-10 w-px bg-white/75 shadow-[0_0_0_1px_rgb(0_0_0/0.12)] transition-[left] ${movementClass}`}
           style={{ left: `${position}%` }}
         >
-          <span className="absolute top-1/2 left-1/2 flex h-9 w-6 -translate-1/2 items-center justify-center rounded-full border border-black/12 bg-white/92 backdrop-blur-sm">
+          <span className="comparison-handle absolute top-1/2 left-1/2 flex h-9 w-6 -translate-1/2 items-center justify-center rounded-full border border-black/12 bg-white/92 backdrop-blur-sm">
             <i className="h-3 w-px bg-black/25" />
             <i className="ml-1 h-3 w-px bg-black/25" />
           </span>
@@ -146,7 +146,7 @@ function App() {
             >
               <a
                 href={downloadUrl}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-ink px-7 text-sm font-semibold text-canvas transition-opacity duration-150 hover:opacity-75 sm:w-auto"
+                className="primary-action inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-ink px-7 text-sm font-semibold text-canvas sm:w-auto"
               >
                 Download for macOS
               </a>
@@ -154,7 +154,7 @@ function App() {
                 href={repositoryUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="border-b border-ink/35 pb-1 text-sm font-semibold transition-opacity duration-150 hover:opacity-55"
+                className="secondary-action text-sm font-semibold"
               >
                 Read the source
               </a>

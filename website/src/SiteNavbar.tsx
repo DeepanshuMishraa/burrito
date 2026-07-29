@@ -13,22 +13,22 @@ export function SiteNavbar() {
         <a
           href="/"
           aria-label="Burrito home"
-          className="flex items-center gap-2.5 text-[1.05rem] font-semibold tracking-[-0.035em]"
+          className="brand-link flex items-center gap-2.5 text-[1.05rem] font-semibold tracking-[-0.035em]"
         >
-          <BurritoMark className="size-8" />
+          <BurritoMark className="brand-mark size-8" />
           <span>Burrito</span>
         </a>
 
         <div className="flex items-center gap-5 text-sm font-medium sm:gap-8">
           <a
             href="/privacy/"
-            className="hidden text-ink/50 transition-colors duration-150 hover:text-ink md:block"
+            className="nav-link hidden text-ink/50 md:block"
           >
             Privacy
           </a>
           <a
             href="/terms/"
-            className="hidden text-ink/50 transition-colors duration-150 hover:text-ink md:block"
+            className="nav-link hidden text-ink/50 md:block"
           >
             Terms
           </a>
@@ -36,13 +36,13 @@ export function SiteNavbar() {
             href={repositoryUrl}
             target="_blank"
             rel="noreferrer"
-            className="hidden text-ink/50 transition-colors duration-150 hover:text-ink sm:block"
+            className="nav-link hidden text-ink/50 sm:block"
           >
             GitHub
           </a>
           <a
             href={downloadUrl}
-            className="border-b border-ink pb-0.5 transition-opacity duration-150 hover:opacity-55"
+            className="nav-link nav-download"
           >
             Download
           </a>

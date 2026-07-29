@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://burrito-1l2.pages.dev/sitemap.xml
+Sitemap: https://burrito.dipxsy.app/sitemap.xml
