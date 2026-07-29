@@ -57,6 +57,7 @@ jobs:
           codesign --force --deep --sign - "$APP"
           mkdir -p "$STAGE"
           cp -R "$APP" "$STAGE/Burrito.app"
+          ln -s /Applications "$STAGE/Applications"
           hdiutil create \
             -volname Burrito \
             -srcfolder "$STAGE" \
