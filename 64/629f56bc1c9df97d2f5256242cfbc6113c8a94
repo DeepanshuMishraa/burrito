@@ -1,0 +1,61 @@
+website/index.html
+  s_dd0bacb6899cc2::t_990abd14d606a4 25
+  s_dd0bacb6899cc2::t_9c601945747dd1 66,69-70
+website/src/SiteNavbar.tsx
+  s_dd0bacb6899cc2::t_239b2fcfcfc8f6 26,29-32,38,41
+  s_dd0bacb6899cc2::t_990abd14d606a4 1,10,13,24,27,33,39,43-45,50,57,59
+  s_dd0bacb6899cc2::t_3a19956f0d31e3 3,52
+  s_dd0bacb6899cc2::t_629f7b753fd058 18,20
+  s_dd0bacb6899cc2::t_0326a2f549f2eb 28
+website/src/AppleMark.tsx
+  s_dd0bacb6899cc2::t_990abd14d606a4 1-17
+website/privacy/index.html
+  s_dd0bacb6899cc2::t_990abd14d606a4 20
+website/src/LegalPages.tsx
+  s_dd0bacb6899cc2::t_990abd14d606a4 198
+  s_dd0bacb6899cc2::t_3a19956f0d31e3 65-78,81,83-85,101-114
+website/terms/index.html
+  s_dd0bacb6899cc2::t_990abd14d606a4 20
+website/src/GithubMark.tsx
+  s_dd0bacb6899cc2::t_3a19956f0d31e3 1-22
+website/src/App.tsx
+  s_dd0bacb6899cc2::t_629f7b753fd058 159,166
+  s_dd0bacb6899cc2::t_41079eb02f27bb 2-8,20,39,41,44-45,70-77,79-92,94-97,205,375-380,385-390,395-400,405-410,433-439
+  s_dd0bacb6899cc2::t_7b7bb28e080054 47-68,78,100-106,108-112,114-119,203,206-217,220-374,381-384,391-394,401-404,411-417,422-432,440-443,445-455,457,459-469
+  s_dd0bacb6899cc2::t_990abd14d606a4 9,23,148,155,174,182,187,189,196,456,458
+  s_dd0bacb6899cc2::t_3a19956f0d31e3 10,198,418-421
+  s_dd0bacb6899cc2::t_593979a41d7e25 99,113,150
+  s_dd0bacb6899cc2::t_9c601945747dd1 152
+  s_dd0bacb6899cc2::t_5d195c6e834adc 40
+  s_dd0bacb6899cc2::t_23053ab5d98061 42-43
+  s_dd0bacb6899cc2::t_9b05d2e155a2e1 204
+website/src/index.css
+  s_dd0bacb6899cc2::t_593979a41d7e25 138,183,185-191,195,198-211,214,217-590,594-607,609-611,613,615-619,625-628,630-631,633-636,638,657-658,660-674,756-757,759,808-818,820-857,860-865,887-893
+  s_dd0bacb6899cc2::t_b76f9feed59406 591-593,675-722,866-886
+  s_dd0bacb6899cc2::t_629f7b753fd058 27-28,36-53,106,174-176,181-182,746,754
+  s_dd0bacb6899cc2::t_9c601945747dd1 73,76-102,105,806-807
+  s_dd0bacb6899cc2::t_d667193af6cade 192-194,196-197,212-213,215-216,608,612,614,620-624,629,632,637,639-656,659,758,819
+  s_dd0bacb6899cc2::t_990abd14d606a4 4-5,8,74-75,112-113,130-137,177-178,727-729,747-753,755
+  s_dd0bacb6899cc2::t_1299259a82295f 139
+  s_dd0bacb6899cc2::t_b3f4d659bf146c 184
+website/package.json
+  s_dd0bacb6899cc2::t_14e740b2fd6630 13-14
+website/bun.lock
+  s_dd0bacb6899cc2::t_8c1361948b630d 8-9,31-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "64629f56bc1c9df97d2f5256242cfbc6113c8a94",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
