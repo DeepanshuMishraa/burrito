@@ -15,13 +15,13 @@ export function SiteNavbar() {
         <a
           href="/"
           aria-label="Burrito home"
-          className="brand-link flex items-center gap-2 text-[0.84rem] font-semibold tracking-[-0.025em]"
+          className="brand-link col-start-1 flex items-center gap-2 text-[0.84rem] font-semibold tracking-[-0.025em]"
         >
           <BurritoMark className="brand-mark size-6" />
           <span>Burrito</span>
         </a>
 
-        <div className="hidden items-center gap-7 text-[0.78rem] font-normal md:flex">
+        <div className="col-start-2 hidden items-center gap-7 text-[0.78rem] font-normal md:flex">
           <a
             href="/#features"
             className="nav-link text-ink/72"
@@ -42,7 +42,7 @@ export function SiteNavbar() {
           </a>
         </div>
 
-        <div className="flex items-center justify-end gap-2 text-[0.78rem] font-medium">
+        <div className="col-start-3 flex items-center justify-end gap-2 text-[0.78rem] font-medium">
           <a
             href={repositoryUrl}
             target="_blank"

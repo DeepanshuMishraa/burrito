@@ -26,6 +26,8 @@ html {
   scroll-behavior: smooth;
   scrollbar-color: rgb(25 25 24 / 28%) transparent;
   scrollbar-width: thin;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -816,17 +818,37 @@ a {
 @media (max-width: 40rem) {
   .hero-section {
     min-height: auto;
-    padding-top: 7rem;
+    padding-top: 6.5rem;
   }
 
   .hero-section h1 {
-    font-size: clamp(3.35rem, 15vw, 4rem);
+    font-size: clamp(2.9rem, 13vw, 3.35rem);
     line-height: 1.02;
+  }
+
+  .hero-section h1 > span:first-child {
+    white-space: nowrap;
   }
 
   .hero-section h1 img {
     width: 0.58em;
     height: 0.58em;
+  }
+
+  .hero-section h1 + p {
+    max-width: 21rem;
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
+  }
+
+  .hero-section h1 + p + div {
+    margin-top: 1.5rem;
+  }
+
+  .hero-section .primary-action,
+  .hero-section .secondary-button {
+    width: min(100%, 20rem);
   }
 
   .hero-cloud-image {
@@ -838,9 +860,9 @@ a {
   }
 
   .comparison-frame img {
-    width: 150%;
+    width: 125%;
     max-width: none;
-    transform: translateX(-16.667%);
+    transform: translateX(-10%);
   }
 
   .landing-section {
@@ -923,7 +945,9 @@ a {
   }
 
   .nav-download {
-    min-height: 2.5rem;
+    min-height: 2rem;
+    padding-inline: 0.75rem;
+    font-size: 0.72rem;
   }
 
   .closing-section footer {
@@ -970,7 +994,7 @@ a {
 
 @media (max-width: 23.5rem) {
   .hero-section h1 {
-    font-size: 3.1rem;
+    font-size: 2.75rem;
   }
 
   .hero-section > div:nth-of-type(2) {
