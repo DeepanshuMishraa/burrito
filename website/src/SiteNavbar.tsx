@@ -3,7 +3,7 @@ import { BurritoMark } from "./BurritoMark";
 import { GithubMark } from "./GithubMark";
 
 export const repositoryUrl = "https://github.com/DeepanshuMishraa/burrito";
-export const downloadUrl = `${repositoryUrl}/releases/latest`;
+export const downloadUrl = `${repositoryUrl}/releases/latest/download/Burrito.dmg`;
 
 export function SiteNavbar() {
   return (

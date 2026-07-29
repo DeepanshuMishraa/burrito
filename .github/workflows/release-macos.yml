@@ -51,8 +51,6 @@ jobs:
             build
 
       - name: Create disk images
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
         run: |
           APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
           STAGE="$RUNNER_TEMP/BurritoDMG"
@@ -63,8 +61,7 @@ jobs:
             -volname Burrito \
             -srcfolder "$STAGE" \
             -format UDZO \
-            "$RUNNER_TEMP/burrito-$VERSION.dmg"
-          cp "$RUNNER_TEMP/burrito-$VERSION.dmg" "$RUNNER_TEMP/Burrito.dmg"
+            "$RUNNER_TEMP/Burrito.dmg"
 
       - name: Sign update and create appcast
         env:
@@ -85,11 +82,11 @@ jobs:
             exit 1
           fi
 
-          DMG="$RUNNER_TEMP/burrito-$VERSION.dmg"
+          DMG="$RUNNER_TEMP/Burrito.dmg"
           SIGNATURE="$(printf '%s' "$SPARKLE_PRIVATE_KEY" |
             "$SIGN_UPDATE" --ed-key-file - "$DMG")"
           PUBLISHED_AT="$(date -R)"
-          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/burrito-${VERSION}.dmg"
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/Burrito.dmg"
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
 
           {
@@ -118,10 +115,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-          VERSION: ${{ steps.version.outputs.value }}
         run: |
           gh release upload "$RELEASE_TAG" \
-            "$RUNNER_TEMP/burrito-$VERSION.dmg" \
             "$RUNNER_TEMP/Burrito.dmg" \
             "$RUNNER_TEMP/appcast.xml" \
             --clobber
