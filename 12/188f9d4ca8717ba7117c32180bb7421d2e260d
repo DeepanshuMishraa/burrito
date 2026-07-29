@@ -1,0 +1,25 @@
+.github/workflows/release-macos.yml
+  s_dd0bacb6899cc2::t_612feb1e764cc5 64,85,89
+README.md
+  s_dd0bacb6899cc2::t_612feb1e764cc5 39-51
+website/index.html
+  s_dd0bacb6899cc2::t_ed339058ff5f3d 82
+website/src/SiteNavbar.tsx
+  s_dd0bacb6899cc2::t_ed339058ff5f3d 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "12188f9d4ca8717ba7117c32180bb7421d2e260d",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
