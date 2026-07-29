@@ -1,0 +1,37 @@
+website/public/sitemap.xml
+  s_dd0bacb6899cc2::t_f21de57b71cecd 4,7,10
+website/src/App.tsx
+  s_dd0bacb6899cc2::t_f21de57b71cecd 60,149,157
+website/terms/index.html
+  s_dd0bacb6899cc2::t_f21de57b71cecd 15,30,33
+website/public/robots.txt
+  s_dd0bacb6899cc2::t_f21de57b71cecd 4
+website/privacy/index.html
+  s_dd0bacb6899cc2::t_f21de57b71cecd 15,30,33
+website/src/LegalPages.tsx
+  s_dd0bacb6899cc2::t_f21de57b71cecd 4
+website/src/SiteNavbar.tsx
+  s_dd0bacb6899cc2::t_f21de57b71cecd 16,18,25,31,39,45
+website/src/index.css
+  s_dd0bacb6899cc2::t_f21de57b71cecd 32-39,55-120
+  s_dd0bacb6899cc2::t_2417f0fa7c4ed6 121-146
+  s_dd0bacb6899cc2::t_13d7e0c57d9d5a 147
+website/index.html
+  s_dd0bacb6899cc2::t_f21de57b71cecd 20,35,38,56,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d4feb2032f2602bb95b59737c2a462a58cd8f77a",
+  "prompts": {},
+  "sessions": {
+    "s_dd0bacb6899cc2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa9f8-3797-7b00-9a05-d6f0723a63f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
