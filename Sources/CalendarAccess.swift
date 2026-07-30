@@ -24,15 +24,39 @@ final class CalendarAccess {
         case failed(String)
     }
 
-    private let eventStore = EKEventStore()
+    @ObservationIgnored private let eventStore: EKEventStore
+    @ObservationIgnored private let notificationCenter: NotificationCenter
+    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private var eventStoreObservation: NotificationCenter.ObservationToken?
     private(set) var state: State = .notDetermined
     private(set) var upcomingEvents: [UpcomingCalendarEvent] = []
+    private(set) var lastRefreshedAt: Date?
 
-    init() {
+    init(
+        eventStore: EKEventStore = EKEventStore(),
+        notificationCenter: NotificationCenter = .default,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.eventStore = eventStore
+        self.notificationCenter = notificationCenter
+        self.now = now
+        eventStoreObservation = notificationCenter.addObserver(
+            of: eventStore,
+            for: .changed
+        ) { [weak self] _ in
+            self?.refresh()
+        }
         refresh()
     }
 
+    deinit {
+        if let eventStoreObservation {
+            notificationCenter.removeObserver(eventStoreObservation)
+        }
+    }
+
     func refresh() {
+        lastRefreshedAt = now()
         state = switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess, .authorized:
             .authorized
@@ -67,7 +91,8 @@ final class CalendarAccess {
         }
     }
 
-    private func loadUpcomingEvents(now: Date = .now) {
+    private func loadUpcomingEvents() {
+        let now = now()
         let calendar = Calendar.current
         guard let end = calendar.date(byAdding: .day, value: 7, to: now) else {
             upcomingEvents = []

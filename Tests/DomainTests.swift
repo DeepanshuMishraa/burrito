@@ -1,7 +1,36 @@
+import EventKit
 import Foundation
 import Testing
 import UserNotifications
 @testable import Burrito
+
+@MainActor
+@Suite("Calendar access")
+struct CalendarAccessTests {
+    @Test("Calendar database changes refresh upcoming events")
+    func eventStoreChangesRefresh() throws {
+        let eventStore = EKEventStore()
+        let notificationCenter = NotificationCenter()
+        var tick = 0
+        let access = CalendarAccess(
+            eventStore: eventStore,
+            notificationCenter: notificationCenter,
+            now: {
+                tick += 1
+                return Date(timeIntervalSinceReferenceDate: TimeInterval(tick))
+            }
+        )
+        let initialRefresh = try #require(access.lastRefreshedAt)
+
+        notificationCenter.post(
+            EKEventStore.EventStoreChanged(),
+            subject: eventStore
+        )
+
+        let changedRefresh = try #require(access.lastRefreshedAt)
+        #expect(changedRefresh > initialRefresh)
+    }
+}
 
 @Suite("Appearance")
 struct AppearanceTests {

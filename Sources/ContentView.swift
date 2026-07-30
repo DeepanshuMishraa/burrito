@@ -2512,6 +2512,16 @@ private struct CalendarCard: View {
                 Text(today.formatted(.dateTime.weekday(.wide)))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                if calendarAccess.state == .authorized {
+                    Button("Refresh", systemImage: "arrow.clockwise") {
+                        calendarAccess.refresh()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                    .help("Refresh upcoming Calendar events")
+                }
             }
             .frame(width: 112, alignment: .leading)
             .padding(18)
