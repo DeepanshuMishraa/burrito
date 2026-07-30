@@ -84,6 +84,42 @@ struct PersistenceTests {
         #expect(note.exportedMarkdown.contains("Regenerated summary."))
     }
 
+    @Test("Calendar event snapshots persist independently with recurring identity")
+    func calendarEventSnapshotPersists() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let event = CalendarEventSnapshot(
+            eventIdentifier: "event-42",
+            title: "Product weekly",
+            startDate: Date(timeIntervalSince1970: 1_800_000_000),
+            endDate: Date(timeIntervalSince1970: 1_800_003_600),
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"),
+            attendeeNames: ["Ari", "Sam"],
+            organizerName: "Ari",
+            recurrenceIdentifier: "product-weekly",
+            calendarName: "Work"
+        )
+        let note = Note(
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Meeting", symbol: "person.3", instructions: "Meet."),
+            retainsAudio: false,
+            calendarEvent: event
+        )
+        context.insert(note)
+        try context.save()
+
+        let stored = try #require(context.fetch(FetchDescriptor<Note>()).first)
+
+        #expect(stored.calendarEvent == event)
+        #expect(stored.calendarEvent?.relatedMeetingIdentifier == "product-weekly")
+    }
+
     @Test("Seed data upgrades untouched legacy built-in prompts")
     func upgradesLegacyBuiltInPrompts() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)

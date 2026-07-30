@@ -56,6 +56,11 @@ struct ContentView: View {
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
+    @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
+    @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
+    @AppStorage("recordingModeDefault") private var defaultRecordingMode =
+        RecordingMode.listenAlong.rawValue
+    @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
     private let userProfile = MacUserProfile.current
@@ -121,11 +126,13 @@ struct ContentView: View {
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
+                    relatedNotes: relatedNotes(for: selectedNote),
                     coordinator: coordinator,
                     fileStore: LocalRecordingFileStore(),
                     folders: folders,
                     exportAction: { exportMarkdown(selectedNote) },
                     backAction: { selectedNoteID = nil },
+                    selectRelatedNote: { selectedNoteID = $0 },
                     newRecordingAction: {
                         continueRecording(selectedNote)
                     }
@@ -145,6 +152,7 @@ struct ContentView: View {
             RecordingSetupView(
                 templates: templates,
                 modelStore: modelStore,
+                calendarEvent: destination.calendarEvent,
                 openModels: {
                     recordingDestination = nil
                     selectedNoteID = nil
@@ -453,7 +461,7 @@ struct ContentView: View {
 
                             CalendarCard(
                                 calendarAccess: calendarAccess,
-                                startRecording: { recordingDestination = .newNote },
+                                startRecording: startCalendarRecording,
                                 openSettings: openCalendarSettings
                             )
                             .padding(.bottom, 26)
@@ -709,6 +717,46 @@ struct ContentView: View {
         )
     }
 
+    private func relatedNotes(for note: Note) -> [Note] {
+        guard let event = note.calendarEvent else { return [] }
+        return notes.filter { candidate in
+            guard candidate.id != note.id,
+                  candidate.deletedAt == nil,
+                  let candidateEvent = candidate.calendarEvent
+            else {
+                return false
+            }
+            return candidateEvent.relatedMeetingIdentifier == event.relatedMeetingIdentifier
+        }
+        .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func startCalendarRecording(_ event: UpcomingCalendarEvent) {
+        if let meetingURL = event.meetingURL {
+            NSWorkspace.shared.open(meetingURL)
+        }
+        guard let template = templates.first(where: { $0.builtInID == defaultTemplateID })
+            ?? templates.first
+        else {
+            recordingDestination = .calendarEvent(event.snapshot)
+            return
+        }
+        let mode = RecordingMode(rawValue: defaultRecordingMode) ?? .listenAlong
+        Task {
+            await coordinator.start(
+                options: RecordingOptions(
+                    template: template.snapshot,
+                    languageIdentifier: defaultLanguage,
+                    mode: mode,
+                    retainsAudio: defaultRetainsAudio
+                ),
+                destination: .calendarEvent(event.snapshot),
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
+        }
+    }
+
     private func exportMarkdown(_ note: Note) {
         let panel = NSSavePanel()
         if let markdownType = UTType(filenameExtension: "md") {
@@ -829,6 +877,8 @@ private struct CommandPaletteView: View {
                 $0.title.localizedStandardContains(normalizedQuery)
                     || $0.markdownBody.localizedStandardContains(normalizedQuery)
                     || $0.userNotes.localizedStandardContains(normalizedQuery)
+                    || ($0.calendarEvent?.generationContext
+                        .localizedStandardContains(normalizedQuery) ?? false)
                     || Transcript.rendered($0.transcriptSegments)
                         .localizedStandardContains(normalizedQuery)
             }
@@ -2447,7 +2497,7 @@ private struct SidebarNavigationButton: View {
 
 private struct CalendarCard: View {
     let calendarAccess: CalendarAccess
-    let startRecording: () -> Void
+    let startRecording: (UpcomingCalendarEvent) -> Void
     let openSettings: () -> Void
 
     private var today: Date { .now }
@@ -2583,7 +2633,7 @@ private struct CalendarConnectionState: View {
 
 private struct UpcomingEventRow: View {
     let event: UpcomingCalendarEvent
-    let startRecording: () -> Void
+    let startRecording: (UpcomingCalendarEvent) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -2612,7 +2662,12 @@ private struct UpcomingEventRow: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button("Record", systemImage: "waveform", action: startRecording)
+            Button(
+                event.meetingURL == nil ? "Record" : "Join + Record",
+                systemImage: event.meetingURL == nil ? "waveform" : "video"
+            ) {
+                startRecording(event)
+            }
                 .buttonStyle(HomeToolbarButtonStyle())
         }
         .frame(minHeight: 52)
@@ -3313,6 +3368,7 @@ private struct RecordingSetupView: View {
     @Environment(\.dismiss) private var dismiss
     let templates: [NoteTemplate]
     @Bindable var modelStore: ParakeetModelStore
+    let calendarEvent: CalendarEventSnapshot?
     let openModels: () -> Void
     let start: (RecordingOptions) -> Void
 
@@ -3348,9 +3404,13 @@ private struct RecordingSetupView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("New recording")
+                    Text(calendarEvent?.title ?? "New recording")
                         .font(.burritoDisplay(size: 30, weight: .regular))
-                    Text("Choose what Burrito should listen for.")
+                    Text(
+                        calendarEvent == nil
+                            ? "Choose what Burrito should listen for."
+                            : "This event will guide the title and generated notes."
+                    )
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -3359,6 +3419,41 @@ private struct RecordingSetupView: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(BurritoIconButtonStyle())
                     .keyboardShortcut(.cancelAction)
+            }
+
+            if let calendarEvent {
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 18))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(
+                            calendarEvent.startDate.formatted(
+                                .dateTime.weekday(.wide).month(.abbreviated).day()
+                                    .hour().minute()
+                            )
+                        )
+                        .font(.system(size: 13, weight: .semibold))
+                        Text(calendarEvent.calendarName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if !calendarEvent.attendeeNames.isEmpty {
+                        Label(
+                            "\(calendarEvent.attendeeNames.count)",
+                            systemImage: "person.2"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(BurritoTheme.controlFill.opacity(0.6), in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+                }
             }
 
             VStack(spacing: 0) {
@@ -4496,15 +4591,93 @@ private struct NoteEditingView: View {
     }
 }
 
+private struct MeetingContextPanel: View {
+    let event: CalendarEventSnapshot
+    let relatedNotes: [Note]
+    let selectNote: (UUID) -> Void
+
+    private var peopleSummary: String? {
+        if !event.attendeeNames.isEmpty {
+            return event.attendeeNames.joined(separator: ", ")
+        }
+        return event.organizerName.map { "Organized by \($0)" }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 16))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(event.startDate, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(
+                        "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    if let peopleSummary {
+                        Text(peopleSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                if let meetingURL = event.meetingURL {
+                    Button("Join meeting", systemImage: "video") {
+                        NSWorkspace.shared.open(meetingURL)
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle())
+                }
+            }
+
+            if !relatedNotes.isEmpty {
+                Divider()
+                HStack(spacing: 8) {
+                    Text("Related")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(relatedNotes.prefix(3)) { relatedNote in
+                        Button {
+                            selectNote(relatedNote.id)
+                        } label: {
+                            Text(relatedNote.title)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(BurritoTheme.controlFill, in: Rectangle())
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(BurritoTheme.raised.opacity(0.6), in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+        }
+    }
+}
+
 private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
     @Bindable var note: Note
+    let relatedNotes: [Note]
     let coordinator: AppCoordinator
     let fileStore: LocalRecordingFileStore
     let folders: [Folder]
     let exportAction: () -> Void
     let backAction: () -> Void
+    let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
 
     @State private var selectedTab = 0
@@ -4577,6 +4750,14 @@ private struct NoteDetailView: View {
                             requestRegeneration()
                         }
                         .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
+                    }
+
+                    if let calendarEvent = note.calendarEvent {
+                        MeetingContextPanel(
+                            event: calendarEvent,
+                            relatedNotes: relatedNotes,
+                            selectNote: selectRelatedNote
+                        )
                     }
 
                     HStack(spacing: 20) {

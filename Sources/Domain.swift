@@ -684,17 +684,53 @@ struct RecordingOptions: Equatable, Sendable {
     var retainsAudio: Bool
 }
 
+struct CalendarEventSnapshot: Codable, Equatable, Sendable {
+    var eventIdentifier: String
+    var title: String
+    var startDate: Date
+    var endDate: Date
+    var meetingURL: URL?
+    var attendeeNames: [String]
+    var organizerName: String?
+    var recurrenceIdentifier: String?
+    var calendarName: String
+
+    var relatedMeetingIdentifier: String {
+        recurrenceIdentifier ?? eventIdentifier
+    }
+
+    var generationContext: String {
+        let attendees = attendeeNames.isEmpty ? "Not listed" : attendeeNames.joined(separator: ", ")
+        return """
+            Title: \(title)
+            Starts: \(startDate.formatted(.iso8601))
+            Ends: \(endDate.formatted(.iso8601))
+            Calendar: \(calendarName)
+            Organizer: \(organizerName ?? "Not listed")
+            Attendees: \(attendees)
+            Meeting URL: \(meetingURL?.absoluteString ?? "Not listed")
+            """
+    }
+}
+
 enum RecordingDestination: Equatable, Identifiable, Sendable {
     case newNote
+    case calendarEvent(CalendarEventSnapshot)
     case appendToNote(id: UUID)
 
     var id: String {
         switch self {
         case .newNote:
             "new-note"
+        case .calendarEvent(let event):
+            "calendar-\(event.eventIdentifier)-\(event.startDate.timeIntervalSinceReferenceDate)"
         case .appendToNote(let id):
             "append-\(id.uuidString)"
         }
+    }
+
+    var calendarEvent: CalendarEventSnapshot? {
+        if case .calendarEvent(let event) = self { event } else { nil }
     }
 }
 

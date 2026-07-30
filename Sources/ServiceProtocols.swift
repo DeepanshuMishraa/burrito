@@ -41,6 +41,7 @@ protocol NoteGenerating: Sendable {
     func generate(
         segments: [TranscriptSegment],
         userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError>

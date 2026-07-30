@@ -75,6 +75,7 @@ final class Note {
     var generatedFromTranscriptRevision: Int
     var userEditedNotes: Bool
     var lastErrorMessage: String?
+    var calendarEventData: Data?
     var folder: Folder?
 
     init(
@@ -88,7 +89,8 @@ final class Note {
         languageIdentifier: String,
         template: TemplateSnapshot,
         recordingMode: RecordingMode = .listenAlong,
-        retainsAudio: Bool
+        retainsAudio: Bool,
+        calendarEvent: CalendarEventSnapshot? = nil
     ) {
         self.id = id
         self.lifecycleRawValue = lifecycle.rawValue
@@ -115,6 +117,7 @@ final class Note {
         self.generatedFromTranscriptRevision = 0
         self.userEditedNotes = false
         self.lastErrorMessage = nil
+        self.calendarEventData = calendarEvent.flatMap { try? JSONEncoder().encode($0) }
         self.folder = nil
     }
 
@@ -140,6 +143,17 @@ final class Note {
     var recordingMode: RecordingMode {
         get { recordingModeRawValue.flatMap(RecordingMode.init(rawValue:)) ?? .listenAlong }
         set { recordingModeRawValue = newValue.rawValue }
+    }
+
+    var calendarEvent: CalendarEventSnapshot? {
+        get {
+            calendarEventData.flatMap {
+                try? JSONDecoder().decode(CalendarEventSnapshot.self, from: $0)
+            }
+        }
+        set {
+            calendarEventData = newValue.flatMap { try? JSONEncoder().encode($0) }
+        }
     }
 
     var continuationRecordingOptions: RecordingOptions {

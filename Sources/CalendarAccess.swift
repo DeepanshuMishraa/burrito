@@ -2,12 +2,15 @@ import EventKit
 import Observation
 
 struct UpcomingCalendarEvent: Identifiable, Equatable, Sendable {
-    let id: String
-    let title: String
-    let startDate: Date
-    let endDate: Date
+    let snapshot: CalendarEventSnapshot
     let isAllDay: Bool
-    let calendarName: String
+
+    var id: String { snapshot.eventIdentifier }
+    var title: String { snapshot.title }
+    var startDate: Date { snapshot.startDate }
+    var endDate: Date { snapshot.endDate }
+    var calendarName: String { snapshot.calendarName }
+    var meetingURL: URL? { snapshot.meetingURL }
 }
 
 @MainActor
@@ -81,16 +84,55 @@ final class CalendarAccess {
             .sorted { $0.startDate < $1.startDate }
             .prefix(3)
             .map {
-                UpcomingCalendarEvent(
-                    id: $0.eventIdentifier,
-                    title: $0.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-                        ?? "Untitled event",
-                    startDate: $0.startDate,
-                    endDate: $0.endDate,
+                let eventIdentifier = $0.calendarItemIdentifier
+                return UpcomingCalendarEvent(
+                    snapshot: CalendarEventSnapshot(
+                        eventIdentifier: eventIdentifier,
+                        title: $0.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                            ?? "Untitled event",
+                        startDate: $0.startDate,
+                        endDate: $0.endDate,
+                        meetingURL: MeetingLink.first(
+                            explicitURL: $0.url,
+                            location: $0.location,
+                            notes: $0.notes
+                        ),
+                        attendeeNames: ($0.attendees ?? []).compactMap {
+                            $0.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                        },
+                        organizerName: $0.organizer?.name?
+                            .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                        recurrenceIdentifier: $0.hasRecurrenceRules ? eventIdentifier : nil,
+                        calendarName: $0.calendar.title
+                    ),
                     isAllDay: $0.isAllDay,
-                    calendarName: $0.calendar.title
                 )
             }
+    }
+}
+
+enum MeetingLink {
+    static func first(explicitURL: URL?, location: String?, notes: String?) -> URL? {
+        if let explicitURL, isWebURL(explicitURL) {
+            return explicitURL
+        }
+
+        for text in [location, notes].compactMap({ $0 }) {
+            guard let detector = try? NSDataDetector(
+                types: NSTextCheckingResult.CheckingType.link.rawValue
+            ) else {
+                continue
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            if let url = detector.firstMatch(in: text, range: range)?.url, isWebURL(url) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    private static func isWebURL(_ url: URL) -> Bool {
+        url.scheme == "https" || url.scheme == "http"
     }
 }
 

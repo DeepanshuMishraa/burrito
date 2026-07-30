@@ -76,7 +76,7 @@ final class AppCoordinator {
         lastError = nil
 
         let existingNote: Note? = switch destination {
-        case .newNote:
+        case .newNote, .calendarEvent:
             nil
         case .appendToNote(let id):
             fetchNote(id: id, context: context)
@@ -134,11 +134,13 @@ final class AppCoordinator {
             let newNote = Note(
                 id: sessionID,
                 lifecycle: .recording,
+                title: destination.calendarEvent?.title ?? "New Recording",
                 createdAt: now,
                 languageIdentifier: options.languageIdentifier,
                 template: options.template,
                 recordingMode: recordingMode,
-                retainsAudio: options.retainsAudio
+                retainsAudio: options.retainsAudio,
+                calendarEvent: destination.calendarEvent
             )
             newNote.systemAudioRelativePath = files.systemAudioURL.map(
                 fileStore.relativePath(for:)
@@ -344,6 +346,7 @@ final class AppCoordinator {
         let oldBody = note.markdownBody
         let transcriptSegments = note.transcriptSegments
         let userNotes = note.userNotes
+        let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -355,24 +358,33 @@ final class AppCoordinator {
         async let generatedResult = generator.generate(
             segments: transcriptSegments,
             userNotes: userNotes,
+            meetingContext: calendarEvent,
             template: template,
             languageIdentifier: languageIdentifier
         )
-        async let titleResult = generator.suggestTitle(
+        async let titleResult = suggestedTitle(
             segments: transcriptSegments,
             currentTitle: oldTitle,
-            languageIdentifier: languageIdentifier
+            languageIdentifier: languageIdentifier,
+            calendarEvent: calendarEvent
         )
         let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
         switch generatedResultValue {
         case .success(let generated):
-            note.title = await resolvedSuggestedTitle(
-                initialResult: titleResultValue,
-                segments: transcriptSegments,
-                currentTitle: oldTitle,
-                languageIdentifier: languageIdentifier
-            ) ?? generated.title
+            if let calendarEvent {
+                note.title = calendarAwareTitle(
+                    event: calendarEvent,
+                    currentTitle: oldTitle
+                )
+            } else {
+                note.title = await resolvedSuggestedTitle(
+                    initialResult: titleResultValue,
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier
+                ) ?? generated.title
+            }
             note.markdownBody = generated.markdown
             note.generatedFromTranscriptRevision = note.transcriptRevision
             note.userEditedNotes = false
@@ -406,6 +418,7 @@ final class AppCoordinator {
         let hadUserEdits = note.userEditedNotes
         let completeTranscript = note.transcriptSegments
         let userNotes = note.userNotes
+        let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -417,24 +430,34 @@ final class AppCoordinator {
         async let generatedResult = generator.generate(
             segments: segments,
             userNotes: userNotes,
+            meetingContext: calendarEvent,
             template: template,
             languageIdentifier: languageIdentifier
         )
-        async let titleResult = generator.suggestTitle(
+        async let titleResult = suggestedTitle(
             segments: completeTranscript,
             currentTitle: existingTitle,
-            languageIdentifier: languageIdentifier
+            languageIdentifier: languageIdentifier,
+            calendarEvent: calendarEvent
         )
         let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
         switch generatedResultValue {
         case .success(let generated):
-            let updatedTitle = await resolvedSuggestedTitle(
-                initialResult: titleResultValue,
-                segments: completeTranscript,
-                currentTitle: existingTitle,
-                languageIdentifier: languageIdentifier
-            ) ?? existingTitle
+            let updatedTitle: String
+            if let calendarEvent {
+                updatedTitle = calendarAwareTitle(
+                    event: calendarEvent,
+                    currentTitle: existingTitle
+                )
+            } else {
+                updatedTitle = await resolvedSuggestedTitle(
+                    initialResult: titleResultValue,
+                    segments: completeTranscript,
+                    currentTitle: existingTitle,
+                    languageIdentifier: languageIdentifier
+                ) ?? existingTitle
+            }
             let appendedBody = """
                 ## \(generated.title)
 
@@ -460,6 +483,35 @@ final class AppCoordinator {
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    private func suggestedTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String,
+        calendarEvent: CalendarEventSnapshot?
+    ) async -> Result<String, BurritoError> {
+        if let calendarEvent {
+            return .success(
+                calendarAwareTitle(event: calendarEvent, currentTitle: currentTitle)
+            )
+        }
+        return await generator.suggestTitle(
+            segments: segments,
+            currentTitle: currentTitle,
+            languageIdentifier: languageIdentifier
+        )
+    }
+
+    private func calendarAwareTitle(
+        event: CalendarEventSnapshot,
+        currentTitle: String
+    ) -> String {
+        let current = currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if current.isEmpty || current == "New Recording" {
+            return event.title
+        }
+        return current
     }
 
     private func resolvedSuggestedTitle(

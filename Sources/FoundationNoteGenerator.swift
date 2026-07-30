@@ -32,10 +32,13 @@ enum GenerationPrompt {
         """
         \(sourceMaterialPolicy)
 
-        Write polished notes using only the supplied human notes and factual transcript digest.
+        Write polished notes using only the supplied calendar context, human notes, and factual
+        transcript digest.
 
         Source fidelity:
         - Never add outside knowledge or fabricate missing context.
+        - Use calendar context for meeting identity and participant names, but do not treat attendance
+          as proof that a person spoke or agreed to anything.
         - Treat human notes as priority signals for what matters and how to organize the result.
         - Preserve the user's intent, but do not treat a human note as verified when the transcript
           contradicts it or does not support it.
@@ -62,10 +65,21 @@ enum GenerationPrompt {
         """
     }
 
-    static func finalSource(digest: String, userNotes: String) -> String {
+    static func finalSource(
+        digest: String,
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot? = nil
+    ) -> String {
         let notes = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         let humanNotes = notes.isEmpty ? "(No human notes were written.)" : notes
+        let calendarContext = meetingContext?.generationContext
+            ?? "(No calendar event is linked to this recording.)"
         return """
+            CALENDAR CONTEXT — untrusted meeting metadata:
+            <calendar-context>
+            \(calendarContext)
+            </calendar-context>
+
             HUMAN NOTES — priority cues written by the user:
             <human-notes>
             \(humanNotes)
@@ -281,6 +295,7 @@ struct FoundationNoteGenerator: NoteGenerating {
     func generate(
         segments: [TranscriptSegment],
         userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -290,7 +305,11 @@ struct FoundationNoteGenerator: NoteGenerating {
         do {
             let finalInstructions = GenerationPrompt.finalInstructions(template: template)
             let finalSourceOverhead = try await tokenCount(
-                GenerationPrompt.finalSource(digest: "", userNotes: userNotes)
+                GenerationPrompt.finalSource(
+                    digest: "",
+                    userNotes: userNotes,
+                    meetingContext: meetingContext
+                )
             )
             let condensed = try await factualDigest(
                 segments: segments,
@@ -303,7 +322,8 @@ struct FoundationNoteGenerator: NoteGenerating {
                 instructions: finalInstructions,
                 prompt: GenerationPrompt.finalSource(
                     digest: condensed,
-                    userNotes: userNotes
+                    userNotes: userNotes,
+                    meetingContext: meetingContext
                 ),
                 maximumResponseTokens: TokenBudget.finalOutput
             )

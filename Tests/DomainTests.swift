@@ -224,6 +224,53 @@ struct TemplateTests {
         #expect(prompt.contains("untrusted quoted source material"))
     }
 
+    @Test("Calendar context is labeled separately from notes and transcript")
+    func calendarContextPrompt() {
+        let event = CalendarEventSnapshot(
+            eventIdentifier: "event-42",
+            title: "Product weekly",
+            startDate: Date(timeIntervalSince1970: 1_800_000_000),
+            endDate: Date(timeIntervalSince1970: 1_800_003_600),
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"),
+            attendeeNames: ["Ari", "Sam"],
+            organizerName: "Ari",
+            recurrenceIdentifier: "product-weekly",
+            calendarName: "Work"
+        )
+
+        let source = GenerationPrompt.finalSource(
+            digest: "The team approved the launch.",
+            userNotes: "- Confirm owner",
+            meetingContext: event
+        )
+
+        #expect(source.contains("<calendar-context>"))
+        #expect(source.contains("Title: Product weekly"))
+        #expect(source.contains("Attendees: Ari, Sam"))
+        #expect(source.contains("<human-notes>"))
+        #expect(source.contains("<transcript-digest>"))
+    }
+
+    @Test("Meeting links accept web URLs and reject non-web schemes")
+    func meetingLinkValidation() {
+        let fallback = "Join at https://meet.google.com/abc-defg-hij when ready."
+
+        #expect(
+            MeetingLink.first(
+                explicitURL: URL(string: "file:///tmp/invite"),
+                location: fallback,
+                notes: nil
+            )?.absoluteString == "https://meet.google.com/abc-defg-hij"
+        )
+        #expect(
+            MeetingLink.first(
+                explicitURL: URL(string: "tel:+15551234"),
+                location: nil,
+                notes: nil
+            ) == nil
+        )
+    }
+
     @Test("Title prompt favors the dominant topic across the complete transcript")
     func dominantTopicTitlePrompt() {
         let prompt = GenerationPrompt.titleInstructions(

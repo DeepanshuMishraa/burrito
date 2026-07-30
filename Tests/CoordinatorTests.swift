@@ -88,6 +88,7 @@ private struct GeneratorStub: NoteGenerating {
     func generate(
         segments: [TranscriptSegment],
         userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -105,6 +106,7 @@ private struct GeneratorStub: NoteGenerating {
 
 private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
     let receivedUserNotes = Mutex<[String]>([])
+    let receivedMeetingContexts = Mutex<[CalendarEventSnapshot?]>([])
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
         .success(())
@@ -113,10 +115,12 @@ private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
     func generate(
         segments: [TranscriptSegment],
         userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
         receivedUserNotes.withLock { $0.append(userNotes) }
+        receivedMeetingContexts.withLock { $0.append(meetingContext) }
         return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
     }
 
@@ -144,6 +148,7 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
     func generate(
         segments: [TranscriptSegment],
         userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -190,6 +195,20 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
         removeCount.withLock { $0 += 1 }
         return .success(())
     }
+}
+
+private func sampleCalendarEvent() -> CalendarEventSnapshot {
+    CalendarEventSnapshot(
+        eventIdentifier: "event-42",
+        title: "Product weekly",
+        startDate: Date(timeIntervalSince1970: 1_800_000_000),
+        endDate: Date(timeIntervalSince1970: 1_800_003_600),
+        meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"),
+        attendeeNames: ["Ari", "Sam"],
+        organizerName: "Ari",
+        recurrenceIdentifier: "product-weekly",
+        calendarName: "Work"
+    )
 }
 
 @MainActor
@@ -311,6 +330,52 @@ struct CoordinatorTests {
         )
         #expect(note.userNotes == "- The launch date is the key decision.")
         #expect(note.markdownBody == "# Generated")
+    }
+
+    @Test("Calendar recordings preserve event identity and supply meeting context")
+    func calendarRecordingUsesEventContext() async throws {
+        let context = try makeContext()
+        let generator = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Meeting",
+                symbol: "person.3",
+                instructions: "Capture decisions."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+        let event = sampleCalendarEvent()
+
+        await coordinator.start(
+            options: options,
+            destination: .calendarEvent(event),
+            context: context
+        )
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+
+        #expect(note.title == event.title)
+        #expect(note.calendarEvent == event)
+
+        await coordinator.stop(context: context)
+
+        #expect(note.lifecycle == .ready)
+        #expect(note.title == event.title)
+        #expect(generator.receivedMeetingContexts.withLock { $0 } == [event])
+
+        note.title = "My product review"
+        await coordinator.generate(note: note, context: context)
+
+        #expect(note.title == "My product review")
+        #expect(generator.receivedMeetingContexts.withLock { $0 } == [event, event])
     }
 
     @Test("Continuing a note appends transcript and duration without creating another note")
