@@ -1,0 +1,47 @@
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_cd9455edef45c7 378-379,388-394
+  s_9dd6a64ae5544c::t_907db86f9c86c9 380-387
+  s_9dd6a64ae5544c::t_83e72c1dfb8962 240-245
+  s_9dd6a64ae5544c::t_2bebf1bba499d1 166-177
+  s_9dd6a64ae5544c::t_56f887e0196a3d 133-149
+  s_9dd6a64ae5544c::t_39af390ae0e712 150-165
+Sources/Domain.swift
+  s_9dd6a64ae5544c::t_abf6d1c08a4457 14,21-22,29,50,54
+  s_9dd6a64ae5544c::t_490d0cb4d698fd 79-80,512-532,540-544
+  s_9dd6a64ae5544c::t_e0c2344aee3919 49,51-53,69-78
+  s_9dd6a64ae5544c::t_01c571373a8438 81
+  s_9dd6a64ae5544c::t_acac2a787d96ef 545
+Sources/AppCoordinator.swift
+  s_9dd6a64ae5544c::t_abf6d1c08a4457 272-273
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_3940d71221655b 5539-5544,5548,5650-5658
+  s_9dd6a64ae5544c::t_e0c2344aee3919 5659-5660
+  s_9dd6a64ae5544c::t_59351b416bc5fb 4546-4551,4942-4943
+  s_9dd6a64ae5544c::t_2b566f890861ee 4376,4390-4397,4655,4670,4688,5662
+  s_9dd6a64ae5544c::t_5ec31075507822 4530
+  s_9dd6a64ae5544c::t_147c876eef46fe 5447,5451-5453,5467-5468,5573-5575,5579,5585-5590,5593-5603,5664
+  s_9dd6a64ae5544c::t_864420753547f9 4836,4957-4961,4972
+  s_9dd6a64ae5544c::t_68ed790242ed86 5661
+  s_9dd6a64ae5544c::t_f52c07a058f836 5663
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_ffef10d885bd97 21,30,50-54
+Sources/Settings.swift
+  s_9dd6a64ae5544c::t_48fb8d17c06e9f 117-120,122-124,164-189
+  s_9dd6a64ae5544c::t_641f584f6c5eca 190-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "222ca1a6731b3ebe8e8398f2885b11e6c1e73e5b",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
