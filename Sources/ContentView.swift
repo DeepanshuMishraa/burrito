@@ -4373,6 +4373,7 @@ private struct TemplatePromptDetail: View {
 
 private struct MarkdownNoteContent: View {
     let markdown: String
+    var openTranscript: ((UUID) -> Void)?
 
     private var document: MarkdownDocument {
         MarkdownDocument.parse(markdown)
@@ -4386,6 +4387,14 @@ private struct MarkdownNoteContent: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.openURL, OpenURLAction { url in
+            if let id = TranscriptCitation.segmentID(from: url) {
+                openTranscript?(id)
+                return .handled
+            }
+            NSWorkspace.shared.open(url)
+            return .handled
+        })
     }
 
     @ViewBuilder
@@ -4518,6 +4527,7 @@ private struct RecordingNotepadView: View {
     let elapsed: TimeInterval
     let systemLevel: Double
     let microphoneLevel: Double
+    let recordingMode: RecordingMode
 
     @FocusState private var notesFocused: Bool
 
@@ -4533,6 +4543,12 @@ private struct RecordingNotepadView: View {
                 }
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
                     .monospacedDigit()
+                Label(
+                    recordingMode == .meeting ? "CALL + MIC · ON DEVICE" : "MAC AUDIO · ON DEVICE",
+                    systemImage: "lock.fill"
+                )
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(BurritoTheme.sage)
                 Spacer()
                 RecordingSourceLevel(
                     title: "MAC",
@@ -4636,6 +4652,7 @@ private struct RecordingSourceLevel: View {
 private struct NoteProvenanceView: View {
     let userNotes: String
     let generatedNotes: String
+    let openTranscript: (UUID) -> Void
 
     private var hasHumanNotes: Bool {
         !userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -4650,7 +4667,7 @@ private struct NoteProvenanceView: View {
                     systemImage: "person.fill",
                     isHuman: true
                 )
-                MarkdownNoteContent(markdown: userNotes)
+                MarkdownNoteContent(markdown: userNotes, openTranscript: openTranscript)
                     .padding(20)
                     .background(BurritoTheme.raised, in: Rectangle())
                     .overlay {
@@ -4668,7 +4685,7 @@ private struct NoteProvenanceView: View {
                 detail: "Generated on this Mac",
                 systemImage: "sparkles"
             )
-            MarkdownNoteContent(markdown: generatedNotes)
+            MarkdownNoteContent(markdown: generatedNotes, openTranscript: openTranscript)
         }
     }
 }
@@ -4816,6 +4833,7 @@ private struct NoteDetailView: View {
     @State private var didCopyNotes = false
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var player: AVAudioPlayer?
+    @State private var citedSegmentID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -4921,7 +4939,8 @@ private struct NoteDetailView: View {
                     userNotes: userNotesBinding,
                     elapsed: coordinator.elapsed,
                     systemLevel: coordinator.activity.system,
-                    microphoneLevel: coordinator.activity.microphone
+                    microphoneLevel: coordinator.activity.microphone,
+                    recordingMode: note.recordingMode
                 )
                 .transition(.opacity)
             } else if selectedTab == 0 {
@@ -4935,7 +4954,11 @@ private struct NoteDetailView: View {
                     ScrollView {
                         NoteProvenanceView(
                             userNotes: note.userNotes,
-                            generatedNotes: note.markdownBody
+                            generatedNotes: note.markdownBody,
+                            openTranscript: { id in
+                                citedSegmentID = id
+                                selectedTab = 1
+                            }
                         )
                             .frame(maxWidth: 820, alignment: .leading)
                             .padding(.horizontal, 44)
@@ -4946,7 +4969,7 @@ private struct NoteDetailView: View {
                     .transition(.opacity)
                 }
             } else {
-                TranscriptEditor(note: note)
+                TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
             }
         }
         .background(BurritoTheme.canvas)
@@ -5421,11 +5444,13 @@ private struct TemplateSymbolPicker: View {
 
 private struct TranscriptEditor: View {
     @Bindable var note: Note
+    let focusedSegmentID: UUID?
     @State private var hoveredSegmentID: UUID?
 
     var body: some View {
-        ScrollView {
-            if note.transcriptSegments.isEmpty {
+        ScrollViewReader { proxy in
+            ScrollView {
+                if note.transcriptSegments.isEmpty {
                 VStack(spacing: 14) {
                     TranscriptSignalMark(tint: BurritoTheme.accent)
                         .frame(width: 34, height: 28)
@@ -5439,8 +5464,8 @@ private struct TranscriptEditor: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 88)
-            } else {
-                LazyVStack(spacing: 0) {
+                } else {
+                    LazyVStack(spacing: 0) {
                     HStack(spacing: 18) {
                         HStack(spacing: 8) {
                             TranscriptSignalMark(tint: BurritoTheme.accent)
@@ -5511,11 +5536,16 @@ private struct TranscriptEditor: View {
 
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack(spacing: 8) {
-                                    Text(sourceTitle(for: segment.source))
+                                    TextField(
+                                        sourceTitle(for: segment.source),
+                                        text: speakerBinding(for: segment.id)
+                                    )
+                                        .textFieldStyle(.plain)
+                                        .frame(maxWidth: 120)
                                         .font(.system(size: 10, weight: .semibold))
                                         .tracking(0.5)
-                                        .textCase(.uppercase)
                                         .foregroundStyle(sourceTint(for: segment.source))
+                                        .help("Edit this passage’s speaker name")
                                     Text(durationLabel(for: segment.duration))
                                         .font(.system(size: 9, design: .monospaced))
                                         .monospacedDigit()
@@ -5540,25 +5570,38 @@ private struct TranscriptEditor: View {
                         .padding(.top, 5)
                         .background(
                             sourceTint(for: segment.source).opacity(
-                                hoveredSegmentID == segment.id ? 0.055 : 0
+                                focusedSegmentID == segment.id
+                                    ? 0.16
+                                    : hoveredSegmentID == segment.id ? 0.055 : 0
                             ),
                             in: Rectangle()
                         )
+                        .id(segment.id)
                         .animation(.easeOut(duration: 0.14), value: hoveredSegmentID)
                         .onHover { isHovered in
                             hoveredSegmentID = isHovered ? segment.id : nil
                         }
                     }
+                    }
+                    .frame(maxWidth: 760)
+                    .padding(.horizontal, 44)
+                    .padding(.vertical, 26)
+                    .frame(maxWidth: .infinity)
+                    .hidesEnclosingScrollIndicators()
                 }
-                .frame(maxWidth: 760)
-                .padding(.horizontal, 44)
-                .padding(.vertical, 26)
-                .frame(maxWidth: .infinity)
-                .hidesEnclosingScrollIndicators()
             }
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .onAppear { scrollToCitation(using: proxy) }
+            .onChange(of: focusedSegmentID) { scrollToCitation(using: proxy) }
         }
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
+    }
+
+    private func scrollToCitation(using proxy: ScrollViewProxy) {
+        guard let focusedSegmentID else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(focusedSegmentID, anchor: .center)
+        }
     }
 
     private func sourceKey(title: String, tint: Color) -> some View {
@@ -5600,6 +5643,21 @@ private struct TranscriptEditor: View {
                 var segments = note.transcriptSegments
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 segments[index].text = newValue
+                note.replaceTranscript(with: segments, marksEdited: true)
+            }
+        )
+    }
+
+    private func speakerBinding(for id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                note.transcriptSegments.first(where: { $0.id == id })?.speakerName ?? ""
+            },
+            set: { newValue in
+                var segments = note.transcriptSegments
+                guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                segments[index].speakerName = trimmed.isEmpty ? nil : trimmed
                 note.replaceTranscript(with: segments, marksEdited: true)
             }
         )

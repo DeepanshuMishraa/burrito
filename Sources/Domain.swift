@@ -11,19 +11,22 @@ struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
     var startTime: TimeInterval
     var duration: TimeInterval
     var text: String
+    var speakerName: String?
 
     init(
         id: UUID = UUID(),
         source: AudioSource,
         startTime: TimeInterval,
         duration: TimeInterval,
-        text: String
+        text: String,
+        speakerName: String? = nil
     ) {
         self.id = id
         self.source = source
         self.startTime = startTime
         self.duration = duration
         self.text = text
+        self.speakerName = speakerName
     }
 }
 
@@ -43,7 +46,12 @@ enum Transcript {
     static func rendered(_ segments: [TranscriptSegment]) -> String {
         segments.map {
             let timestamp = Duration.seconds($0.startTime).formatted(.time(pattern: .minuteSecond))
-            return "[\(timestamp)] \($0.source.rawValue): \($0.text)"
+            let correctedSpeaker = $0.speakerName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let speaker = correctedSpeaker?.isEmpty == false
+                ? correctedSpeaker ?? $0.source.rawValue
+                : $0.source.rawValue
+            return "[\(timestamp)] [source:\($0.id.uuidString)] \(speaker): \($0.text)"
         }
         .joined(separator: "\n")
     }
@@ -55,6 +63,19 @@ enum Transcript {
             }
             return $0.startTime > $1.startTime
         }
+    }
+}
+
+enum TranscriptCitation {
+    static func segmentID(from url: URL?) -> UUID? {
+        guard let url,
+              url.scheme == "burrito",
+              url.host == "transcript"
+        else {
+            return nil
+        }
+        let value = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return UUID(uuidString: value)
     }
 }
 
@@ -488,12 +509,39 @@ enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendab
     }
 }
 
+enum TranscriptionEngineCoverage: Equatable, Sendable {
+    case downloadableLocalModel
+    case appleSpeech
+
+    var title: String {
+        switch self {
+        case .downloadableLocalModel: "Parakeet model available"
+        case .appleSpeech: "Apple Speech"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .downloadableLocalModel:
+            "Uses an installed on-device Parakeet model, with Apple Speech as fallback."
+        case .appleSpeech:
+            "Availability is verified by macOS before recording starts."
+        }
+    }
+}
+
 struct TranscriptionLanguage: Identifiable, Equatable, Sendable {
     let identifier: String
     let title: String
     let compactTitle: String
 
     var id: String { identifier }
+
+    var engineCoverage: TranscriptionEngineCoverage {
+        ParakeetModelVariant.candidates(languageIdentifier: identifier).isEmpty
+            ? .appleSpeech
+            : .downloadableLocalModel
+    }
 
     static let supported = [
         TranscriptionLanguage(

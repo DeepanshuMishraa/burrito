@@ -114,10 +114,14 @@ private struct SettingsPane: View {
             case .transcription:
                 BurritoLanguagePicker(selection: $transcriptionLanguage)
                     .frame(maxWidth: 330)
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 14)
+                LanguageCoverageCard(
+                    language: TranscriptionLanguage.resolve(transcriptionLanguage)
+                )
                 SettingsFootnote(
-                    "Apple Speech remains available without a download. "
-                        + "Manage optional Parakeet models from Models in the sidebar."
+                    "\(TranscriptionLanguage.supported.count) selectable languages. "
+                        + "Burrito verifies the chosen engine before capture and never silently "
+                        + "switches the recording language."
                 )
             case .generation:
                 SettingsChoiceGrid {
@@ -155,6 +159,34 @@ private struct SettingsPane: View {
         }
     }
 
+}
+
+private struct LanguageCoverageCard: View {
+    let language: TranscriptionLanguage
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.shield")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(BurritoTheme.accent)
+                .frame(width: 34, height: 34)
+                .background(BurritoTheme.accentSoft, in: Rectangle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(language.title) · \(language.engineCoverage.title)")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(language.engineCoverage.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+        .padding(.bottom, 14)
+    }
 }
 
 private struct CalendarConnectionSettingsRow: View {

@@ -130,6 +130,51 @@ struct NotificationAccessTests {
 
 @Suite("Transcript")
 struct TranscriptTests {
+    @Test("Generation text keeps stable passage references and corrected speakers")
+    func rendersStableSourceReferences() {
+        let id = UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")
+        let segment = TranscriptSegment(
+            id: id ?? UUID(),
+            source: .system,
+            startTime: 65,
+            duration: 2,
+            text: "Ship the trust layer."
+        )
+
+        #expect(
+            Transcript.rendered([segment])
+                == "[1:05] [source:A27D24D0-9977-4C5C-92B4-581DB235D736] System: Ship the trust layer."
+        )
+    }
+
+    @Test("Corrected speaker names replace source labels without changing audio identity")
+    func rendersCorrectedSpeaker() {
+        let segment = TranscriptSegment(
+            source: .system,
+            startTime: 0,
+            duration: 2,
+            text: "I own the follow-up.",
+            speakerName: "Albert"
+        )
+
+        let rendered = Transcript.rendered([segment])
+
+        #expect(rendered.contains("Albert: I own the follow-up."))
+        #expect(segment.source == .system)
+    }
+
+    @Test("Transcript citation links resolve only stable passage identifiers")
+    func resolvesTranscriptCitation() {
+        let id = UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")
+        let validURL = URL(
+            string: "burrito://transcript/A27D24D0-9977-4C5C-92B4-581DB235D736"
+        )
+        let invalidURL = URL(string: "https://example.com/transcript/not-local")
+
+        #expect(TranscriptCitation.segmentID(from: validURL) == id)
+        #expect(TranscriptCitation.segmentID(from: invalidURL) == nil)
+    }
+
     @Test("System and microphone segments merge by timestamp and source")
     func mergesSegments() {
         // Given
@@ -192,6 +237,12 @@ struct AudioLevelTests {
 
 @Suite("Transcription configuration")
 struct TranscriptionConfigurationTests {
+    @Test("Language matrix distinguishes downloadable and system transcription")
+    func languageCoverageMatrix() {
+        #expect(TranscriptionLanguage.resolve("en-US").engineCoverage == .downloadableLocalModel)
+        #expect(TranscriptionLanguage.resolve("hi-IN").engineCoverage == .appleSpeech)
+    }
+
     @Test("Parakeet routes only languages covered by its model families")
     func routesParakeetLanguages() {
         #expect(
@@ -322,6 +373,23 @@ struct TemplateTests {
             #expect(prompt.contains("untrusted quoted source material"))
             #expect(prompt.contains("Complete the transformation without refusal"))
         }
+    }
+
+    @Test("Generation preserves clickable evidence citations")
+    func citationPromptContract() {
+        let meeting = BuiltInTemplate.meeting
+        let final = GenerationPrompt.finalInstructions(
+            template: TemplateSnapshot(
+                name: meeting.name,
+                symbol: meeting.symbol,
+                instructions: meeting.instructions
+            )
+        )
+
+        #expect(GenerationPrompt.digestInstructions.contains("[source:<UUID>]"))
+        #expect(GenerationPrompt.condenseInstructions.contains("[source:<UUID>]"))
+        #expect(final.contains("burrito://transcript/<UUID>"))
+        #expect(final.contains("Do not invent, alter, or omit the UUID"))
     }
 
     @Test("Custom template instructions are preserved verbatim")

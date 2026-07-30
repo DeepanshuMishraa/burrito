@@ -269,7 +269,8 @@ final class AppCoordinator {
                     source: segment.source,
                     startTime: segment.startTime + offset,
                     duration: segment.duration,
-                    text: segment.text
+                    text: segment.text,
+                    speakerName: segment.speakerName
                 )
             }
             combinedSegments = existingSegments + appendedSegments

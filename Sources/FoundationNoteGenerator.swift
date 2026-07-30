@@ -18,6 +18,7 @@ enum GenerationPrompt {
         terminology, numbers, dates, examples, decisions, action items, qualifications, uncertainty,
         and unresolved questions. Merge repetition and discard filler. Never add outside facts,
         explanations, or conclusions. Do not let an isolated remark outweigh the dominant discussion.
+        Preserve the `[source:<UUID>]` marker for every passage supporting each extracted fact.
         """
     static let digestPrefix = "Create a compact factual digest of this timestamped transcript:\n\n"
     static let condenseInstructions = """
@@ -26,6 +27,7 @@ enum GenerationPrompt {
         Combine these factual digests into a shorter, coherent digest. Preserve the dominant subjects
         and all material names, facts, decisions, actions, examples, constraints, uncertainty, and open
         questions. Merge duplication. Do not invent information or promote a minor aside into a main topic.
+        Preserve every relevant `[source:<UUID>]` marker with the fact it supports.
         """
 
     static func finalInstructions(template: TemplateSnapshot) -> String {
@@ -45,6 +47,11 @@ enum GenerationPrompt {
         - Preserve important names, terminology, numbers, dates, decisions, actions, and uncertainty.
         - Do not present speculation, proposals, or opinions as established facts.
         - Prefer omission over invention when the source is ambiguous.
+        - End every factual paragraph, bullet, decision, and action with at least one clickable
+          evidence link in the exact form `[source](burrito://transcript/<UUID>)`, using a
+          `[source:<UUID>]` marker supplied by the transcript digest.
+        - Do not invent, alter, or omit the UUID inside an evidence link.
+        - Human-note-only guidance may remain uncited, but never present it as transcript-confirmed.
 
         Writing:
         - Synthesize ideas instead of following transcript chronology.
