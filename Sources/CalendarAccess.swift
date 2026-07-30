@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import Observation
 
@@ -11,6 +12,45 @@ struct UpcomingCalendarEvent: Identifiable, Equatable, Sendable {
     var endDate: Date { snapshot.endDate }
     var calendarName: String { snapshot.calendarName }
     var meetingURL: URL? { snapshot.meetingURL }
+}
+
+struct UpcomingMeetingIdentity: Hashable {
+    let normalizedTitle: String
+    let startDate: Date
+    let endDate: Date
+
+    init(title: String, startDate: Date, endDate: Date) {
+        normalizedTitle = title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        self.startDate = startDate
+        self.endDate = endDate
+    }
+}
+
+enum CalendarMeetingWindow {
+    static let recentLookback: TimeInterval = 24 * 60 * 60
+    static let recentLimit = 1
+    static let upcomingLimit = 5
+
+    static func start(relativeTo now: Date) -> Date {
+        now.addingTimeInterval(-recentLookback)
+    }
+
+    static func visibleEvents(
+        _ events: [UpcomingCalendarEvent],
+        relativeTo now: Date
+    ) -> [UpcomingCalendarEvent] {
+        let recent = events
+            .filter { $0.endDate < now }
+            .sorted { $0.startDate > $1.startDate }
+            .prefix(recentLimit)
+        let upcoming = events
+            .filter { $0.endDate >= now }
+            .sorted { $0.startDate < $1.startDate }
+            .prefix(upcomingLimit)
+        return Array(recent) + Array(upcoming)
+    }
 }
 
 @MainActor
@@ -57,7 +97,8 @@ final class CalendarAccess {
 
     func refresh() {
         lastRefreshedAt = now()
-        state = switch EKEventStore.authorizationStatus(for: .event) {
+        let previousState = state
+        let refreshedState: State = switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess, .authorized:
             .authorized
         case .denied, .restricted, .writeOnly:
@@ -67,8 +108,12 @@ final class CalendarAccess {
         @unknown default:
             .denied
         }
+        state = refreshedState
 
         if state == .authorized {
+            if previousState != .authorized {
+                eventStore.reset()
+            }
             loadUpcomingEvents()
         } else {
             upcomingEvents = []
@@ -83,6 +128,7 @@ final class CalendarAccess {
             let granted = try await eventStore.requestFullAccessToEvents()
             state = granted ? .authorized : .denied
             if granted {
+                eventStore.reset()
                 loadUpcomingEvents()
             }
         } catch {
@@ -91,48 +137,77 @@ final class CalendarAccess {
         }
     }
 
+    func openSystemSettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
+        ) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     private func loadUpcomingEvents() {
         let now = now()
         let calendar = Calendar.current
-        guard let end = calendar.date(byAdding: .day, value: 7, to: now) else {
+        let start = CalendarMeetingWindow.start(relativeTo: now)
+        guard let end = calendar.date(byAdding: .day, value: 30, to: now) else {
             upcomingEvents = []
             return
         }
 
         let predicate = eventStore.predicateForEvents(
-            withStart: now,
+            withStart: start,
             end: end,
             calendars: nil
         )
-        upcomingEvents = eventStore.events(matching: predicate)
-            .filter { $0.endDate >= now }
+        var seenMeetings = Set<UpcomingMeetingIdentity>()
+        let meetings = eventStore.events(matching: predicate)
+            .filter { $0.endDate >= start }
             .sorted { $0.startDate < $1.startDate }
-            .prefix(3)
-            .map {
-                let eventIdentifier = $0.calendarItemIdentifier
+            .compactMap { event -> UpcomingCalendarEvent? in
+                guard !event.isAllDay, event.status != .canceled else {
+                    return nil
+                }
+
+                let title = event.title?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty ?? "Untitled event"
+                let identity = UpcomingMeetingIdentity(
+                    title: title,
+                    startDate: event.startDate,
+                    endDate: event.endDate
+                )
+                guard seenMeetings.insert(identity).inserted else {
+                    return nil
+                }
+
+                let eventIdentifier = event.calendarItemIdentifier
                 return UpcomingCalendarEvent(
                     snapshot: CalendarEventSnapshot(
                         eventIdentifier: eventIdentifier,
-                        title: $0.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-                            ?? "Untitled event",
-                        startDate: $0.startDate,
-                        endDate: $0.endDate,
+                        title: title,
+                        startDate: event.startDate,
+                        endDate: event.endDate,
                         meetingURL: MeetingLink.first(
-                            explicitURL: $0.url,
-                            location: $0.location,
-                            notes: $0.notes
+                            explicitURL: event.url,
+                            location: event.location,
+                            notes: event.notes
                         ),
-                        attendeeNames: ($0.attendees ?? []).compactMap {
+                        attendeeNames: (event.attendees ?? []).compactMap {
                             $0.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                         },
-                        organizerName: $0.organizer?.name?
+                        organizerName: event.organizer?.name?
                             .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                        recurrenceIdentifier: $0.hasRecurrenceRules ? eventIdentifier : nil,
-                        calendarName: $0.calendar.title
+                        recurrenceIdentifier: event.hasRecurrenceRules ? eventIdentifier : nil,
+                        calendarName: event.calendar.title
                     ),
-                    isAllDay: $0.isAllDay,
+                    isAllDay: false,
                 )
             }
+        upcomingEvents = CalendarMeetingWindow.visibleEvents(
+            meetings,
+            relativeTo: now
+        )
     }
 }
 

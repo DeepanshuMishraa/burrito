@@ -1,3 +1,4 @@
+import AVFoundation
 import EventKit
 import Foundation
 import Testing
@@ -7,6 +8,65 @@ import UserNotifications
 @MainActor
 @Suite("Calendar access")
 struct CalendarAccessTests {
+    @Test("Meeting window keeps the previous 24 hours visible")
+    func meetingWindowIncludesRecentEvents() {
+        let now = Date(timeIntervalSinceReferenceDate: 100_000)
+
+        #expect(
+            CalendarMeetingWindow.start(relativeTo: now)
+                == now.addingTimeInterval(-(24 * 60 * 60))
+        )
+    }
+
+    @Test("Meeting list keeps upcoming events when recent meetings fill the card")
+    func meetingListKeepsUpcomingEvents() {
+        let now = Date(timeIntervalSinceReferenceDate: 100_000)
+        func event(id: String, startOffset: TimeInterval) -> UpcomingCalendarEvent {
+            UpcomingCalendarEvent(
+                snapshot: CalendarEventSnapshot(
+                    eventIdentifier: id,
+                    title: id,
+                    startDate: now.addingTimeInterval(startOffset),
+                    endDate: now.addingTimeInterval(startOffset + 300),
+                    meetingURL: nil,
+                    attendeeNames: [],
+                    organizerName: nil,
+                    recurrenceIdentifier: nil,
+                    calendarName: "Work"
+                ),
+                isAllDay: false
+            )
+        }
+        let recent: [UpcomingCalendarEvent] = [
+            event(id: "recent-1", startOffset: -600),
+            event(id: "recent-2", startOffset: -1_200),
+            event(id: "recent-3", startOffset: -1_800),
+            event(id: "recent-4", startOffset: -2_400),
+        ]
+        let upcoming: [UpcomingCalendarEvent] = [
+            event(id: "upcoming-1", startOffset: 600),
+            event(id: "upcoming-2", startOffset: 1_200),
+        ]
+
+        let visible = CalendarMeetingWindow.visibleEvents(
+            recent + upcoming,
+            relativeTo: now
+        )
+
+        #expect(visible.map { $0.id } == ["recent-1", "upcoming-1", "upcoming-2"])
+    }
+
+    @Test("Meeting identity ignores title casing and surrounding whitespace")
+    func meetingIdentityNormalizesTitles() {
+        let start = Date(timeIntervalSinceReferenceDate: 100)
+        let end = Date(timeIntervalSinceReferenceDate: 200)
+
+        #expect(
+            UpcomingMeetingIdentity(title: " Weekly Sync ", startDate: start, endDate: end)
+                == UpcomingMeetingIdentity(title: "weekly sync", startDate: start, endDate: end)
+        )
+    }
+
     @Test("Calendar database changes refresh upcoming events")
     func eventStoreChangesRefresh() throws {
         let eventStore = EKEventStore()
@@ -98,6 +158,35 @@ struct TranscriptTests {
         ]
 
         #expect(Transcript.latestFirst(segments).map(\.text) == ["Latest", "Middle", "Oldest"])
+    }
+}
+
+@Suite("Audio levels")
+struct AudioLevelTests {
+    @Test("Measures interleaved microphone PCM")
+    func measuresInterleavedPCM() throws {
+        let format = try #require(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: 48_000,
+                channels: 1,
+                interleaved: true
+            )
+        )
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)
+        )
+        buffer.frameLength = 4
+        let audioBuffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        let audioBuffer = try #require(audioBuffers.first)
+        let data = try #require(audioBuffer.mData)
+        let samples = data.assumingMemoryBound(to: Int16.self)
+        samples[0] = 12_000
+        samples[1] = -12_000
+        samples[2] = 12_000
+        samples[3] = -12_000
+
+        #expect(AudioLevel.measure(buffer) > 0.5)
     }
 }
 

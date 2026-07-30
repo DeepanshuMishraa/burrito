@@ -148,7 +148,7 @@ struct PersistenceTests {
 
 @Suite("Recording storage")
 struct RecordingStorageTests {
-    @Test("Successful cleanup removes the selected audio source")
+    @Test("Meeting recordings retain separate call and microphone tracks")
     func removesAudio() throws {
         // Given
         let root = FileManager.default.temporaryDirectory
@@ -156,14 +156,16 @@ struct RecordingStorageTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LocalRecordingFileStore(root: root)
         let files = try store.createSession(id: UUID(), mode: .meeting).get()
-        #expect(files.systemAudioURL == nil)
+        let systemURL = try #require(files.systemAudioURL)
         let microphoneURL = try #require(files.microphoneAudioURL)
+        try Data("system".utf8).write(to: systemURL)
         try Data("microphone".utf8).write(to: microphoneURL)
 
         // When
         try store.removeAudio(for: files).get()
 
         // Then
+        #expect(!FileManager.default.fileExists(atPath: systemURL.path()))
         #expect(!FileManager.default.fileExists(atPath: microphoneURL.path()))
     }
 }

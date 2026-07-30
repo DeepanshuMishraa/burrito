@@ -7,6 +7,7 @@ extension Notification.Name {
     static let burritoNewFolder = Notification.Name("burrito.new-folder")
     static let burritoCommandPalette = Notification.Name("burrito.command-palette")
     static let burritoExportMarkdown = Notification.Name("burrito.export-markdown")
+    static let burritoOpenSettings = Notification.Name("burrito.open-settings")
 }
 
 struct BurritoCommands: Commands {
@@ -39,7 +40,7 @@ struct BurritoCommands: Commands {
 
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") {
-                SettingsWindowController.show()
+                NotificationCenter.default.post(name: .burritoOpenSettings, object: nil)
             }
             .keyboardShortcut(",", modifiers: .command)
         }

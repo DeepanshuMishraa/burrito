@@ -11,6 +11,7 @@ private enum SidebarSelection: Hashable {
     case favorites
     case models
     case templates
+    case settings
     case trash
     case folder(UUID)
 }
@@ -58,8 +59,6 @@ struct ContentView: View {
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
-    @AppStorage("recordingModeDefault") private var defaultRecordingMode =
-        RecordingMode.listenAlong.rawValue
     @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
@@ -88,6 +87,8 @@ struct ContentView: View {
                 false
             case .templates:
                 false
+            case .settings:
+                false
             case .trash:
                 note.deletedAt != nil
             case .folder(let id):
@@ -112,7 +113,10 @@ struct ContentView: View {
     var body: some View {
         Group {
             if !permissionOnboardingCompleted || !permissions.allGranted {
-                PermissionGateView(permissions: permissions) {
+                PermissionGateView(
+                    permissions: permissions,
+                    calendarAccess: calendarAccess
+                ) {
                     permissionOnboardingCompleted = true
                 }
             } else if let activeProcessingNote,
@@ -267,6 +271,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .burritoExportMarkdown)) { _ in
             if let selectedNote { exportMarkdown(selectedNote) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoOpenSettings)) { _ in
+            selectedNoteID = nil
+            sidebarSelection = .settings
+        }
     }
 
     private func finalTranscriptionEngine(for languageIdentifier: String) -> String {
@@ -293,6 +301,8 @@ struct ContentView: View {
                 ModelsView(modelStore: modelStore)
             } else if sidebarSelection == .templates {
                 TemplatesView(templates: templates)
+            } else if sidebarSelection == .settings {
+                BurritoSettingsView(calendarAccess: calendarAccess)
             } else {
                 noteList
             }
@@ -384,6 +394,14 @@ struct ContentView: View {
                         isSelected: sidebarSelection == .trash
                     ) {
                         sidebarSelection = .trash
+                    }
+                    SidebarNavigationButton(
+                        title: "Settings",
+                        systemImage: "gearshape",
+                        count: 0,
+                        isSelected: sidebarSelection == .settings
+                    ) {
+                        sidebarSelection = .settings
                     }
 
                     HStack {
@@ -488,6 +506,7 @@ struct ContentView: View {
                 .hidesEnclosingScrollIndicators()
             }
             .scrollIndicators(.hidden)
+            .hidesEnclosingScrollIndicators()
         }
         .overlay(alignment: .topTrailing) {
             noteListAction
@@ -585,6 +604,7 @@ struct ContentView: View {
         case .favorites: "Favorites"
         case .models: "Models"
         case .templates: "Templates"
+        case .settings: "Settings"
         case .trash: "Trash"
         case .folder(let id): folders.first(where: { $0.id == id })?.name ?? "Folder"
         }
@@ -683,7 +703,8 @@ struct ContentView: View {
         case .toggleSidebar:
             isSidebarVisible.toggle()
         case .settings:
-            SettingsWindowController.show()
+            selectedNoteID = nil
+            sidebarSelection = .settings
         }
     }
 
@@ -712,9 +733,7 @@ struct ContentView: View {
     }
 
     private func openCalendarSettings() {
-        NSWorkspace.shared.open(
-            URL(fileURLWithPath: "/System/Applications/System Settings.app")
-        )
+        calendarAccess.openSystemSettings()
     }
 
     private func relatedNotes(for note: Note) -> [Note] {
@@ -735,19 +754,21 @@ struct ContentView: View {
         if let meetingURL = event.meetingURL {
             NSWorkspace.shared.open(meetingURL)
         }
-        guard let template = templates.first(where: { $0.builtInID == defaultTemplateID })
+        guard let template = templates.first(where: {
+            $0.builtInID == BuiltInTemplate.meeting.rawValue
+        })
+            ?? templates.first(where: { $0.builtInID == defaultTemplateID })
             ?? templates.first
         else {
             recordingDestination = .calendarEvent(event.snapshot)
             return
         }
-        let mode = RecordingMode(rawValue: defaultRecordingMode) ?? .listenAlong
         Task {
             await coordinator.start(
                 options: RecordingOptions(
                     template: template.snapshot,
                     languageIdentifier: defaultLanguage,
-                    mode: mode,
+                    mode: .meeting,
                     retainsAudio: defaultRetainsAudio
                 ),
                 destination: .calendarEvent(event.snapshot),
@@ -1809,6 +1830,7 @@ private struct ScooterGenerationLoader: View {
 
 private struct PermissionGateView: View {
     @Bindable var permissions: PermissionAccess
+    @Bindable var calendarAccess: CalendarAccess
     let continueAction: () -> Void
 
     var body: some View {
@@ -1852,6 +1874,8 @@ private struct PermissionGateView: View {
                     ) {
                         permissions.requestSystemAudio()
                     }
+                    Divider().opacity(0.45)
+                    CalendarPermissionRow(calendarAccess: calendarAccess)
                 }
                 .background(BurritoTheme.raised, in: Rectangle())
                 .overlay {
@@ -1860,7 +1884,11 @@ private struct PermissionGateView: View {
                 }
 
                 HStack {
-                    Text(permissions.allGranted ? "Everything stays on this Mac." : "Grant both permissions to continue.")
+                    Text(
+                        permissions.allGranted
+                            ? "Calendar is optional. Everything stays on this Mac."
+                            : "Grant both audio permissions to continue. Calendar is optional."
+                    )
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()
@@ -1876,6 +1904,85 @@ private struct PermissionGateView: View {
                 Rectangle()
                     .stroke(BurritoTheme.softBorder)
             }
+        }
+    }
+}
+
+private struct CalendarPermissionRow: View {
+    @Bindable var calendarAccess: CalendarAccess
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "calendar")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(
+                    calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
+                )
+                .frame(width: 36, height: 36)
+                .background(BurritoTheme.controlFill, in: Rectangle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Show upcoming meetings")
+                    .font(.system(size: 14, weight: .medium))
+                Text(calendarDetail)
+                    .font(.caption)
+                    .foregroundStyle(
+                        calendarAccess.state == .denied ? Color.red : Color.secondary.opacity(0.7)
+                    )
+            }
+
+            Spacer()
+            calendarAction
+        }
+        .padding(.horizontal, 20)
+        .frame(minHeight: 82)
+    }
+
+    @ViewBuilder
+    private var calendarAction: some View {
+        switch calendarAccess.state {
+        case .authorized:
+            HStack(spacing: 7) {
+                ZStack {
+                    Rectangle().fill(BurritoTheme.accent)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 18, height: 18)
+                Text("Connected")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+        case .requesting:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 100)
+        case .denied:
+            Button("Open Settings") {
+                calendarAccess.openSystemSettings()
+            }
+            .buttonStyle(BurritoActionButtonStyle(prominent: false))
+        case .notDetermined, .failed:
+            Button("Connect Calendar") {
+                Task { await calendarAccess.requestAccess() }
+            }
+            .buttonStyle(BurritoActionButtonStyle(prominent: false))
+        }
+    }
+
+    private var calendarDetail: String {
+        switch calendarAccess.state {
+        case .notDetermined:
+            "Calendar · Optional"
+        case .requesting:
+            "Waiting for macOS permission…"
+        case .authorized:
+            "Calendar access allowed"
+        case .denied:
+            "Access denied — allow Burrito in System Settings."
+        case .failed(let message):
+            "Couldn’t connect: \(message)"
         }
     }
 }
@@ -2315,6 +2422,8 @@ private struct ScrollIndicatorHider: NSViewRepresentable {
             if scrollView.hasHorizontalScroller {
                 scrollView.hasHorizontalScroller = false
             }
+            scrollView.verticalScroller = nil
+            scrollView.horizontalScroller = nil
             scrollView.autohidesScrollers = true
         }
     }
@@ -2503,32 +2612,35 @@ private struct CalendarCard: View {
     private var today: Date { .now }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(today.formatted(.dateTime.day()))
-                    .font(.burritoDisplay(size: 34, weight: .regular))
-                Text(today.formatted(.dateTime.month(.abbreviated)))
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
                     .font(.system(size: 12, weight: .semibold))
-                Text(today.formatted(.dateTime.weekday(.wide)))
-                    .font(.system(size: 11))
+                Text("Recent & upcoming meetings")
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+                Spacer()
                 if calendarAccess.state == .authorized {
-                    Button("Refresh", systemImage: "arrow.clockwise") {
+                    Button {
                         calendarAccess.refresh()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .padding(.top, 8)
                     .help("Refresh upcoming Calendar events")
                 }
             }
-            .frame(width: 112, alignment: .leading)
-            .padding(18)
+            .padding(.horizontal, 18)
+            .frame(height: 46)
 
             Rectangle()
                 .fill(BurritoTheme.softBorder.opacity(0.75))
-                .frame(width: 1)
+                .frame(height: 1)
 
             Group {
                 switch calendarAccess.state {
@@ -2554,16 +2666,17 @@ private struct CalendarCard: View {
                     if calendarAccess.upcomingEvents.isEmpty {
                         CalendarConnectionState(
                             symbol: "calendar.badge.clock",
-                            title: "No upcoming events",
-                            detail: "Your next seven days are clear.",
+                            title: "No recent or upcoming meetings",
+                            detail: "No timed events were found from the last 24 hours onward.",
                             buttonTitle: nil,
                             action: {}
                         )
                     } else {
                         VStack(spacing: 0) {
-                            ForEach(calendarAccess.upcomingEvents) { event in
+                            ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
+                                index, event in
                                 UpcomingEventRow(event: event, startRecording: startRecording)
-                                if event.id != calendarAccess.upcomingEvents.last?.id {
+                                if index < calendarAccess.upcomingEvents.count - 1 {
                                     Rectangle()
                                         .fill(BurritoTheme.softBorder)
                                         .frame(height: 1)
@@ -2591,7 +2704,7 @@ private struct CalendarCard: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 156)
+            .frame(maxWidth: .infinity, minHeight: 110)
         }
         .background(BurritoTheme.raised.opacity(0.58))
         .overlay {
@@ -2647,16 +2760,17 @@ private struct UpcomingEventRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(event.startDate, format: .dateTime.hour().minute())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.startDate.formatted(date: .omitted, time: .shortened))
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                if !Calendar.current.isDateInToday(event.startDate) {
-                    Text(event.startDate, format: .dateTime.weekday(.abbreviated))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-            .frame(width: 54, alignment: .trailing)
+            .frame(width: 76, alignment: .leading)
 
             Rectangle()
                 .fill(BurritoTheme.accent)
@@ -2666,7 +2780,11 @@ private struct UpcomingEventRow: View {
                 Text(event.title)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text(event.isAllDay ? "All day · \(event.calendarName)" : event.calendarName)
+                Text(
+                    event.endDate < .now
+                        ? "Earlier · \(event.calendarName)"
+                        : event.calendarName
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -2680,7 +2798,7 @@ private struct UpcomingEventRow: View {
             }
                 .buttonStyle(HomeToolbarButtonStyle())
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: 58)
     }
 }
 
@@ -5332,8 +5450,14 @@ private struct TranscriptEditor: View {
                         }
                         Spacer()
                         HStack(spacing: 12) {
-                            sourceKey(title: "Computer", tint: BurritoTheme.accent)
-                            sourceKey(title: "You", tint: BurritoTheme.sage)
+                            sourceKey(
+                                title: note.recordingMode == .meeting ? "Person 2" : "Computer",
+                                tint: BurritoTheme.accent
+                            )
+                            sourceKey(
+                                title: note.recordingMode == .meeting ? "Person 1" : "You",
+                                tint: BurritoTheme.sage
+                            )
                         }
                         Text("\(note.transcriptSegments.count) passages")
                             .font(.system(size: 10, weight: .medium))
@@ -5450,8 +5574,8 @@ private struct TranscriptEditor: View {
 
     private func sourceTitle(for source: AudioSource) -> String {
         switch source {
-        case .system: "Computer"
-        case .microphone: "You"
+        case .system: note.recordingMode == .meeting ? "Person 2" : "Computer"
+        case .microphone: note.recordingMode == .meeting ? "Person 1" : "You"
         }
     }
 

@@ -665,7 +665,7 @@ enum RecordingMode: String, CaseIterable, Identifiable, Sendable {
     var description: String {
         switch self {
         case .listenAlong: "Capture audio playing on this Mac."
-        case .meeting: "Capture the room through your microphone."
+        case .meeting: "Capture the call and your microphone separately."
         }
     }
 

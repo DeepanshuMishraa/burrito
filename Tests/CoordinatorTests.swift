@@ -182,7 +182,7 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
         .success(
             RecordingFiles(
                 sessionID: id,
-                systemAudioURL: mode == .listenAlong ? root.appending(path: "system.m4a") : nil,
+                systemAudioURL: root.appending(path: "system.m4a"),
                 microphoneAudioURL: mode == .meeting ? root.appending(path: "microphone.m4a") : nil
             )
         )
@@ -289,7 +289,8 @@ struct CoordinatorTests {
         #expect(capture.stops == 1)
         #expect(note.lifecycle == .ready)
         #expect(note.title == "Generated title")
-        #expect(note.transcriptSegments.count == 1)
+        #expect(note.transcriptSegments.count == 2)
+        #expect(note.transcriptSegments.map(\.source) == [.microphone, .system])
         #expect(fileStore.removeCount.withLock { $0 } == 1)
         #expect(
             feedback.events
@@ -430,7 +431,10 @@ struct CoordinatorTests {
 
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 1)
-        #expect(note.transcriptSegments.map(\.text) == ["Existing text", "Microphone text"])
+        #expect(
+            note.transcriptSegments.map(\.text)
+                == ["Existing text", "Microphone text", "System text"]
+        )
         #expect(note.transcriptSegments.last?.startTime == 4)
         #expect(note.duration >= 10)
         #expect(note.title == "Generated title")
