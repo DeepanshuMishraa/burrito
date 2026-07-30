@@ -1,0 +1,59 @@
+Tests/CoordinatorTests.swift
+  s_9dd6a64ae5544c::t_ae7c68e68a97f0 292-293,434-437
+  s_9dd6a64ae5544c::t_f60da4d64722d0 185
+Sources/RecordingFileStore.swift
+  s_9dd6a64ae5544c::t_f60da4d64722d0 22
+Sources/SystemAudioCapture.swift
+  s_9dd6a64ae5544c::t_86abb6c11dc94b 307-308
+  s_9dd6a64ae5544c::t_f60da4d64722d0 57
+  s_9dd6a64ae5544c::t_cda3c0ad420594 262,264,267-306,311-312
+Sources/CalendarAccess.swift
+  s_9dd6a64ae5544c::t_f60da4d64722d0 33-34,39-53,147,207-210
+  s_9dd6a64ae5544c::t_79c65bc03993db 31-32,35-38,54-55,152,159,165
+  s_9dd6a64ae5544c::t_4679366060afcd 1,140-146
+  s_9dd6a64ae5544c::t_07f32e427ce342 17-30,163-164,167-184,188-190,192-194,196,199,201-202,204
+  s_9dd6a64ae5544c::t_b0923356c88f90 100-101,111,114-116,131,153
+  s_9dd6a64ae5544c::t_43a4be9f6c9936 148
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_79c65bc03993db 2622,2669-2670,2783-2787
+  s_9dd6a64ae5544c::t_a0acbca4f1219f 14,90,274-277,304-305,398-405,509,607,706-707,2425-2426
+  s_9dd6a64ae5544c::t_f60da4d64722d0 757-760,771,5453-5460,5577-5578
+  s_9dd6a64ae5544c::t_4679366060afcd 116-119,736,1833,1877-1878,1887-1891,1911-1987
+  s_9dd6a64ae5544c::t_07f32e427ce342 2615-2620,2623,2625,2627,2629-2630,2633,2638-2639,2643,2676-2677,2679,2707,2763-2764,2766-2771,2773,2801
+  s_9dd6a64ae5544c::t_105817a38c7270 91
+  s_9dd6a64ae5544c::t_49e0ecb7d50b14 1988-1989
+Sources/AppCommands.swift
+  s_9dd6a64ae5544c::t_a0acbca4f1219f 10,43
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_f60da4d64722d0 21-23,25-26,31-39,50-55,57-58
+  s_9dd6a64ae5544c::t_cda3c0ad420594 1,164-189
+  s_9dd6a64ae5544c::t_79c65bc03993db 11-20
+  s_9dd6a64ae5544c::t_3d6ad527c6c748 24,27-30,40-49,56
+  s_9dd6a64ae5544c::t_07f32e427ce342 59-69,190
+  s_9dd6a64ae5544c::t_e20eb677e7683e 191-192
+Sources/Settings.swift
+  s_9dd6a64ae5544c::t_4679366060afcd 5,15,25,109-113,151,160-247
+  s_9dd6a64ae5544c::t_a0acbca4f1219f 33-35,38-39,41-65,68,70-76,78,85
+  s_9dd6a64ae5544c::t_b0923356c88f90 317
+  s_9dd6a64ae5544c::t_c6b8796577ebd2 248
+Sources/Domain.swift
+  s_9dd6a64ae5544c::t_f60da4d64722d0 668
+Tests/PersistenceAndStorageTests.swift
+  s_9dd6a64ae5544c::t_f60da4d64722d0 151,159,161,168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "9fa94b2fc85bfc5e86c7dc85e420195fe1874981",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
