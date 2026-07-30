@@ -1,0 +1,53 @@
+Tests/CoordinatorTests.swift
+  s_9dd6a64ae5544c::t_d9316bc44ea6a0 90,146
+  s_9dd6a64ae5544c::t_d638beecec5e8a 106-131,281-314
+  s_9dd6a64ae5544c::t_492ebd6f496069 315
+Tests/PersistenceAndStorageTests.swift
+  s_9dd6a64ae5544c::t_074c99ea25b979 67-80,85-86
+  s_9dd6a64ae5544c::t_60b7e52087305e 81-84
+Sources/Models.swift
+  s_9dd6a64ae5544c::t_d114234a3914b8 58,85,98
+  s_9dd6a64ae5544c::t_c2698e8d408736 158-177
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_a4b00a3ce5b4e4 268-280
+Sources/ServiceProtocols.swift
+  s_9dd6a64ae5544c::t_d9316bc44ea6a0 43
+docs/research/granola-comparison.md
+  s_9dd6a64ae5544c::t_f12d1391e433a2 27,35
+  s_9dd6a64ae5544c::t_09902eae64abce 28,33
+  s_9dd6a64ae5544c::t_a029f566b2b6cf 1-2,5-26,29-32,34,36-198
+  s_9dd6a64ae5544c::t_05baac02c92f7d 3-4
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_f237b4d05a06e2 10
+  s_9dd6a64ae5544c::t_6e5eac092c8bab 7-9
+  s_9dd6a64ae5544c::t_ebd046fc804203 35,39-41,65-78
+  s_9dd6a64ae5544c::t_d9316bc44ea6a0 283,292-294,299-300,304-307
+  s_9dd6a64ae5544c::t_de49c83b9c8432 79-80
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_4fe3ef064680f0 2967,4270-4338,4340-4345,4348-4354,4356-4358,4363-4498
+  s_9dd6a64ae5544c::t_18a40b0f7dc543 4339,4346-4347,4355,4359-4362
+  s_9dd6a64ae5544c::t_d8d9e9733e6a85 720,831,2964-2966
+  s_9dd6a64ae5544c::t_8f3ace47854d40 4610-4612,4620-4623,4627-4630,4689,4820-4829,4842
+README.md
+  s_9dd6a64ae5544c::t_b181f799d01d85 10
+Tests/MarkdownDocumentTests.swift
+  s_9dd6a64ae5544c::t_18a40b0f7dc543 60-84
+Sources/AppCoordinator.swift
+  s_9dd6a64ae5544c::t_8af3e259018984 346,357,408,419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "46ffb747936dd8587f86d7da968710f9bd1be909",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
