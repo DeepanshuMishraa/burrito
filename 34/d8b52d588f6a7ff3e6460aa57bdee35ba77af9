@@ -1,0 +1,59 @@
+Sources/Models.swift
+  s_9dd6a64ae5544c::t_c67a20964ebfd6 78,92-93,120,148-156
+  s_9dd6a64ae5544c::t_0ca659c263f923 157-158
+Sources/CalendarAccess.swift
+  s_9dd6a64ae5544c::t_176251297e4df3 88
+  s_9dd6a64ae5544c::t_c67a20964ebfd6 5,7-13,87,89-107,114-136
+  s_9dd6a64ae5544c::t_f4c8eceb2aafd0 137-138
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_4b03c5693f9b39 227-273
+Sources/AppCoordinator.swift
+  s_9dd6a64ae5544c::t_e38a3d1dcc0d3f 79,137,142-143,365,368,437,440,488-494,498-503
+  s_9dd6a64ae5544c::t_95b8c53650bf2d 375,380-387,447-448,453-460
+  s_9dd6a64ae5544c::t_b78da5822a6d43 376-379,449-452,495-497,504-515
+  s_9dd6a64ae5544c::t_0ba28615c2a30e 349,361,369,421,433,441
+  s_9dd6a64ae5544c::t_1aee59aba9d052 516
+Tests/PersistenceAndStorageTests.swift
+  s_9dd6a64ae5544c::t_4b03c5693f9b39 87,97-113,118,121-122
+  s_9dd6a64ae5544c::t_9fdc900ffe2c12 88-96,114-117,119-120
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_c67a20964ebfd6 35-36,40-41,68-72,75-76,78-82,298,308-312,325-326
+Tests/CoordinatorTests.swift
+  s_9dd6a64ae5544c::t_b78da5822a6d43 373-378
+  s_9dd6a64ae5544c::t_a68580e2ff0f15 91,109,118,123,151
+  s_9dd6a64ae5544c::t_4b03c5693f9b39 200-213,335-372
+  s_9dd6a64ae5544c::t_01e7c17fb17a49 379-380
+Sources/Domain.swift
+  s_9dd6a64ae5544c::t_c67a20964ebfd6 687-715,718,725-726,731-734
+README.md
+  s_9dd6a64ae5544c::t_8a4fbe2ce0ac64 11-12
+Sources/ServiceProtocols.swift
+  s_9dd6a64ae5544c::t_c67a20964ebfd6 44
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_50874622a94d37 59-63,464,732-757
+  s_9dd6a64ae5544c::t_f8ab4dcd01a4ed 129,155,720-731
+  s_9dd6a64ae5544c::t_d10f77b6309cfb 880-881
+  s_9dd6a64ae5544c::t_5336d6963e1a44 135,4674,4680,4755-4760
+  s_9dd6a64ae5544c::t_43836e4e83c2b6 2500,2636,2665-2670
+  s_9dd6a64ae5544c::t_b2b54a1f9dc097 758,3457,4594-4669,4761
+  s_9dd6a64ae5544c::t_cfd39c691f41b0 3371,3407,3409-3413,3424-3456
+  s_9dd6a64ae5544c::t_9c883445df1d99 759
+  s_9dd6a64ae5544c::t_9a6b6444a49c5f 3458
+  s_9dd6a64ae5544c::t_e5346a8f492d49 4762
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "34d8b52d588f6a7ff3e6460aa57bdee35ba77af9",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
