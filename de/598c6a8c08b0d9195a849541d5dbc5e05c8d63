@@ -1,0 +1,32 @@
+Sources/CalendarAccess.swift
+  s_9dd6a64ae5544c::t_47c4023682541e 27-30,33,35-48,52-57,59,94-95
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_bca1c95949c730 2515-2524
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_e15189e29fe30d 1,7-33
+  s_5682d392cf810f::t_1de5e8a57d911c 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "de598c6a8c08b0d9195a849541d5dbc5e05c8d63",
+  "prompts": {},
+  "sessions": {
+    "s_5682d392cf810f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb2af-3569-7850-8d0a-88ed697eb08c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    },
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
