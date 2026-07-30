@@ -57,4 +57,29 @@ struct MarkdownDocumentTests {
             ]
         )
     }
+
+    @Test("Parses human Markdown into the rendered note structure")
+    func parsesHumanNotes() {
+        let document = MarkdownDocument.parse(
+            """
+            ## Questions
+
+            - Is **Friday** confirmed?
+            - Who owns the rollout?
+
+            > Follow up with Priya.
+            """
+        )
+
+        #expect(
+            document.blocks == [
+                .heading(level: 2, text: "Questions"),
+                .unorderedList([
+                    "Is **Friday** confirmed?",
+                    "Who owns the rollout?",
+                ]),
+                .quote("Follow up with Priya."),
+            ]
+        )
+    }
 }

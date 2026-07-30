@@ -64,6 +64,26 @@ struct PersistenceTests {
         #expect(note.notesMayBeOutdated)
     }
 
+    @Test("Human notes persist independently from generated notes")
+    func humanNotesRemainIndependent() {
+        let note = Note(
+            markdownBody: "## Enhanced notes\n\nGenerated summary.",
+            userNotes: "- Ask about the launch date",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: false
+        )
+
+        note.markdownBody = "## Enhanced notes\n\nRegenerated summary."
+
+        #expect(note.userNotes == "- Ask about the launch date")
+        #expect(note.markdownBody == "## Enhanced notes\n\nRegenerated summary.")
+        #expect(note.exportedMarkdown.contains("## Your notes"))
+        #expect(note.exportedMarkdown.contains("- Ask about the launch date"))
+        #expect(note.exportedMarkdown.contains("## Burrito notes"))
+        #expect(note.exportedMarkdown.contains("Regenerated summary."))
+    }
+
     @Test("Seed data upgrades untouched legacy built-in prompts")
     func upgradesLegacyBuiltInPrompts() throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)

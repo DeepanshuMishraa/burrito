@@ -55,6 +55,7 @@ final class Note {
     var processingStageRawValue: String?
     var title: String
     var markdownBody: String
+    var userNotes: String = ""
     var transcriptData: Data
     var createdAt: Date
     var updatedAt: Date
@@ -81,6 +82,7 @@ final class Note {
         lifecycle: NoteLifecycle = .recording,
         title: String = "New Recording",
         markdownBody: String = "",
+        userNotes: String = "",
         transcriptSegments: [TranscriptSegment] = [],
         createdAt: Date = .now,
         languageIdentifier: String,
@@ -93,6 +95,7 @@ final class Note {
         self.processingStageRawValue = nil
         self.title = title
         self.markdownBody = markdownBody
+        self.userNotes = userNotes
         self.transcriptData = (try? JSONEncoder().encode(transcriptSegments)) ?? Data()
         self.createdAt = createdAt
         self.updatedAt = createdAt
@@ -150,6 +153,26 @@ final class Note {
 
     var notesMayBeOutdated: Bool {
         transcriptRevision != generatedFromTranscriptRevision
+    }
+
+    var exportedMarkdown: String {
+        let human = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generated = markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !human.isEmpty else { return generated }
+        guard !generated.isEmpty else {
+            return "## Your notes\n\n\(human)"
+        }
+        return """
+            ## Your notes
+
+            \(human)
+
+            ---
+
+            ## Burrito notes
+
+            \(generated)
+            """
     }
 
     func replaceTranscript(with segments: [TranscriptSegment], marksEdited: Bool) {

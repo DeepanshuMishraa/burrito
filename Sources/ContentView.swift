@@ -717,7 +717,7 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(note.title).md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try note.markdownBody.write(to: url, atomically: true, encoding: .utf8)
+            try note.exportedMarkdown.write(to: url, atomically: true, encoding: .utf8)
         } catch {
             let alert = NSAlert(error: error)
             alert.runModal()
@@ -828,6 +828,7 @@ private struct CommandPaletteView: View {
             candidates.filter {
                 $0.title.localizedStandardContains(normalizedQuery)
                     || $0.markdownBody.localizedStandardContains(normalizedQuery)
+                    || $0.userNotes.localizedStandardContains(normalizedQuery)
                     || Transcript.rendered($0.transcriptSegments)
                         .localizedStandardContains(normalizedQuery)
             }
@@ -2960,6 +2961,10 @@ private struct NoteRow: View {
         if !body.isEmpty {
             return body.replacingOccurrences(of: "#", with: "")
         }
+        let humanNotes = note.userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !humanNotes.isEmpty {
+            return humanNotes.replacingOccurrences(of: "#", with: "")
+        }
         return note.transcriptSegments.first?.text ?? "Recording ready for your notes."
     }
 
@@ -4262,6 +4267,235 @@ private struct MarkdownNoteContent: View {
     }
 }
 
+private struct NoteSourceLabel: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    var isHuman = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+            Text(title.uppercased())
+                .fontWeight(.semibold)
+            Text(detail)
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .tracking(0.8)
+        .foregroundStyle(isHuman ? BurritoTheme.accent : Color.secondary)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct RecordingNotepadView: View {
+    @Binding var title: String
+    @Binding var userNotes: String
+    let elapsed: TimeInterval
+    let systemLevel: Double
+    let microphoneLevel: Double
+
+    @FocusState private var notesFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 7, height: 7)
+                    Text("RECORDING")
+                        .fontWeight(.semibold)
+                }
+                Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
+                    .monospacedDigit()
+                Spacer()
+                RecordingSourceLevel(
+                    title: "MAC",
+                    systemImage: "speaker.wave.2.fill",
+                    level: systemLevel
+                )
+                RecordingSourceLevel(
+                    title: "MIC",
+                    systemImage: "mic.fill",
+                    level: microphoneLevel
+                )
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: 820)
+            .padding(.horizontal, 44)
+            .padding(.top, 28)
+            .frame(maxWidth: .infinity)
+
+            VStack(alignment: .leading, spacing: 18) {
+                TextField("Untitled note", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(.burritoDisplay(size: 34, weight: .regular))
+
+                NoteSourceLabel(
+                    title: "Your notes",
+                    detail: "Markdown · guides what Burrito writes",
+                    systemImage: "person.fill",
+                    isHuman: true
+                )
+
+                ZStack(alignment: .topLeading) {
+                    if userNotes.isEmpty {
+                        Text("Write Markdown—fragments, questions, headings, and lists are enough.")
+                            .font(.system(size: 15, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextEditor(text: $userNotes)
+                        .font(.system(size: 15, design: .monospaced))
+                        .lineSpacing(5)
+                        .scrollContentBackground(.hidden)
+                        .focused($notesFocused)
+                        .accessibilityLabel("Your Markdown meeting notes")
+                        .accessibilityHint(
+                            "Markdown is rendered after recording and guides Burrito's generated result"
+                        )
+                }
+                .padding(14)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            notesFocused
+                                ? BurritoTheme.accent.opacity(0.65)
+                                : BurritoTheme.softBorder,
+                            lineWidth: notesFocused ? 1.25 : 1
+                        )
+                }
+            }
+            .frame(maxWidth: 820, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 44)
+            .padding(.top, 24)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            notesFocused = true
+        }
+    }
+}
+
+private struct RecordingSourceLevel: View {
+    let title: String
+    let systemImage: String
+    let level: Double
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+            Text(title)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(BurritoTheme.softBorder)
+                    Rectangle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: proxy.size.width * min(1, max(0, level)))
+                }
+            }
+            .frame(width: 34, height: 3)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) audio level")
+        .accessibilityValue("\(Int(min(1, max(0, level)) * 100)) percent")
+    }
+}
+
+private struct NoteProvenanceView: View {
+    let userNotes: String
+    let generatedNotes: String
+
+    private var hasHumanNotes: Bool {
+        !userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if hasHumanNotes {
+                NoteSourceLabel(
+                    title: "Your notes",
+                    detail: "Written by you",
+                    systemImage: "person.fill",
+                    isHuman: true
+                )
+                MarkdownNoteContent(markdown: userNotes)
+                    .padding(20)
+                    .background(BurritoTheme.raised, in: Rectangle())
+                    .overlay {
+                        Rectangle().stroke(BurritoTheme.accent.opacity(0.22))
+                    }
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(height: 1)
+                    .padding(.vertical, 4)
+            }
+
+            NoteSourceLabel(
+                title: "Burrito notes",
+                detail: "Generated on this Mac",
+                systemImage: "sparkles"
+            )
+            MarkdownNoteContent(markdown: generatedNotes)
+        }
+    }
+}
+
+private struct NoteEditingView: View {
+    @Binding var userNotes: String
+    @Binding var generatedNotes: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NoteSourceLabel(
+                title: "Your notes",
+                detail: "Used as guidance when regenerating",
+                systemImage: "person.fill",
+                isHuman: true
+            )
+            TextEditor(text: $userNotes)
+                .font(.system(size: 14, design: .monospaced))
+                .lineSpacing(5)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 110, maxHeight: 190)
+                .padding(12)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                }
+
+            NoteSourceLabel(
+                title: "Burrito notes",
+                detail: "Generated, then editable by you",
+                systemImage: "sparkles"
+            )
+            TextEditor(text: $generatedNotes)
+                .font(.system(size: 14, design: .monospaced))
+                .lineSpacing(5)
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: .infinity)
+                .padding(12)
+                .background(BurritoTheme.controlFill, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder)
+                }
+        }
+        .frame(maxWidth: 820, maxHeight: .infinity)
+        .padding(.horizontal, 44)
+        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
@@ -4373,7 +4607,9 @@ private struct NoteDetailView: View {
             }
 
             if isRecordingThisNote {
-                ActiveRecordingStage(
+                RecordingNotepadView(
+                    title: titleBinding,
+                    userNotes: userNotesBinding,
                     elapsed: coordinator.elapsed,
                     systemLevel: coordinator.activity.system,
                     microphoneLevel: coordinator.activity.microphone
@@ -4381,18 +4617,17 @@ private struct NoteDetailView: View {
                 .transition(.opacity)
             } else if selectedTab == 0 {
                 if isEditingMarkdown {
-                    TextEditor(text: notesBinding)
-                        .font(.system(size: 14, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .lineSpacing(5)
-                        .frame(maxWidth: 820)
-                        .padding(.horizontal, 44)
-                        .padding(.vertical, 24)
-                        .frame(maxWidth: .infinity)
+                    NoteEditingView(
+                        userNotes: userNotesBinding,
+                        generatedNotes: notesBinding
+                    )
                         .transition(.opacity)
                 } else {
                     ScrollView {
-                        MarkdownNoteContent(markdown: note.markdownBody)
+                        NoteProvenanceView(
+                            userNotes: note.userNotes,
+                            generatedNotes: note.markdownBody
+                        )
                             .frame(maxWidth: 820, alignment: .leading)
                             .padding(.horizontal, 44)
                             .padding(.vertical, 30)
@@ -4451,7 +4686,7 @@ private struct NoteDetailView: View {
                         arrowEdge: .top
                     ) {
                         BurritoPopoverPanel {
-                            ShareLink(item: note.markdownBody) {
+                            ShareLink(item: note.exportedMarkdown) {
                                 BurritoPopoverRowLabel(
                                     title: "Share",
                                     systemImage: "paperplane"
@@ -4582,6 +4817,16 @@ private struct NoteDetailView: View {
         )
     }
 
+    private var userNotesBinding: Binding<String> {
+        Binding(
+            get: { note.userNotes },
+            set: {
+                note.userNotes = $0
+                note.updatedAt = .now
+            }
+        )
+    }
+
     private func regenerate() {
         Task {
             await coordinator.generate(
@@ -4594,7 +4839,7 @@ private struct NoteDetailView: View {
 
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(note.markdownBody, forType: .string)
+        NSPasteboard.general.setString(note.exportedMarkdown, forType: .string)
         copyFeedbackTask?.cancel()
         withAnimation(.smooth(duration: 0.18)) {
             didCopyNotes = true

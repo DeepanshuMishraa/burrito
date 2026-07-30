@@ -40,6 +40,7 @@ protocol NoteGenerating: Sendable {
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError>
     func generate(
         segments: [TranscriptSegment],
+        userNotes: String,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError>

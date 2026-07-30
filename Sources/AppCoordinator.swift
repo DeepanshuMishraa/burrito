@@ -343,6 +343,7 @@ final class AppCoordinator {
         let oldTitle = note.title
         let oldBody = note.markdownBody
         let transcriptSegments = note.transcriptSegments
+        let userNotes = note.userNotes
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -353,6 +354,7 @@ final class AppCoordinator {
 
         async let generatedResult = generator.generate(
             segments: transcriptSegments,
+            userNotes: userNotes,
             template: template,
             languageIdentifier: languageIdentifier
         )
@@ -403,6 +405,7 @@ final class AppCoordinator {
         let existingBody = note.markdownBody
         let hadUserEdits = note.userEditedNotes
         let completeTranscript = note.transcriptSegments
+        let userNotes = note.userNotes
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -413,6 +416,7 @@ final class AppCoordinator {
 
         async let generatedResult = generator.generate(
             segments: segments,
+            userNotes: userNotes,
             template: template,
             languageIdentifier: languageIdentifier
         )

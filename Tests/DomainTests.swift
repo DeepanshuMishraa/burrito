@@ -265,6 +265,19 @@ struct TemplateTests {
         #expect(prompt.contains(snapshot.instructions))
     }
 
+    @Test("Final generation keeps human notes separate from transcript facts")
+    func labelsHumanNotesAsPrioritySource() {
+        let prompt = GenerationPrompt.finalSource(
+            digest: "The team discussed release timing.",
+            userNotes: "- Ask Priya whether Friday is firm."
+        )
+
+        #expect(prompt.contains("HUMAN NOTES"))
+        #expect(prompt.contains("- Ask Priya whether Friday is firm."))
+        #expect(prompt.contains("TRANSCRIPT DIGEST"))
+        #expect(prompt.contains("The team discussed release timing."))
+    }
+
     @Test("Generated titles discard labels and generic placeholders")
     func sanitizesGeneratedTitles() {
         #expect(GeneratedTitle.sanitized("New Recording: Phone Blocks") == "Phone Blocks")

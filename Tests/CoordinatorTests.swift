@@ -87,6 +87,7 @@ private struct GeneratorStub: NoteGenerating {
 
     func generate(
         segments: [TranscriptSegment],
+        userNotes: String,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -99,6 +100,32 @@ private struct GeneratorStub: NoteGenerating {
         languageIdentifier: String
     ) async -> Result<String, BurritoError> {
         .success(suggestedTitle)
+    }
+}
+
+private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
+    let receivedUserNotes = Mutex<[String]>([])
+
+    func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func generate(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        template: TemplateSnapshot,
+        languageIdentifier: String
+    ) async -> Result<GeneratedNote, BurritoError> {
+        receivedUserNotes.withLock { $0.append(userNotes) }
+        return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        .success("Guided meeting")
     }
 }
 
@@ -116,6 +143,7 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
 
     func generate(
         segments: [TranscriptSegment],
+        userNotes: String,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -248,6 +276,41 @@ struct CoordinatorTests {
             feedback.events
                 == ["recordingStarted", "recordingStopped", "noteReady:Generated title"]
         )
+    }
+
+    @Test("Human notes written during capture guide generation and remain intact")
+    func humanNotesGuideGeneration() async throws {
+        let context = try makeContext()
+        let generator = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "text.alignleft",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        note.userNotes = "- The launch date is the key decision."
+        await coordinator.stop(context: context)
+
+        #expect(
+            generator.receivedUserNotes.withLock { $0 }
+                == ["- The launch date is the key decision."]
+        )
+        #expect(note.userNotes == "- The launch date is the key decision.")
+        #expect(note.markdownBody == "# Generated")
     }
 
     @Test("Continuing a note appends transcript and duration without creating another note")
