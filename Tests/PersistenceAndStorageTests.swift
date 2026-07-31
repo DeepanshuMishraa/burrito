@@ -6,6 +6,107 @@ import Testing
 @MainActor
 @Suite("Persistence")
 struct PersistenceTests {
+    @Test("A versioned archive round-trips notes, transcripts, folders, and templates")
+    func archiveRoundTrip() throws {
+        let folder = Folder(
+            id: UUID(uuidString: "35DD3525-1105-496B-AB20-0910859B365D") ?? UUID(),
+            name: "Research",
+            order: 2
+        )
+        let template = NoteTemplate(
+            id: UUID(uuidString: "67BF505E-958E-43D4-89AD-0FD62D729F3D") ?? UUID(),
+            name: "Customer interview",
+            symbol: "person.2",
+            instructions: "Capture objections.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 80)
+        )
+        let note = Note(
+            id: UUID(uuidString: "FFB42F83-817F-462A-B302-D4AA3BE25626") ?? UUID(),
+            lifecycle: .ready,
+            title: "Pricing interview",
+            markdownBody: "## Decision\n\nKeep the free plan.",
+            userNotes: "- Follow up with Sam",
+            transcriptSegments: [
+                TranscriptSegment(
+                    source: .microphone,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The free plan matters.",
+                    speakerName: "Sam"
+                ),
+            ],
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template.snapshot,
+            recordingMode: .meeting,
+            retainsAudio: true
+        )
+        note.folder = folder
+        note.isFavorite = true
+        note.updatedAt = Date(timeIntervalSinceReferenceDate: 200)
+        note.duration = 95
+
+        let archive = BurritoArchive.capture(
+            notes: [note],
+            folders: [folder],
+            templates: [template],
+            exportedAt: Date(timeIntervalSinceReferenceDate: 300)
+        )
+        let decoded = try BurritoArchive.decode(archive.encoded())
+
+        #expect(decoded.version == 1)
+        #expect(decoded.folders.first?.name == "Research")
+        #expect(decoded.templates.first?.instructions == "Capture objections.")
+        #expect(decoded.notes.first?.folderID == folder.id)
+        #expect(decoded.notes.first?.transcriptSegments == note.transcriptSegments)
+        #expect(decoded.notes.first?.markdownBody == note.markdownBody)
+        #expect(decoded.notes.first?.isFavorite == true)
+    }
+
+    @Test("Restoring the same archive twice preserves local data and skips duplicates")
+    func archiveRestoreIsDuplicateSafe() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let folder = Folder(name: "Imported")
+        let template = NoteTemplate(
+            name: "Interview",
+            symbol: "person.2",
+            instructions: "Capture themes."
+        )
+        let note = Note(
+            lifecycle: .ready,
+            title: "Original title",
+            markdownBody: "## Summary\n\nImported.",
+            languageIdentifier: "en-US",
+            template: template.snapshot,
+            retainsAudio: false
+        )
+        note.folder = folder
+        let archive = BurritoArchive.capture(
+            notes: [note],
+            folders: [folder],
+            templates: [template]
+        )
+
+        let first = try archive.restore(into: context)
+        let imported = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        imported.title = "Locally renamed"
+        try context.save()
+        let second = try archive.restore(into: context)
+
+        #expect(first == ArchiveRestoreReport(notesInserted: 1, foldersInserted: 1, templatesInserted: 1, duplicatesSkipped: 0))
+        #expect(second.duplicatesSkipped == 3)
+        #expect(try context.fetch(FetchDescriptor<Note>()).count == 1)
+        #expect(imported.title == "Locally renamed")
+        #expect(imported.folder?.name == "Imported")
+    }
+
     @Test("Folders, favorites, Trash, and restore keep migration-safe defaults")
     func libraryOperations() throws {
         // Given
@@ -148,6 +249,137 @@ struct PersistenceTests {
 
 @Suite("Recording storage")
 struct RecordingStorageTests {
+    @MainActor
+    @Test("A library package restores retained audio without overwriting duplicates")
+    func restoresCompleteLibraryPackage() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appending(path: "BurritoRestoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let sourceRoot = temporaryRoot.appending(path: "Source", directoryHint: .isDirectory)
+        let restoredRoot = temporaryRoot.appending(path: "Restored", directoryHint: .isDirectory)
+        let backup = temporaryRoot.appending(path: "Backup", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let sourceStore = LocalRecordingFileStore(root: sourceRoot)
+        let note = Note(
+            lifecycle: .ready,
+            title: "Audio restore",
+            markdownBody: "Complete.",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            recordingMode: .meeting,
+            retainsAudio: true
+        )
+        let sourceFiles = try sourceStore.createSession(id: note.id, mode: .meeting).get()
+        let sourceSystemURL = try #require(sourceFiles.systemAudioURL)
+        let sourceMicrophoneURL = try #require(sourceFiles.microphoneAudioURL)
+        try Data("system".utf8).write(to: sourceSystemURL)
+        try Data("microphone".utf8).write(to: sourceMicrophoneURL)
+        note.systemAudioRelativePath = sourceStore.relativePath(for: sourceSystemURL)
+        note.microphoneAudioRelativePath = sourceStore.relativePath(for: sourceMicrophoneURL)
+        _ = try BurritoArchivePackage.export(
+            notes: [note],
+            folders: [],
+            templates: [],
+            recordingStore: sourceStore,
+            to: backup
+        )
+
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let restoredStore = LocalRecordingFileStore(root: restoredRoot)
+        let first = try BurritoArchivePackage.restore(
+            from: backup,
+            into: context,
+            recordingStore: restoredStore
+        )
+        let restoredNote = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        let restoredSystemPath = try #require(restoredNote.systemAudioRelativePath)
+        restoredNote.title = "Keep this local title"
+        try context.save()
+        let second = try BurritoArchivePackage.restore(
+            from: backup,
+            into: context,
+            recordingStore: restoredStore
+        )
+
+        #expect(first.notesInserted == 1)
+        #expect(first.audioFilesRestored == 2)
+        #expect(try Data(contentsOf: restoredStore.url(forRelativePath: restoredSystemPath)) == Data("system".utf8))
+        #expect(second.notesInserted == 0)
+        #expect(second.audioFilesRestored == 0)
+        #expect(restoredNote.title == "Keep this local title")
+    }
+
+    @Test("A library package contains its archive, readable notes, and retained audio")
+    func exportsCompleteLibraryPackage() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appending(path: "BurritoExportTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let recordingRoot = temporaryRoot.appending(path: "Recordings", directoryHint: .isDirectory)
+        let destination = temporaryRoot.appending(path: "Backup", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let store = LocalRecordingFileStore(root: recordingRoot)
+        let note = Note(
+            lifecycle: .ready,
+            title: "Planning / review",
+            markdownBody: "## Decision\n\nShip the backup.",
+            userNotes: "- Verify restore",
+            transcriptSegments: [
+                TranscriptSegment(
+                    source: .microphone,
+                    startTime: 1,
+                    duration: 2,
+                    text: "Let’s ship it.",
+                    speakerName: "Ari"
+                ),
+            ],
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            recordingMode: .meeting,
+            retainsAudio: true
+        )
+        let files = try store.createSession(id: note.id, mode: .meeting).get()
+        let systemURL = try #require(files.systemAudioURL)
+        let microphoneURL = try #require(files.microphoneAudioURL)
+        try Data("system".utf8).write(to: systemURL)
+        try Data("microphone".utf8).write(to: microphoneURL)
+        note.systemAudioRelativePath = store.relativePath(for: systemURL)
+        note.microphoneAudioRelativePath = store.relativePath(for: microphoneURL)
+
+        let report = try BurritoArchivePackage.export(
+            notes: [note],
+            folders: [],
+            templates: [],
+            recordingStore: store,
+            to: destination
+        )
+        let archive = try BurritoArchive.decode(
+            Data(contentsOf: destination.appending(path: "burrito.json"))
+        )
+        let markdown = try String(
+            contentsOf: try #require(report.markdownFiles.first),
+            encoding: .utf8
+        )
+
+        #expect(report.notesExported == 1)
+        #expect(report.audioFilesExported == 2)
+        #expect(markdown.contains("Ship the backup."))
+        #expect(markdown.contains("Ari: Let’s ship it."))
+        #expect(archive.notes.first?.systemAudioArchivePath != nil)
+        #expect(archive.notes.first?.microphoneAudioArchivePath != nil)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: destination.appending(path: "Audio/\(note.id.uuidString)/system.m4a").path()
+            )
+        )
+    }
+
     @Test("Meeting recordings retain separate call and microphone tracks")
     func removesAudio() throws {
         // Given

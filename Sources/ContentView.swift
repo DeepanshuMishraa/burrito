@@ -60,6 +60,7 @@ struct ContentView: View {
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
+    @State private var ownershipStatus: OwnershipOperationStatus?
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
@@ -360,7 +361,12 @@ struct ContentView: View {
                     selectedNoteID = citation.noteID
                 }
             } else if sidebarSelection == .settings {
-                BurritoSettingsView(calendarAccess: calendarAccess)
+                BurritoSettingsView(
+                    calendarAccess: calendarAccess,
+                    exportLibrary: exportLibrary,
+                    importLibrary: importLibrary,
+                    ownershipStatus: ownershipStatus
+                )
             } else {
                 noteList
             }
@@ -917,6 +923,77 @@ struct ContentView: View {
             let alert = NSAlert(error: error)
             alert.runModal()
         }
+    }
+
+    private func exportLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Export Burrito Library"
+        panel.message = "Choose where Burrito should create the backup folder."
+        panel.prompt = "Export Here"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let parent = panel.url else { return }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HHmm"
+        let baseName = "Burrito Export \(formatter.string(from: .now))"
+        var destination = parent.appending(path: baseName, directoryHint: .isDirectory)
+        if FileManager.default.fileExists(atPath: destination.path()) {
+            destination = parent.appending(
+                path: "\(baseName) \(UUID().uuidString.prefix(4))",
+                directoryHint: .isDirectory
+            )
+        }
+
+        do {
+            let report = try BurritoArchivePackage.export(
+                notes: notes,
+                folders: folders,
+                templates: templates,
+                recordingStore: LocalRecordingFileStore(),
+                to: destination
+            )
+            ownershipStatus = .success(
+                "Exported \(report.notesExported) notes and \(report.audioFilesExported) audio files to \(destination.lastPathComponent)."
+            )
+            NSWorkspace.shared.activateFileViewerSelecting([destination])
+        } catch {
+            ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+        }
+    }
+
+    private func importLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Burrito Backup"
+        panel.message = "Choose a Burrito export folder or its burrito.json file."
+        panel.prompt = "Import"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+
+        do {
+            let report = try BurritoArchivePackage.restore(
+                from: source,
+                into: modelContext,
+                recordingStore: LocalRecordingFileStore()
+            )
+            ownershipStatus = .success(
+                "Imported \(report.notesInserted) notes, \(report.foldersInserted) folders, \(report.templatesInserted) templates, and \(report.audioFilesRestored) audio files. Skipped \(report.duplicatesSkipped) existing items."
+            )
+        } catch {
+            ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+        }
+    }
+
+    private func ownershipRecoveryMessage(for error: Error) -> String {
+        if let archiveError = error as? BurritoArchiveError {
+            return archiveError.recoveryMessage
+        }
+        return "Burrito could not complete the library operation: \(error.localizedDescription) Existing notes were not changed."
     }
 }
 

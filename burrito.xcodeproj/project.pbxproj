@@ -20,6 +20,7 @@
 		62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A516A8DE5CC1A96513E93F1E /* AppIcon.icon */; };
 		63D6B5E998CF954795A8BBB2 /* BurritoUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */; };
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
+		73A16A74514E4D2097C8B64A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D718142B54B4D49A125A421 /* Ownership.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
@@ -69,6 +70,7 @@
 		7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Scooter-loader.json"; sourceTree = "<group>"; };
 		80312D2153FF4924DF498F98 /* CoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorTests.swift; sourceTree = "<group>"; };
 		8932061A0CA5A58DCC622228 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
+		8D718142B54B4D49A125A421 /* Ownership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ownership.swift; sourceTree = "<group>"; };
 		9F27CD15A054415C3F40F273 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
+				8D718142B54B4D49A125A421 /* Ownership.swift */,
 				0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */,
 				7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */,
 				728318FB3CB86222B61B8235 /* RecordingFileStore.swift */,
@@ -275,6 +278,7 @@
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
+				73A16A74514E4D2097C8B64A /* Ownership.swift in Sources */,
 				5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */,
 				BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */,
 				CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */,

@@ -1,5 +1,31 @@
 import SwiftUI
 
+enum OwnershipOperationStatus: Equatable {
+    case success(String)
+    case failure(String)
+
+    var message: String {
+        switch self {
+        case .success(let message), .failure(let message):
+            message
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .success: "checkmark.circle"
+        case .failure: "exclamationmark.triangle"
+        }
+    }
+
+    var isFailure: Bool {
+        if case .failure = self {
+            return true
+        }
+        return false
+    }
+}
+
 enum SettingsTab: String, CaseIterable, Identifiable {
     case capture
     case connections
@@ -32,6 +58,9 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct BurritoSettingsView: View {
     @Bindable var calendarAccess: CalendarAccess
+    let exportLibrary: () -> Void
+    let importLibrary: () -> Void
+    let ownershipStatus: OwnershipOperationStatus?
     @State private var selected = SettingsTab.capture
 
     var body: some View {
@@ -67,7 +96,13 @@ struct BurritoSettingsView: View {
                 }
                 .padding(.bottom, 28)
 
-                SettingsPane(tab: selected, calendarAccess: calendarAccess)
+                SettingsPane(
+                    tab: selected,
+                    calendarAccess: calendarAccess,
+                    exportLibrary: exportLibrary,
+                    importLibrary: importLibrary,
+                    ownershipStatus: ownershipStatus
+                )
             }
             .frame(maxWidth: 780, alignment: .leading)
             .padding(.horizontal, 38)
@@ -83,6 +118,9 @@ struct BurritoSettingsView: View {
 private struct SettingsPane: View {
     let tab: SettingsTab
     @Bindable var calendarAccess: CalendarAccess
+    let exportLibrary: () -> Void
+    let importLibrary: () -> Void
+    let ownershipStatus: OwnershipOperationStatus?
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "en-US"
     @AppStorage("microphoneDefault") private var microphoneDefault = false
@@ -143,6 +181,11 @@ private struct SettingsPane: View {
                     isOn: $retainAudioDefault
                 )
                 SettingsFootnote("Audio is always preserved if capture or transcription fails.")
+                OwnershipSettingsCard(
+                    exportLibrary: exportLibrary,
+                    importLibrary: importLibrary,
+                    status: ownershipStatus
+                )
             }
             Spacer()
         }
@@ -159,6 +202,65 @@ private struct SettingsPane: View {
         }
     }
 
+}
+
+private struct OwnershipSettingsCard: View {
+    let exportLibrary: () -> Void
+    let importLibrary: () -> Void
+    let status: OwnershipOperationStatus?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "shippingbox")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 36, height: 36)
+                    .background(BurritoTheme.accentSoft, in: Rectangle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your library, in open files")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 10) {
+                Button("Export Library", systemImage: "square.and.arrow.up") {
+                    exportLibrary()
+                }
+                .buttonStyle(SettingsActionButtonStyle())
+
+                Button("Import Backup", systemImage: "square.and.arrow.down") {
+                    importLibrary()
+                }
+                .buttonStyle(SettingsActionButtonStyle())
+            }
+
+            if let status {
+                Label(status.message, systemImage: status.symbol)
+                    .font(.caption)
+                    .foregroundStyle(
+                        status.isFailure ? Color.red : Color.secondary
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Imports skip matching IDs and never overwrite local edits.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(16)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+        .padding(.top, 18)
+    }
 }
 
 private struct LanguageCoverageCard: View {
