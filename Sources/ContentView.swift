@@ -42,10 +42,11 @@ struct ContentView: View {
     @Query(sort: \Folder.order) private var folders: [Folder]
     @Query(sort: \NoteTemplate.createdAt) private var templates: [NoteTemplate]
 
-    @State private var coordinator = AppCoordinator.live()
+    let coordinator: AppCoordinator
     @State private var permissions = PermissionAccess()
-    @State private var calendarAccess = CalendarAccess()
+    let calendarAccess: CalendarAccess
     @State private var notificationAccess = NotificationAccess.shared
+    @State private var meetingActionInbox = MeetingActionInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
@@ -224,6 +225,19 @@ struct ContentView: View {
                         }
                     )
                 }
+            } else if coordinator.smartStopStatus == .suggested {
+                BurritoModalBackdrop {
+                    BurritoMessageDialog(
+                        title: "Is the meeting finished?",
+                        message: "The scheduled meeting has ended and Burrito has heard sustained silence. Stop now to build the note, or keep recording.",
+                        confirmTitle: "Stop recording",
+                        isDestructive: false,
+                        cancel: { coordinator.keepRecording() },
+                        confirm: {
+                            Task { await coordinator.stop(context: modelContext) }
+                        }
+                    )
+                }
             } else if let error = coordinator.lastError {
                 BurritoModalBackdrop {
                     if case .languageAssetMissing = error {
@@ -256,6 +270,8 @@ struct ContentView: View {
             permissions.refresh()
             calendarAccess.refresh()
             Task { await notificationAccess.refresh() }
+            synchronizeMeetingReminders()
+            handlePendingMeetingAction()
         }
         .task {
             await updater.checkIfDue()
@@ -265,7 +281,19 @@ struct ContentView: View {
                 permissions.refresh()
                 calendarAccess.refresh()
                 Task { await notificationAccess.refresh() }
+                synchronizeMeetingReminders()
             }
+        }
+        .onChange(of: calendarAccess.upcomingEvents) {
+            synchronizeMeetingReminders()
+        }
+        .onChange(of: notificationAccess.state) {
+            if notificationAccess.canDeliverAlerts {
+                synchronizeMeetingReminders()
+            }
+        }
+        .onChange(of: meetingActionInbox.pending) {
+            handlePendingMeetingAction()
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
             recordingDestination = .newNote
@@ -285,6 +313,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .burritoOpenSettings)) { _ in
             selectedNoteID = nil
             sidebarSelection = .settings
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoStopRecording)) { _ in
+            guard coordinator.captureState.isRecording else { return }
+            Task { await coordinator.stop(context: modelContext) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoKeepRecording)) { _ in
+            coordinator.keepRecording()
         }
     }
 
@@ -820,7 +855,14 @@ struct ContentView: View {
     }
 
     private func startCalendarRecording(_ event: UpcomingCalendarEvent) {
-        if let meetingURL = event.meetingURL {
+        startCalendarRecording(event.snapshot, joinsMeeting: true)
+    }
+
+    private func startCalendarRecording(
+        _ event: CalendarEventSnapshot,
+        joinsMeeting: Bool
+    ) {
+        if joinsMeeting, let meetingURL = event.meetingURL {
             NSWorkspace.shared.open(meetingURL)
         }
         guard let template = templates.first(where: {
@@ -829,7 +871,7 @@ struct ContentView: View {
             ?? templates.first(where: { $0.builtInID == defaultTemplateID })
             ?? templates.first
         else {
-            recordingDestination = .calendarEvent(event.snapshot)
+            recordingDestination = .calendarEvent(event)
             return
         }
         Task {
@@ -840,10 +882,25 @@ struct ContentView: View {
                     mode: .meeting,
                     retainsAudio: defaultRetainsAudio
                 ),
-                destination: .calendarEvent(event.snapshot),
+                destination: .calendarEvent(event),
                 context: modelContext
             )
             selectedNoteID = coordinator.activeNoteID
+        }
+    }
+
+    private func synchronizeMeetingReminders() {
+        let events = calendarAccess.upcomingEvents
+        Task {
+            await MeetingReminderScheduler.shared.synchronize(events: events)
+        }
+    }
+
+    private func handlePendingMeetingAction() {
+        guard let action = meetingActionInbox.consume() else { return }
+        switch action {
+        case .record(let event, let joinsMeeting):
+            startCalendarRecording(event, joinsMeeting: joinsMeeting)
         }
     }
 

@@ -8,6 +8,33 @@ import UserNotifications
 @MainActor
 @Suite("Calendar access")
 struct CalendarAccessTests {
+    @Test("Meeting reminders use stable identifiers and never schedule in the past")
+    func meetingReminderPlan() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 100_000)
+        let event = UpcomingCalendarEvent(
+            snapshot: CalendarEventSnapshot(
+                eventIdentifier: "weekly-sync",
+                title: "Weekly sync",
+                startDate: now.addingTimeInterval(120),
+                endDate: now.addingTimeInterval(1_920),
+                meetingURL: URL(string: "https://meet.example.com/weekly"),
+                attendeeNames: [],
+                organizerName: nil,
+                recurrenceIdentifier: "weekly",
+                calendarName: "Work"
+            ),
+            isAllDay: false
+        )
+
+        let reminder = try #require(
+            MeetingReminder.plan(events: [event], relativeTo: now).first
+        )
+
+        #expect(reminder.id == "meeting-reminder-weekly-sync-100120")
+        #expect(reminder.deliveryDate == now.addingTimeInterval(1))
+        #expect(reminder.event == event.snapshot)
+    }
+
     @Test("Meeting window keeps the previous 24 hours visible")
     func meetingWindowIncludesRecentEvents() {
         let now = Date(timeIntervalSinceReferenceDate: 100_000)
@@ -89,6 +116,42 @@ struct CalendarAccessTests {
 
         let changedRefresh = try #require(access.lastRefreshedAt)
         #expect(changedRefresh > initialRefresh)
+    }
+}
+
+@Suite("Smart stop")
+struct SmartStopTests {
+    @Test("Suggests stopping only after a calendar meeting ends in sustained silence")
+    func calendarMeetingEndSuggestion() {
+        let end = Date(timeIntervalSinceReferenceDate: 100_000)
+
+        #expect(
+            SmartStopPolicy.decision(
+                now: end.addingTimeInterval(59),
+                eventEnd: end,
+                recordingElapsed: 1_800,
+                silentFor: 120,
+                alreadySuggested: false
+            ) == .keepRecording
+        )
+        #expect(
+            SmartStopPolicy.decision(
+                now: end.addingTimeInterval(60),
+                eventEnd: end,
+                recordingElapsed: 1_800,
+                silentFor: 45,
+                alreadySuggested: false
+            ) == .suggestStop
+        )
+        #expect(
+            SmartStopPolicy.decision(
+                now: end.addingTimeInterval(120),
+                eventEnd: end,
+                recordingElapsed: 1_800,
+                silentFor: 120,
+                alreadySuggested: true
+            ) == .keepRecording
+        )
     }
 }
 

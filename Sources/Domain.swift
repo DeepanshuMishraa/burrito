@@ -186,6 +186,45 @@ enum CaptureState: Equatable, Sendable {
     }
 }
 
+enum SmartStopDecision: Equatable, Sendable {
+    case keepRecording
+    case suggestStop
+}
+
+enum SmartStopStatus: Equatable, Sendable {
+    case monitoring
+    case suggested
+    case dismissed
+
+    var wasSuggested: Bool {
+        self != .monitoring
+    }
+}
+
+enum SmartStopPolicy {
+    static let meetingEndGrace: TimeInterval = 60
+    static let requiredSilence: TimeInterval = 45
+    static let minimumRecordingDuration: TimeInterval = 2 * 60
+
+    static func decision(
+        now: Date,
+        eventEnd: Date?,
+        recordingElapsed: TimeInterval,
+        silentFor: TimeInterval,
+        alreadySuggested: Bool
+    ) -> SmartStopDecision {
+        guard !alreadySuggested,
+              recordingElapsed >= minimumRecordingDuration,
+              silentFor >= requiredSilence,
+              let eventEnd,
+              now >= eventEnd.addingTimeInterval(meetingEndGrace)
+        else {
+            return .keepRecording
+        }
+        return .suggestStop
+    }
+}
+
 enum ProcessingStage: String, Codable, CaseIterable, Sendable {
     case preparingAudio = "Preparing Audio"
     case transcribing = "Transcribing"

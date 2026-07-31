@@ -28,6 +28,32 @@ struct UpcomingMeetingIdentity: Hashable {
     }
 }
 
+struct MeetingReminder: Equatable, Sendable {
+    static let defaultLeadTime: TimeInterval = 5 * 60
+
+    let id: String
+    let deliveryDate: Date
+    let event: CalendarEventSnapshot
+
+    static func plan(
+        events: [UpcomingCalendarEvent],
+        relativeTo now: Date,
+        leadTime: TimeInterval = defaultLeadTime
+    ) -> [MeetingReminder] {
+        events
+            .filter { $0.startDate > now && $0.endDate > now }
+            .map { event in
+                let requestedDate = event.startDate.addingTimeInterval(-leadTime)
+                let earliestDelivery = now.addingTimeInterval(1)
+                return MeetingReminder(
+                    id: "meeting-reminder-\(event.id)-\(Int(event.startDate.timeIntervalSinceReferenceDate))",
+                    deliveryDate: max(requestedDate, earliestDelivery),
+                    event: event.snapshot
+                )
+            }
+    }
+}
+
 enum CalendarMeetingWindow {
     static let recentLookback: TimeInterval = 24 * 60 * 60
     static let recentLimit = 1

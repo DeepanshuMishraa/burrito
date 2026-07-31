@@ -10,6 +10,9 @@ final class AppCoordinator {
     private(set) var activeNoteID: UUID?
     private(set) var elapsed: TimeInterval = 0
     private(set) var activity = AudioActivity.silent
+    private(set) var silentFor: TimeInterval = 0
+    private(set) var activeCalendarEvent: CalendarEventSnapshot?
+    private(set) var smartStopStatus: SmartStopStatus = .monitoring
     private(set) var lastError: BurritoError?
     private(set) var isInstallingLanguageAsset = false
 
@@ -168,9 +171,12 @@ final class AppCoordinator {
             activeFiles = files
             activeNoteID = note.id
             appendsToExistingNote = existingNote != nil
+            activeCalendarEvent = note.calendarEvent
             captureState = .recording(sessionID: sessionID, startedAt: now)
             elapsed = 0
             activity = .silent
+            silentFor = 0
+            smartStopStatus = .monitoring
             startTimer(startedAt: now)
             feedback.recordingStarted()
         case .failure(let error):
@@ -196,6 +202,7 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = nil
         activity = .silent
+        silentFor = 0
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
@@ -310,10 +317,13 @@ final class AppCoordinator {
         }
         activeFiles = nil
         activeNoteID = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         captureState = .idle
         elapsed = 0
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
     }
 
     private func finishSilentRecording(
@@ -336,10 +346,13 @@ final class AppCoordinator {
         try? context.save()
         activeFiles = nil
         activeNoteID = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         captureState = .idle
         elapsed = 0
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
@@ -553,6 +566,10 @@ final class AppCoordinator {
         lastError = nil
     }
 
+    func keepRecording() {
+        smartStopStatus = .dismissed
+    }
+
     func installMissingLanguageAsset() async {
         guard case .languageAssetMissing(let identifier) = lastError,
               !isInstallingLanguageAsset
@@ -574,6 +591,9 @@ final class AppCoordinator {
     private func failBeforeRecording(_ error: BurritoError) {
         captureState = .idle
         activity = .silent
+        silentFor = 0
+        activeCalendarEvent = nil
+        smartStopStatus = .monitoring
         lastError = error
     }
 
@@ -585,8 +605,11 @@ final class AppCoordinator {
         lastError = error
         captureState = .failed(sessionID: note.id, message: error.recoveryMessage)
         activeFiles = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
         timerTask?.cancel()
         timerTask = nil
     }
@@ -602,12 +625,33 @@ final class AppCoordinator {
     private func startTimer(startedAt: Date) {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
+            var lastTick = startedAt
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                elapsed = Date.now.timeIntervalSince(startedAt)
+                let now = Date.now
+                let tickDuration = max(0, now.timeIntervalSince(lastTick))
+                lastTick = now
+                elapsed = now.timeIntervalSince(startedAt)
                 activity = capture.activity
+                if max(activity.system, activity.microphone) >= 0.04 {
+                    silentFor = 0
+                } else {
+                    silentFor += tickDuration
+                }
+                if SmartStopPolicy.decision(
+                    now: now,
+                    eventEnd: activeCalendarEvent?.endDate,
+                    recordingElapsed: elapsed,
+                    silentFor: silentFor,
+                    alreadySuggested: smartStopStatus.wasSuggested
+                ) == .suggestStop {
+                    smartStopStatus = .suggested
+                    feedback.smartStopSuggested(
+                        title: activeCalendarEvent?.title ?? "Your recording"
+                    )
+                }
             }
         }
     }
