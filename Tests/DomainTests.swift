@@ -466,6 +466,50 @@ struct LocalMemoryTests {
             ) == nil
         )
     }
+
+    @Test("Memory answers reject external Markdown links")
+    func rejectsExternalLinks() {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let answer = "Launch is October 12. [source](\(validURL)) [details](https://example.com)"
+
+        #expect(MemoryAnswer.validated(answer, against: [evidence]) == nil)
+    }
+
+    @Test("Memory answers label claim grounding as unverified")
+    func labelsUnverifiedGrounding() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let unsupportedClaim = "The moon is made of cheese. [source](\(validURL))"
+
+        let answer = try #require(
+            MemoryAnswer.validated(unsupportedClaim, against: [evidence])
+        )
+        #expect(answer.contains("Unverified AI answer"))
+        #expect(answer.contains(unsupportedClaim))
+    }
 }
 
 @Suite("Audio levels")
@@ -533,6 +577,15 @@ private struct CharacterTokenMeasurer: PromptTokenMeasuring {
     let size: Int
     var contextSize: Int { get async { size } }
     func tokenCount(_ text: String) async throws -> Int { text.count }
+}
+
+@Suite("Fallback token estimation")
+struct FallbackTokenEstimateTests {
+    @Test("Compatibility estimates reserve one token per UTF-8 byte")
+    func usesConservativeUpperBound() {
+        #expect(FallbackTokenEstimate.count("abcd") == 4)
+        #expect(FallbackTokenEstimate.count("🌯") == 4)
+    }
 }
 
 @Suite("Transcript chunking")

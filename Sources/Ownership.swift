@@ -258,6 +258,11 @@ enum BurritoArchivePackage {
         to destination: URL,
         fileManager: FileManager = .default
     ) throws -> ArchiveExportReport {
+        guard input.archive.notes.map(\.id) == input.noteFiles.map(\.id) else {
+            throw BurritoArchiveError.invalidArchive(
+                details: "The export note records do not match their files. No backup was created."
+            )
+        }
         guard !fileManager.fileExists(atPath: destination.path()) else {
             throw BurritoArchiveError.fileOperationFailed(
                 operation: "create the backup",

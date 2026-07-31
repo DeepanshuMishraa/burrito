@@ -257,6 +257,7 @@ private struct OwnershipSettingsCard: View {
                     if status.isRunning {
                         ProgressView()
                             .controlSize(.small)
+                            .tint(.secondary)
                     } else {
                         Image(systemName: status.symbol)
                     }

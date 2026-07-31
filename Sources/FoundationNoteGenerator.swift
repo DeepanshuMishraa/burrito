@@ -308,28 +308,24 @@ enum MemoryPrompt {
 }
 
 enum MemoryAnswer {
-    private static let citationPattern =
-        #"burrito://memory/[^\s\)\]\>]+"#
+    private static let groundingNotice = """
+        > **Unverified AI answer:** Citation destinations are valid, but Burrito has not independently verified every claim against the linked passages.
+
+        """
 
     static func validated(
         _ answer: String,
         against evidence: [MemoryEvidence]
     ) -> String? {
-        guard let expression = try? NSRegularExpression(pattern: citationPattern) else {
+        guard let rendered = try? AttributedString(markdown: answer) else {
             return nil
         }
-        let range = NSRange(answer.startIndex..<answer.endIndex, in: answer)
-        let citations = Set<String>(
-            expression.matches(in: answer, range: range).compactMap { match in
-                guard let range = Range(match.range, in: answer) else { return nil }
-                return String(answer[range])
-            }
-        )
+        let destinations = Set(rendered.runs.compactMap { $0.link?.absoluteString })
         let allowed = Set(evidence.compactMap { $0.citationURL?.absoluteString })
-        guard !citations.isEmpty, citations.isSubset(of: allowed) else {
+        guard !destinations.isEmpty, destinations.isSubset(of: allowed) else {
             return nil
         }
-        return answer
+        return groundingNotice + answer
     }
 }
 
@@ -454,6 +450,12 @@ enum GenerationInputBudget {
     }
 }
 
+enum FallbackTokenEstimate {
+    static func count(_ text: String) -> Int {
+        max(1, text.utf8.count)
+    }
+}
+
 actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
     private let model = SystemLanguageModel(
         useCase: .general,
@@ -466,7 +468,7 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
         if #available(macOS 26.4, *) {
             return try await model.tokenCount(for: text)
         }
-        return max(1, text.utf8.count / 3)
+        return FallbackTokenEstimate.count(text)
     }
 
     func complete(

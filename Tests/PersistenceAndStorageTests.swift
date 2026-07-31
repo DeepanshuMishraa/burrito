@@ -343,6 +343,45 @@ struct RecordingStorageTests {
         #expect(contents.contains { $0.contains("Second note") })
     }
 
+    @Test("Mismatched export note records are rejected without creating a backup")
+    func mismatchedExportInputIsRejected() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appending(path: "BurritoMismatchedExportTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let destination = temporaryRoot.appending(path: "Backup", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let first = Note(
+            lifecycle: .ready,
+            title: "First",
+            markdownBody: "First note",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: false
+        )
+        let second = Note(
+            lifecycle: .ready,
+            title: "Second",
+            markdownBody: "Second note",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: false
+        )
+        var input = BurritoArchivePackage.prepareExport(
+            notes: [first, second],
+            folders: [],
+            templates: [],
+            recordingStore: LocalRecordingFileStore(
+                root: temporaryRoot.appending(path: "Recordings", directoryHint: .isDirectory)
+            )
+        )
+        input.archive.notes.swapAt(0, 1)
+
+        #expect(throws: BurritoArchiveError.self) {
+            try BurritoArchivePackage.export(input, to: destination)
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.path()))
+    }
+
     @MainActor
     @Test("A library package restores retained audio without overwriting duplicates")
     func restoresCompleteLibraryPackage() async throws {
