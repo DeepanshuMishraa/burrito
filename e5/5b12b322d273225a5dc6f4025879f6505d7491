@@ -1,0 +1,32 @@
+Sources/Domain.swift
+  s_9dd6a64ae5544c::t_7e78aa452d955c 82-176
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_578d0edd59a5a4 159-242
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_37b3e1de51fc6a 55,317-321,403,561-577,665-679
+  s_9dd6a64ae5544c::t_af721d4dc0bdfe 405,680,4446,4465-4468,4726-4873,5383
+  s_9dd6a64ae5544c::t_bb97e7ebe7a45a 12,54,89-90,138-140,146-149,315-316,322-326,397-402,404,649,658-664
+  s_9dd6a64ae5544c::t_a98c0933a311fb 5043,5141-5143,5199,5201-5218,5223-5228,5379-5382
+  s_9dd6a64ae5544c::t_7ca807ec9616c1 681
+  s_9dd6a64ae5544c::t_4b87946d6a5a1f 4874-4875
+  s_9dd6a64ae5544c::t_15ab788a2378fc 5384
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_56e6c804fafb4a 209-248,277-278
+  s_9dd6a64ae5544c::t_f01714c67f91f6 249-276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "e55b12b322d273225a5dc6f4025879f6505d7491",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
