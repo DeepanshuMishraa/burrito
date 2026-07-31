@@ -250,8 +250,10 @@ enum MeetingLink {
                 continue
             }
             let range = NSRange(text.startIndex..<text.endIndex, in: text)
-            if let url = detector.firstMatch(in: text, range: range)?.url, isWebURL(url) {
-                return url
+            for match in detector.matches(in: text, range: range) {
+                if let url = match.url, isWebURL(url) {
+                    return url
+                }
             }
         }
         return nil

@@ -250,8 +250,102 @@ struct PersistenceTests {
 @Suite("Recording storage")
 struct RecordingStorageTests {
     @MainActor
+    @Test("Invalid backup audio is rejected before recording directories are created")
+    func invalidBackupAudioLeavesNoRecordingDirectories() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appending(path: "BurritoInvalidAudioTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let sourceRoot = temporaryRoot.appending(path: "Source", directoryHint: .isDirectory)
+        let restoredRoot = temporaryRoot.appending(path: "Restored", directoryHint: .isDirectory)
+        let backup = temporaryRoot.appending(path: "Backup", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let sourceStore = LocalRecordingFileStore(root: sourceRoot)
+        let note = Note(
+            lifecycle: .ready,
+            title: "Missing audio",
+            markdownBody: "Keep the note safe.",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: true
+        )
+        let files = try sourceStore.createSession(id: note.id, mode: .listenAlong).get()
+        let systemURL = try #require(files.systemAudioURL)
+        try Data("system".utf8).write(to: systemURL)
+        note.systemAudioRelativePath = sourceStore.relativePath(for: systemURL)
+        _ = try BurritoArchivePackage.export(
+            notes: [note],
+            folders: [],
+            templates: [],
+            recordingStore: sourceStore,
+            to: backup
+        )
+        try FileManager.default.removeItem(
+            at: backup.appending(path: "Audio/\(note.id.uuidString)/system.m4a")
+        )
+
+        var rejected = false
+        do {
+            _ = try BurritoArchivePackage.restore(
+                from: backup,
+                into: try inMemoryModelContext(),
+                recordingStore: LocalRecordingFileStore(root: restoredRoot)
+            )
+        } catch {
+            rejected = true
+        }
+
+        #expect(rejected)
+        #expect(!FileManager.default.fileExists(atPath: restoredRoot.path()))
+    }
+
+    @Test("Same-titled notes with matching UUID prefixes export to distinct Markdown files")
+    func exportMarkdownFilenamesAreCollisionFree() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appending(path: "BurritoCollisionTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let destination = temporaryRoot.appending(path: "Backup", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let first = Note(
+            id: UUID(uuidString: "AAAAAAAA-0000-4000-8000-000000000001") ?? UUID(),
+            lifecycle: .ready,
+            title: "Weekly review",
+            markdownBody: "First note",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: false
+        )
+        let second = Note(
+            id: UUID(uuidString: "AAAAAAAA-0000-4000-8000-000000000002") ?? UUID(),
+            lifecycle: .ready,
+            title: "Weekly review",
+            markdownBody: "Second note",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            retainsAudio: false
+        )
+
+        let report = try BurritoArchivePackage.export(
+            notes: [first, second],
+            folders: [],
+            templates: [],
+            recordingStore: LocalRecordingFileStore(
+                root: temporaryRoot.appending(path: "Recordings", directoryHint: .isDirectory)
+            ),
+            to: destination
+        )
+        let contents = try report.markdownFiles.map {
+            try String(contentsOf: $0, encoding: .utf8)
+        }
+
+        #expect(report.markdownFiles.count == 2)
+        #expect(Set(report.markdownFiles.map(\.lastPathComponent)).count == 2)
+        #expect(contents.contains { $0.contains("First note") })
+        #expect(contents.contains { $0.contains("Second note") })
+    }
+
+    @MainActor
     @Test("A library package restores retained audio without overwriting duplicates")
-    func restoresCompleteLibraryPackage() throws {
+    func restoresCompleteLibraryPackage() async throws {
         let temporaryRoot = FileManager.default.temporaryDirectory
             .appending(path: "BurritoRestoreTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         let sourceRoot = temporaryRoot.appending(path: "Source", directoryHint: .isDirectory)
@@ -293,7 +387,7 @@ struct RecordingStorageTests {
         )
         let context = ModelContext(container)
         let restoredStore = LocalRecordingFileStore(root: restoredRoot)
-        let first = try BurritoArchivePackage.restore(
+        let first = try await BurritoArchivePackage.restore(
             from: backup,
             into: context,
             recordingStore: restoredStore
@@ -302,7 +396,7 @@ struct RecordingStorageTests {
         let restoredSystemPath = try #require(restoredNote.systemAudioRelativePath)
         restoredNote.title = "Keep this local title"
         try context.save()
-        let second = try BurritoArchivePackage.restore(
+        let second = try await BurritoArchivePackage.restore(
             from: backup,
             into: context,
             recordingStore: restoredStore
@@ -400,4 +494,16 @@ struct RecordingStorageTests {
         #expect(!FileManager.default.fileExists(atPath: systemURL.path()))
         #expect(!FileManager.default.fileExists(atPath: microphoneURL.path()))
     }
+}
+
+@MainActor
+private func inMemoryModelContext() throws -> ModelContext {
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try ModelContainer(
+        for: Note.self,
+        Folder.self,
+        NoteTemplate.self,
+        configurations: configuration
+    )
+    return ModelContext(container)
 }

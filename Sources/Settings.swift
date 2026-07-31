@@ -1,18 +1,20 @@
 import SwiftUI
 
 enum OwnershipOperationStatus: Equatable {
+    case running(String)
     case success(String)
     case failure(String)
 
     var message: String {
         switch self {
-        case .success(let message), .failure(let message):
+        case .running(let message), .success(let message), .failure(let message):
             message
         }
     }
 
     var symbol: String {
         switch self {
+        case .running: "clock"
         case .success: "checkmark.circle"
         case .failure: "exclamationmark.triangle"
         }
@@ -20,6 +22,13 @@ enum OwnershipOperationStatus: Equatable {
 
     var isFailure: Bool {
         if case .failure = self {
+            return true
+        }
+        return false
+    }
+
+    var isRunning: Bool {
+        if case .running = self {
             return true
         }
         return false
@@ -234,20 +243,30 @@ private struct OwnershipSettingsCard: View {
                     exportLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
+                .disabled(status?.isRunning == true)
 
                 Button("Import Backup", systemImage: "square.and.arrow.down") {
                     importLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
+                .disabled(status?.isRunning == true)
             }
 
             if let status {
-                Label(status.message, systemImage: status.symbol)
-                    .font(.caption)
-                    .foregroundStyle(
-                        status.isFailure ? Color.red : Color.secondary
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 7) {
+                    if status.isRunning {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: status.symbol)
+                    }
+                    Text(status.message)
+                }
+                .font(.caption)
+                .foregroundStyle(
+                    status.isFailure ? Color.red : Color.secondary
+                )
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Text("Imports skip matching IDs and never overwrite local edits.")

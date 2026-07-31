@@ -149,6 +149,7 @@ enum LocalMemory {
             }
         }
         return candidates
+            .filter { $0.score > 0 }
             .sorted {
                 if $0.score != $1.score { return $0.score > $1.score }
                 if $0.evidence.noteUpdatedAt != $1.evidence.noteUpdatedAt {

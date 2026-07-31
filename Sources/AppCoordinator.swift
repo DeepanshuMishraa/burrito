@@ -22,6 +22,7 @@ final class AppCoordinator {
     private let fileStore: any RecordingFileStore
     private let feedback: any AppFeedbackProviding
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
+    private let now: @MainActor @Sendable () -> Date
     private var activeFiles: RecordingFiles?
     private var appendsToExistingNote = false
     private var timerTask: Task<Void, Never>?
@@ -32,7 +33,8 @@ final class AppCoordinator {
         generator: any NoteGenerating,
         fileStore: any RecordingFileStore,
         feedback: any AppFeedbackProviding = SilentAppFeedback(),
-        requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization
+        requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization,
+        now: @escaping @MainActor @Sendable () -> Date = { .now }
     ) {
         self.capture = capture
         self.transcriber = transcriber
@@ -40,6 +42,7 @@ final class AppCoordinator {
         self.fileStore = fileStore
         self.feedback = feedback
         self.requestSpeechAuthorization = requestSpeechAuthorization
+        self.now = now
     }
 
     static func live() -> AppCoordinator {
@@ -125,7 +128,7 @@ final class AppCoordinator {
             return
         }
 
-        let now = Date.now
+        let now = now()
         let note: Note
         if let existingNote {
             note = existingNote
@@ -206,7 +209,7 @@ final class AppCoordinator {
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
-        let recordingDuration = Date.now.timeIntervalSince(startedAt)
+        let recordingDuration = now().timeIntervalSince(startedAt)
         note.updatedAt = .now
         try? context.save()
 
@@ -625,12 +628,13 @@ final class AppCoordinator {
     private func startTimer(startedAt: Date) {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
-            var lastTick = startedAt
+            guard let initialTick = self?.now() else { return }
+            var lastTick = initialTick
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                let now = Date.now
+                let now = now()
                 let tickDuration = max(0, now.timeIntervalSince(lastTick))
                 lastTick = now
                 elapsed = now.timeIntervalSince(startedAt)

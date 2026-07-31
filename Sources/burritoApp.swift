@@ -156,6 +156,7 @@ private enum BurritoMenuBarArtwork {
 private struct BurritoMenuBarMenu: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
+    @Query(sort: \NoteTemplate.createdAt) private var templates: [NoteTemplate]
 
     let coordinator: AppCoordinator
     let calendarAccess: CalendarAccess
@@ -282,14 +283,13 @@ private struct BurritoMenuBarMenu: View {
         if joinsMeeting, let meetingURL = event.meetingURL {
             NSWorkspace.shared.open(meetingURL)
         }
-        let template = BuiltInTemplate.meeting
         Task {
             await coordinator.start(
                 options: RecordingOptions(
-                    template: TemplateSnapshot(
-                        name: template.name,
-                        symbol: template.symbol,
-                        instructions: template.instructions
+                    template: RecordingTemplateResolver.snapshot(
+                        for: .meeting,
+                        defaultTemplateID: defaultTemplateID,
+                        templates: templates
                     ),
                     languageIdentifier: language,
                     mode: .meeting,
@@ -302,19 +302,13 @@ private struct BurritoMenuBarMenu: View {
     }
 
     private func startQuickRecording(mode: RecordingMode) {
-        let template: BuiltInTemplate
-        if mode == .meeting {
-            template = .meeting
-        } else {
-            template = BuiltInTemplate(rawValue: defaultTemplateID) ?? .summary
-        }
         Task {
             await coordinator.start(
                 options: RecordingOptions(
-                    template: TemplateSnapshot(
-                        name: template.name,
-                        symbol: template.symbol,
-                        instructions: template.instructions
+                    template: RecordingTemplateResolver.snapshot(
+                        for: mode,
+                        defaultTemplateID: defaultTemplateID,
+                        templates: templates
                     ),
                     languageIdentifier: language,
                     mode: mode,
@@ -326,12 +320,32 @@ private struct BurritoMenuBarMenu: View {
     }
 
     private func openRecordingSetup() {
+        RecordingDestinationInbox.shared.submit(.newNote)
         openMainWindow()
-        NotificationCenter.default.post(name: .burritoNewRecording, object: nil)
     }
 
     private func openMainWindow() {
         openWindow(id: "main")
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+enum RecordingTemplateResolver {
+    static func snapshot(
+        for mode: RecordingMode,
+        defaultTemplateID: String,
+        templates: [NoteTemplate]
+    ) -> TemplateSnapshot {
+        let builtIn = mode == .meeting
+            ? BuiltInTemplate.meeting
+            : BuiltInTemplate(rawValue: defaultTemplateID) ?? .summary
+        if let stored = templates.first(where: { $0.builtInID == builtIn.rawValue }) {
+            return stored.snapshot
+        }
+        return TemplateSnapshot(
+            name: builtIn.name,
+            symbol: builtIn.symbol,
+            instructions: builtIn.instructions
+        )
     }
 }

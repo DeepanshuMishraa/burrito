@@ -14,6 +14,7 @@ private final class CaptureSpyingStub: AudioCapturing {
     private(set) var modes: [RecordingMode] = []
     var startResult: Result<Void, BurritoError> = .success(())
     var stopResult: Result<Void, BurritoError> = .success(())
+    var didStart: (() -> Void)?
 
     func start(
         files: RecordingFiles,
@@ -23,6 +24,7 @@ private final class CaptureSpyingStub: AudioCapturing {
         starts += 1
         languageIdentifiers.append(languageIdentifier)
         modes.append(mode)
+        didStart?()
         return startResult
     }
 
@@ -527,6 +529,41 @@ struct CoordinatorTests {
 
         await coordinator.stop(context: context)
         #expect(coordinator.activity == .silent)
+    }
+
+    @Test("Capture startup time does not count as recording silence")
+    func captureStartupDoesNotCountAsSilence() async throws {
+        let context = try makeContext()
+        let clock = Mutex(Date(timeIntervalSinceReferenceDate: 100))
+        let capture = CaptureSpyingStub()
+        capture.didStart = {
+            clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 160) }
+        }
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true },
+            now: { clock.withLock { $0 } }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        try await Task.sleep(for: .milliseconds(120))
+
+        #expect(coordinator.silentFor == 0)
+
+        await coordinator.stop(context: context)
     }
 
     @Test("Silent recordings do not create transcripts or generated notes")

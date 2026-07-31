@@ -294,35 +294,43 @@ extension BurritoAppFeedback: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
         let actionIdentifier = response.actionIdentifier
         let userInfo = response.notification.request.content.userInfo
         let event = Self.decodeEvent(from: userInfo)
-        completionHandler()
 
         Task { @MainActor in
-            switch actionIdentifier {
-            case BurritoNotificationContract.joinAndRecordAction,
-                 BurritoNotificationContract.recordAction:
-                guard let event else { return }
-                MeetingActionInbox.shared.submit(
-                    .record(
-                        event,
-                        joinsMeeting:
-                            actionIdentifier
-                                == BurritoNotificationContract.joinAndRecordAction
-                    )
+            Self.processNotificationAction(actionIdentifier, event: event)
+            completionHandler()
+        }
+    }
+
+    @MainActor
+    static func processNotificationAction(
+        _ actionIdentifier: String,
+        event: CalendarEventSnapshot?
+    ) {
+        switch actionIdentifier {
+        case BurritoNotificationContract.joinAndRecordAction,
+             BurritoNotificationContract.recordAction:
+            guard let event else { return }
+            MeetingActionInbox.shared.submit(
+                .record(
+                    event,
+                    joinsMeeting:
+                        actionIdentifier
+                            == BurritoNotificationContract.joinAndRecordAction
                 )
-                NSApp.activate(ignoringOtherApps: true)
-            case BurritoNotificationContract.stopAction:
-                NotificationCenter.default.post(name: .burritoStopRecording, object: nil)
-                NSApp.activate(ignoringOtherApps: true)
-            case BurritoNotificationContract.keepRecordingAction:
-                NotificationCenter.default.post(name: .burritoKeepRecording, object: nil)
-            default:
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            )
+            NSApp.activate(ignoringOtherApps: true)
+        case BurritoNotificationContract.stopAction:
+            NotificationCenter.default.post(name: .burritoStopRecording, object: nil)
+            NSApp.activate(ignoringOtherApps: true)
+        case BurritoNotificationContract.keepRecordingAction:
+            NotificationCenter.default.post(name: .burritoKeepRecording, object: nil)
+        default:
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
@@ -346,6 +354,18 @@ final class MeetingReminderScheduler {
 
     private init() {}
 
+    nonisolated static func canSchedule(
+        authorizationStatus: UNAuthorizationStatus,
+        alertSetting: UNNotificationSetting,
+        alertStyle: UNAlertStyle
+    ) -> Bool {
+        NotificationAccess.resolveState(
+            authorizationStatus: authorizationStatus,
+            alertSetting: alertSetting,
+            alertStyle: alertStyle
+        ) == .granted
+    }
+
     func synchronize(events: [UpcomingCalendarEvent], relativeTo now: Date = .now) async {
         let plans = MeetingReminder.plan(events: events, relativeTo: now)
         let pending = await notificationCenter.pendingNotificationRequests()
@@ -355,8 +375,11 @@ final class MeetingReminderScheduler {
         notificationCenter.removePendingNotificationRequests(withIdentifiers: oldIdentifiers)
 
         let settings = await notificationCenter.notificationSettings()
-        guard settings.authorizationStatus == .authorized
-                || settings.authorizationStatus == .provisional else {
+        guard Self.canSchedule(
+            authorizationStatus: settings.authorizationStatus,
+            alertSetting: settings.alertSetting,
+            alertStyle: settings.alertStyle
+        ) else {
             return
         }
 

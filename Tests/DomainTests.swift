@@ -189,6 +189,49 @@ struct NotificationAccessTests {
             ) == .granted
         )
     }
+
+    @Test("Meeting reminders require visible notification alerts")
+    func meetingRemindersRequireVisibleAlerts() {
+        #expect(
+            MeetingReminderScheduler.canSchedule(
+                authorizationStatus: .authorized,
+                alertSetting: .disabled,
+                alertStyle: .banner
+            ) == false
+        )
+        #expect(
+            MeetingReminderScheduler.canSchedule(
+                authorizationStatus: .authorized,
+                alertSetting: .enabled,
+                alertStyle: .banner
+            )
+        )
+    }
+
+    @MainActor
+    @Test("Notification actions are available before handling completes")
+    func notificationActionsFinishAfterProcessing() async {
+        _ = MeetingActionInbox.shared.consume()
+        let event = CalendarEventSnapshot(
+            eventIdentifier: "weekly-sync",
+            title: "Weekly sync",
+            startDate: Date(timeIntervalSinceReferenceDate: 100),
+            endDate: Date(timeIntervalSinceReferenceDate: 200),
+            meetingURL: nil,
+            attendeeNames: [],
+            organizerName: nil,
+            recurrenceIdentifier: nil,
+            calendarName: "Work"
+        )
+
+        BurritoAppFeedback.processNotificationAction(
+            BurritoNotificationContract.recordAction,
+            event: event
+        )
+        let completedAction = MeetingActionInbox.shared.consume()
+
+        #expect(completedAction == .record(event, joinsMeeting: false))
+    }
 }
 
 @Suite("Transcript")
@@ -310,6 +353,30 @@ struct LocalMemoryTests {
         #expect(evidence.first?.segment.text == "The launch date is October 12.")
     }
 
+    @Test("Questions with no lexical match return no transcript evidence")
+    func rejectsUnrelatedEvidence() {
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Hiring review",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 4,
+                    duration: 2,
+                    text: "We should interview two design candidates."
+                ),
+            ]
+        )
+
+        let evidence = LocalMemory.retrieve(
+            question: "When does the rocket launch?",
+            from: [document]
+        )
+
+        #expect(evidence.isEmpty)
+    }
+
     @Test("Memory prompts require cited answers and explicit uncertainty")
     func promptContract() {
         let noteID = UUID(uuidString: "B445F1FC-D124-4CD4-A157-D25201200659") ?? UUID()
@@ -336,6 +403,68 @@ struct LocalMemoryTests {
         #expect(MemoryPrompt.instructions.contains("burrito://memory/<NOTE-UUID>/<SEGMENT-UUID>"))
         #expect(source.contains("Launch planning"))
         #expect(source.contains("burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"))
+    }
+
+    @Test("Memory prompts reserve model context for the answer")
+    func boundsQuestionAndEvidence() async throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: String(repeating: "Launch evidence ", count: 300)
+            )
+        )
+        let measurer = CharacterTokenMeasurer(size: 2_400)
+
+        let prepared = try await MemoryPrompt.boundedSource(
+            question: String(repeating: "What changed? ", count: 200),
+            evidence: [evidence],
+            tokenMeasurer: measurer,
+            reservedResponseTokens: 768,
+            safetyMargin: 128
+        )
+
+        let requestTokens = try await measurer.tokenCount(
+            MemoryPrompt.instructions + prepared.prompt
+        )
+        #expect(requestTokens + 768 + 128 <= measurer.size)
+        #expect(!prepared.evidence.isEmpty)
+    }
+
+    @Test("Memory answers accept only citations from the supplied evidence")
+    func validatesAnswerCitations() {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let inventedURL = "burrito://memory/\(UUID().uuidString)/\(UUID().uuidString)"
+
+        #expect(
+            MemoryAnswer.validated(
+                "Launch is October 12. [source](\(validURL))",
+                against: [evidence]
+            ) != nil
+        )
+        #expect(MemoryAnswer.validated("Launch is October 12.", against: [evidence]) == nil)
+        #expect(
+            MemoryAnswer.validated(
+                "Launch is October 12. [source](\(inventedURL))",
+                against: [evidence]
+            ) == nil
+        )
     }
 }
 
@@ -455,6 +584,35 @@ struct TranscriptChunkerTests {
 
         #expect(chunks.count == 2)
         #expect(chunks.flatMap(\.segments) == segments)
+    }
+
+    @Test("Generation rejects auxiliary source that leaves no model input budget")
+    func rejectsOversizedHumanNotesBeforeFinalRequest() {
+        let result: Result<Int, BurritoError>
+        do {
+            result = .success(
+                try GenerationInputBudget.limit(
+                    contextSize: 2_048,
+                    instructionTokens: 300,
+                    reservedOutputTokens: 1_024,
+                    additionalReservedTokens: 1_000,
+                    safetyMargin: 256
+                )
+            )
+        } catch let error as BurritoError {
+            result = .failure(error)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+            return
+        }
+
+        #expect(
+            result == .failure(
+                .generationFailed(
+                    details: "Human notes and calendar context are too large for on-device generation. Shorten the human notes and choose Generate Again."
+                )
+            )
+        )
     }
 }
 

@@ -2,9 +2,27 @@ import AppKit
 import AVFAudio
 import Collaboration
 import Lottie
+import Observation
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+
+@MainActor
+@Observable
+final class RecordingDestinationInbox {
+    static let shared = RecordingDestinationInbox()
+
+    private(set) var pending: RecordingDestination?
+
+    func submit(_ destination: RecordingDestination) {
+        pending = destination
+    }
+
+    func consume() -> RecordingDestination? {
+        defer { pending = nil }
+        return pending
+    }
+}
 
 private enum SidebarSelection: Hashable {
     case all
@@ -47,6 +65,7 @@ struct ContentView: View {
     let calendarAccess: CalendarAccess
     @State private var notificationAccess = NotificationAccess.shared
     @State private var meetingActionInbox = MeetingActionInbox.shared
+    @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
@@ -273,6 +292,7 @@ struct ContentView: View {
             Task { await notificationAccess.refresh() }
             synchronizeMeetingReminders()
             handlePendingMeetingAction()
+            handlePendingRecordingDestination()
         }
         .task {
             await updater.checkIfDue()
@@ -295,6 +315,9 @@ struct ContentView: View {
         }
         .onChange(of: meetingActionInbox.pending) {
             handlePendingMeetingAction()
+        }
+        .onChange(of: recordingDestinationInbox.pending) {
+            handlePendingRecordingDestination()
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
             recordingDestination = .newNote
@@ -910,6 +933,11 @@ struct ContentView: View {
         }
     }
 
+    private func handlePendingRecordingDestination() {
+        guard let destination = recordingDestinationInbox.consume() else { return }
+        recordingDestination = destination
+    }
+
     private func exportMarkdown(_ note: Note) {
         let panel = NSSavePanel()
         if let markdownType = UTType(filenameExtension: "md") {
@@ -948,20 +976,27 @@ struct ContentView: View {
             )
         }
 
-        do {
-            let report = try BurritoArchivePackage.export(
-                notes: notes,
-                folders: folders,
-                templates: templates,
-                recordingStore: LocalRecordingFileStore(),
-                to: destination
-            )
-            ownershipStatus = .success(
-                "Exported \(report.notesExported) notes and \(report.audioFilesExported) audio files to \(destination.lastPathComponent)."
-            )
-            NSWorkspace.shared.activateFileViewerSelecting([destination])
-        } catch {
-            ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+        let recordingStore = LocalRecordingFileStore()
+        let input = BurritoArchivePackage.prepareExport(
+            notes: notes,
+            folders: folders,
+            templates: templates,
+            recordingStore: recordingStore
+        )
+        ownershipStatus = .running("Exporting your library…")
+        Task {
+            do {
+                let report = try await BurritoArchivePackage.export(
+                    input,
+                    to: destination
+                )
+                ownershipStatus = .success(
+                    "Exported \(report.notesExported) notes and \(report.audioFilesExported) audio files to \(destination.lastPathComponent)."
+                )
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+            } catch {
+                ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+            }
         }
     }
 
@@ -975,17 +1010,20 @@ struct ContentView: View {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let source = panel.url else { return }
 
-        do {
-            let report = try BurritoArchivePackage.restore(
-                from: source,
-                into: modelContext,
-                recordingStore: LocalRecordingFileStore()
-            )
-            ownershipStatus = .success(
-                "Imported \(report.notesInserted) notes, \(report.foldersInserted) folders, \(report.templatesInserted) templates, and \(report.audioFilesRestored) audio files. Skipped \(report.duplicatesSkipped) existing items."
-            )
-        } catch {
-            ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+        ownershipStatus = .running("Validating and importing your backup…")
+        Task {
+            do {
+                let report = try await BurritoArchivePackage.restore(
+                    from: source,
+                    into: modelContext,
+                    recordingStore: LocalRecordingFileStore()
+                )
+                ownershipStatus = .success(
+                    "Imported \(report.notesInserted) notes, \(report.foldersInserted) folders, \(report.templatesInserted) templates, and \(report.audioFilesRestored) audio files. Skipped \(report.duplicatesSkipped) existing items."
+                )
+            } catch {
+                ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+            }
         }
     }
 
@@ -3027,10 +3065,11 @@ private struct TimelineNoteRow: View {
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
-                Text(note.processingStage?.rawValue ?? note.templateSnapshot.name)
+                Text(note.processingStage?.rawValue ?? NoteExcerpt.text(for: note))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .tracking(0.25)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
             Spacer()
             if let folder = note.folder {
@@ -3045,6 +3084,24 @@ private struct TimelineNoteRow: View {
         .padding(.horizontal, 8)
         .frame(height: 52)
         .contentShape(Rectangle())
+    }
+}
+
+enum NoteExcerpt {
+    static func text(for note: Note) -> String {
+        let markdown = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !markdown.isEmpty {
+            return markdown
+                .replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let humanNotes = note.userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !humanNotes.isEmpty {
+            return humanNotes
+                .replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return note.transcriptSegments.first?.text ?? "Recording ready for your notes."
     }
 }
 
@@ -3335,70 +3392,6 @@ private struct WelcomeWorkspaceView: View {
             }
             .padding(40)
         }
-    }
-}
-
-private struct NoteRow: View {
-    let note: Note
-    let isSelected: Bool
-
-    private var excerpt: String {
-        let body = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty {
-            return body.replacingOccurrences(of: "#", with: "")
-        }
-        let humanNotes = note.userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !humanNotes.isEmpty {
-            return humanNotes.replacingOccurrences(of: "#", with: "")
-        }
-        return note.transcriptSegments.first?.text ?? "Recording ready for your notes."
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text(note.title)
-                    .font(.burritoDisplay(size: 15, weight: .medium))
-                    .lineLimit(1)
-                Spacer()
-                if note.isFavorite {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundStyle(BurritoTheme.accent)
-                        .accessibilityLabel("Favorite")
-                }
-            }
-            Text(excerpt)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .lineSpacing(2)
-            HStack(spacing: 6) {
-                if let stage = note.processingStage {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text(stage.rawValue)
-                } else {
-                    Text(note.updatedAt, style: .date)
-                    Text("•")
-                    Text(Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)))
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            if let message = note.lastErrorMessage {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-            }
-        }
-        .padding(12)
-        .background(
-            isSelected ? BurritoTheme.accentSoft : Color.clear,
-            in: Rectangle()
-        )
-        .contentShape(Rectangle())
     }
 }
 

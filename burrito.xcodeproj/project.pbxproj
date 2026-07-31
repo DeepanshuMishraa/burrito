@@ -10,6 +10,7 @@
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
+		12F4A8C5D9E74AF690C40211 /* AppSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7E6F9A01854D73B3C81142 /* AppSurfaceTests.swift */; };
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
@@ -55,6 +56,7 @@
 		0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManager.swift; sourceTree = "<group>"; };
 		0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetTranscriber.swift; sourceTree = "<group>"; };
 		0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceAndStorageTests.swift; sourceTree = "<group>"; };
+		2B7E6F9A01854D73B3C81142 /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
 		3A7EDE94375DECAC98C16A4F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
@@ -98,6 +100,7 @@
 		05E85C1DB4D0CA916BC1F73E /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				2B7E6F9A01854D73B3C81142 /* AppSurfaceTests.swift */,
 				D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */,
 				80312D2153FF4924DF498F98 /* CoordinatorTests.swift */,
 				0A2216874DB0B52B8350E522 /* DomainTests.swift */,
@@ -293,6 +296,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				12F4A8C5D9E74AF690C40211 /* AppSurfaceTests.swift in Sources */,
 				4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */,
 				FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */,
 				0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */,

@@ -167,19 +167,94 @@ struct ArchivePackageRestoreReport: Equatable, Sendable {
     let audioFilesRestored: Int
 }
 
+struct ArchiveExportInput: Sendable {
+    struct NoteFile: Sendable {
+        let id: UUID
+        let title: String
+        let markdown: String
+        let systemAudioSource: URL?
+        let microphoneAudioSource: URL?
+    }
+
+    var archive: BurritoArchive
+    let noteFiles: [NoteFile]
+}
+
 struct RestoredAudioPaths: Sendable {
     let system: String?
     let microphone: String?
 }
 
+private struct ValidatedArchiveAudio: Sendable {
+    let system: URL?
+    let microphone: URL?
+}
+
+private struct LoadedArchivePackage: Sendable {
+    let directory: URL
+    let archive: BurritoArchive
+}
+
+private struct RestoredArchiveFiles: Sendable {
+    let audioPaths: [UUID: RestoredAudioPaths]
+    let createdFiles: [URL]
+    let createdDirectories: [URL]
+    let count: Int
+}
+
 enum BurritoArchivePackage {
     static let manifestFilename = "burrito.json"
+
+    static func prepareExport(
+        notes: [Note],
+        folders: [Folder],
+        templates: [NoteTemplate],
+        recordingStore: LocalRecordingFileStore
+    ) -> ArchiveExportInput {
+        ArchiveExportInput(
+            archive: BurritoArchive.capture(
+                notes: notes,
+                folders: folders,
+                templates: templates
+            ),
+            noteFiles: notes.map { note in
+                ArchiveExportInput.NoteFile(
+                    id: note.id,
+                    title: note.title,
+                    markdown: markdown(for: note),
+                    systemAudioSource: note.systemAudioRelativePath.map(
+                        recordingStore.url(forRelativePath:)
+                    ),
+                    microphoneAudioSource: note.microphoneAudioRelativePath.map(
+                        recordingStore.url(forRelativePath:)
+                    )
+                )
+            }
+        )
+    }
 
     static func export(
         notes: [Note],
         folders: [Folder],
         templates: [NoteTemplate],
         recordingStore: LocalRecordingFileStore,
+        to destination: URL,
+        fileManager: FileManager = .default
+    ) throws -> ArchiveExportReport {
+        try export(
+            prepareExport(
+                notes: notes,
+                folders: folders,
+                templates: templates,
+                recordingStore: recordingStore
+            ),
+            to: destination,
+            fileManager: fileManager
+        )
+    }
+
+    static func export(
+        _ input: ArchiveExportInput,
         to destination: URL,
         fileManager: FileManager = .default
     ) throws -> ArchiveExportReport {
@@ -201,19 +276,15 @@ enum BurritoArchivePackage {
             let audioDirectory = destination.appending(path: "Audio", directoryHint: .isDirectory)
             try fileManager.createDirectory(at: notesDirectory, withIntermediateDirectories: true)
 
-            var archive = BurritoArchive.capture(
-                notes: notes,
-                folders: folders,
-                templates: templates
-            )
+            var archive = input.archive
             var markdownFiles: [URL] = []
             var audioFilesExported = 0
 
-            for (index, note) in notes.enumerated() {
+            for (index, note) in input.noteFiles.enumerated() {
                 let markdownURL = notesDirectory.appending(
-                    path: "\(safeFilename(note.title))--\(note.id.uuidString.prefix(8)).md"
+                    path: "\(safeFilename(note.title))--\(note.id.uuidString).md"
                 )
-                try markdown(for: note).write(
+                try note.markdown.write(
                     to: markdownURL,
                     atomically: true,
                     encoding: .utf8
@@ -225,17 +296,15 @@ enum BurritoArchivePackage {
                     directoryHint: .isDirectory
                 )
                 let systemArchivePath = try copyAudio(
-                    relativePath: note.systemAudioRelativePath,
+                    source: note.systemAudioSource,
                     filename: "system.m4a",
                     noteAudioDirectory: noteAudioDirectory,
-                    recordingStore: recordingStore,
                     fileManager: fileManager
                 )
                 let microphoneArchivePath = try copyAudio(
-                    relativePath: note.microphoneAudioRelativePath,
+                    source: note.microphoneAudioSource,
                     filename: "microphone.m4a",
                     noteAudioDirectory: noteAudioDirectory,
-                    recordingStore: recordingStore,
                     fileManager: fileManager
                 )
                 archive.notes[index].systemAudioArchivePath = systemArchivePath
@@ -257,7 +326,7 @@ enum BurritoArchivePackage {
 
             return ArchiveExportReport(
                 destination: destination,
-                notesExported: notes.count,
+                notesExported: input.noteFiles.count,
                 audioFilesExported: audioFilesExported,
                 markdownFiles: markdownFiles
             )
@@ -275,6 +344,16 @@ enum BurritoArchivePackage {
         }
     }
 
+    static func export(
+        _ input: ArchiveExportInput,
+        to destination: URL
+    ) async throws -> ArchiveExportReport {
+        try await Task.detached(priority: .userInitiated) {
+            try export(input, to: destination, fileManager: .default)
+        }
+        .value
+    }
+
     @MainActor
     static func restore(
         from selectedURL: URL,
@@ -282,6 +361,70 @@ enum BurritoArchivePackage {
         recordingStore: LocalRecordingFileStore,
         fileManager: FileManager = .default
     ) throws -> ArchivePackageRestoreReport {
+        let package = try loadPackage(from: selectedURL, fileManager: fileManager)
+        let existingNoteIDs = Set(
+            try context.fetch(FetchDescriptor<Note>()).map(\.id)
+        )
+        let restoredFiles = try restoreFiles(
+            for: package,
+            excluding: existingNoteIDs,
+            recordingStore: recordingStore,
+            fileManager: fileManager
+        )
+        do {
+            let report = try package.archive.restore(
+                into: context,
+                audioPaths: restoredFiles.audioPaths
+            )
+            return packageReport(from: report, restoredFiles: restoredFiles)
+        } catch {
+            cleanup(restoredFiles, fileManager: fileManager)
+            throw restoreError(error)
+        }
+    }
+
+    @MainActor
+    static func restore(
+        from selectedURL: URL,
+        into context: ModelContext,
+        recordingStore: LocalRecordingFileStore
+    ) async throws -> ArchivePackageRestoreReport {
+        let package = try await Task.detached(priority: .userInitiated) {
+            try loadPackage(from: selectedURL, fileManager: .default)
+        }
+        .value
+        let existingNoteIDs = Set(
+            try context.fetch(FetchDescriptor<Note>()).map(\.id)
+        )
+        let restoredFiles = try await Task.detached(priority: .userInitiated) {
+            try restoreFiles(
+                for: package,
+                excluding: existingNoteIDs,
+                recordingStore: recordingStore,
+                fileManager: .default
+            )
+        }
+        .value
+
+        do {
+            let report = try package.archive.restore(
+                into: context,
+                audioPaths: restoredFiles.audioPaths
+            )
+            return packageReport(from: report, restoredFiles: restoredFiles)
+        } catch {
+            await Task.detached(priority: .utility) {
+                cleanup(restoredFiles, fileManager: .default)
+            }
+            .value
+            throw restoreError(error)
+        }
+    }
+
+    private static func loadPackage(
+        from selectedURL: URL,
+        fileManager: FileManager
+    ) throws -> LoadedArchivePackage {
         let packageDirectory: URL
         let manifestURL: URL
         if selectedURL.lastPathComponent == manifestFilename {
@@ -292,9 +435,11 @@ enum BurritoArchivePackage {
             manifestURL = selectedURL.appending(path: manifestFilename)
         }
 
-        let archive: BurritoArchive
         do {
-            archive = try BurritoArchive.decode(Data(contentsOf: manifestURL))
+            return LoadedArchivePackage(
+                directory: packageDirectory,
+                archive: try BurritoArchive.decode(Data(contentsOf: manifestURL))
+            )
         } catch let error as BurritoArchiveError {
             throw error
         } catch {
@@ -303,16 +448,44 @@ enum BurritoArchivePackage {
                 details: "\(error.localizedDescription) Existing notes were not changed."
             )
         }
+    }
 
-        let existingNoteIDs = Set(
-            try context.fetch(FetchDescriptor<Note>()).map(\.id)
-        )
-        let missingRecords = archive.notes.filter { !existingNoteIDs.contains($0.id) }
+    private static func restoreFiles(
+        for package: LoadedArchivePackage,
+        excluding existingNoteIDs: Set<UUID>,
+        recordingStore: LocalRecordingFileStore,
+        fileManager: FileManager
+    ) throws -> RestoredArchiveFiles {
+        let missingRecords = package.archive.notes.filter { !existingNoteIDs.contains($0.id) }
+        var validatedAudio: [UUID: ValidatedArchiveAudio] = [:]
         var restoredPaths: [UUID: RestoredAudioPaths] = [:]
         var createdAudioFiles: [URL] = []
+        var createdDirectories: [URL] = []
         var audioFilesRestored = 0
 
         do {
+            for record in missingRecords {
+                let mode = record.recordingModeRawValue
+                    .flatMap(RecordingMode.init(rawValue:)) ?? .listenAlong
+                if record.microphoneAudioArchivePath != nil, mode != .meeting {
+                    throw BurritoArchiveError.invalidArchive(
+                        details: "A microphone recording is attached to a non-meeting note. Existing notes were not changed."
+                    )
+                }
+                validatedAudio[record.id] = ValidatedArchiveAudio(
+                    system: try validatedAudioURL(
+                        archivePath: record.systemAudioArchivePath,
+                        packageDirectory: package.directory,
+                        fileManager: fileManager
+                    ),
+                    microphone: try validatedAudioURL(
+                        archivePath: record.microphoneAudioArchivePath,
+                        packageDirectory: package.directory,
+                        fileManager: fileManager
+                    )
+                )
+            }
+
             for record in missingRecords {
                 guard record.systemAudioArchivePath != nil
                         || record.microphoneAudioArchivePath != nil else {
@@ -320,10 +493,18 @@ enum BurritoArchivePackage {
                 }
                 let mode = record.recordingModeRawValue
                     .flatMap(RecordingMode.init(rawValue:)) ?? .listenAlong
+                let sessionDirectory = recordingStore.url(
+                    forRelativePath: record.id.uuidString
+                )
+                let sessionDirectoryExisted = fileManager.fileExists(
+                    atPath: sessionDirectory.path()
+                )
                 let files = try recordingStore.createSession(id: record.id, mode: mode).get()
+                if !sessionDirectoryExisted {
+                    createdDirectories.append(sessionDirectory)
+                }
                 let systemPath = try restoreAudio(
-                    archivePath: record.systemAudioArchivePath,
-                    packageDirectory: packageDirectory,
+                    source: validatedAudio[record.id]?.system,
                     destination: files.systemAudioURL,
                     recordingStore: recordingStore,
                     fileManager: fileManager
@@ -332,8 +513,7 @@ enum BurritoArchivePackage {
                     createdAudioFiles.append(systemURL)
                 }
                 let microphonePath = try restoreAudio(
-                    archivePath: record.microphoneAudioArchivePath,
-                    packageDirectory: packageDirectory,
+                    source: validatedAudio[record.id]?.microphone,
                     destination: files.microphoneAudioURL,
                     recordingStore: recordingStore,
                     fileManager: fileManager
@@ -348,41 +528,78 @@ enum BurritoArchivePackage {
                 audioFilesRestored += [systemPath, microphonePath].compactMap { $0 }.count
             }
 
-            let report = try archive.restore(into: context, audioPaths: restoredPaths)
-            return ArchivePackageRestoreReport(
-                notesInserted: report.notesInserted,
-                foldersInserted: report.foldersInserted,
-                templatesInserted: report.templatesInserted,
-                duplicatesSkipped: report.duplicatesSkipped,
-                audioFilesRestored: audioFilesRestored
+            return RestoredArchiveFiles(
+                audioPaths: restoredPaths,
+                createdFiles: createdAudioFiles,
+                createdDirectories: createdDirectories,
+                count: audioFilesRestored
             )
         } catch {
-            for url in createdAudioFiles {
-                try? fileManager.removeItem(at: url)
-            }
-            if let archiveError = error as? BurritoArchiveError {
-                throw archiveError
-            }
-            throw BurritoArchiveError.fileOperationFailed(
-                operation: "restore the backup",
-                details: "\(error.localizedDescription) Existing notes were not changed."
+            cleanup(
+                RestoredArchiveFiles(
+                    audioPaths: restoredPaths,
+                    createdFiles: createdAudioFiles,
+                    createdDirectories: createdDirectories,
+                    count: audioFilesRestored
+                ),
+                fileManager: fileManager
             )
+            throw restoreError(error)
         }
     }
 
+    private static func cleanup(
+        _ restoredFiles: RestoredArchiveFiles,
+        fileManager: FileManager
+    ) {
+        for url in restoredFiles.createdFiles {
+            try? fileManager.removeItem(at: url)
+        }
+        for directory in restoredFiles.createdDirectories.reversed() {
+            let contents = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+            if contents?.isEmpty == true {
+                try? fileManager.removeItem(at: directory)
+            }
+        }
+    }
+
+    private static func packageReport(
+        from report: ArchiveRestoreReport,
+        restoredFiles: RestoredArchiveFiles
+    ) -> ArchivePackageRestoreReport {
+        ArchivePackageRestoreReport(
+            notesInserted: report.notesInserted,
+            foldersInserted: report.foldersInserted,
+            templatesInserted: report.templatesInserted,
+            duplicatesSkipped: report.duplicatesSkipped,
+            audioFilesRestored: restoredFiles.count
+        )
+    }
+
+    private static func restoreError(_ error: Error) -> BurritoArchiveError {
+        if let archiveError = error as? BurritoArchiveError {
+            return archiveError
+        }
+        return BurritoArchiveError.fileOperationFailed(
+            operation: "restore the backup",
+            details: "\(error.localizedDescription) Existing notes were not changed."
+        )
+    }
+
     private static func copyAudio(
-        relativePath: String?,
+        source: URL?,
         filename: String,
         noteAudioDirectory: URL,
-        recordingStore: LocalRecordingFileStore,
         fileManager: FileManager
     ) throws -> String? {
-        guard let relativePath else { return nil }
-        let source = recordingStore.url(forRelativePath: relativePath)
+        guard let source else { return nil }
         guard fileManager.fileExists(atPath: source.path()) else {
             throw BurritoArchiveError.fileOperationFailed(
                 operation: "create the backup",
-                details: "The retained recording \(relativePath) is missing. Your existing library was not changed."
+                details: "The retained recording \(source.lastPathComponent) is missing. Your existing library was not changed."
             )
         }
         try fileManager.createDirectory(at: noteAudioDirectory, withIntermediateDirectories: true)
@@ -391,19 +608,12 @@ enum BurritoArchivePackage {
         return "Audio/\(noteAudioDirectory.lastPathComponent)/\(filename)"
     }
 
-    private static func restoreAudio(
+    private static func validatedAudioURL(
         archivePath: String?,
         packageDirectory: URL,
-        destination: URL?,
-        recordingStore: LocalRecordingFileStore,
         fileManager: FileManager
-    ) throws -> String? {
+    ) throws -> URL? {
         guard let archivePath else { return nil }
-        guard let destination else {
-            throw BurritoArchiveError.invalidArchive(
-                details: "A microphone recording is attached to a non-meeting note. Existing notes were not changed."
-            )
-        }
         var packagePath = packageDirectory
             .standardizedFileURL
             .resolvingSymlinksInPath()
@@ -423,6 +633,21 @@ enum BurritoArchivePackage {
         guard fileManager.fileExists(atPath: source.path()) else {
             throw BurritoArchiveError.invalidArchive(
                 details: "The backup references missing audio at \(archivePath). Existing notes were not changed."
+            )
+        }
+        return source
+    }
+
+    private static func restoreAudio(
+        source: URL?,
+        destination: URL?,
+        recordingStore: LocalRecordingFileStore,
+        fileManager: FileManager
+    ) throws -> String? {
+        guard let source else { return nil }
+        guard let destination else {
+            throw BurritoArchiveError.invalidArchive(
+                details: "The backup contains audio for a track this note cannot restore. Existing notes were not changed."
             )
         }
         try fileManager.copyItem(at: source, to: destination)
