@@ -1,0 +1,83 @@
+Sources/Ownership.swift
+  s_9dd6a64ae5544c::t_7d5031a72029b1 285
+  s_9dd6a64ae5544c::t_a8d56370f3682f 364-427,439-442,451,453-459,463,478,483,496-501,503-505,531-535,538-558,569-589,651-652
+  s_9dd6a64ae5544c::t_e05d29ba94f43e 347-356
+  s_9dd6a64ae5544c::t_df3a3492573289 559-561,563-565
+  s_9dd6a64ae5544c::t_ac6cdb966a032f 170-182,208-235,243-259,279,283,287,299,305,329,593,598,602
+  s_9dd6a64ae5544c::t_7496af3e1599f2 188-192,460,467-477,479-482,484-488,507,516,590,611,615,638-650
+  s_9dd6a64ae5544c::t_75e924e94bdda4 193-204
+  s_9dd6a64ae5544c::t_c6627862a44cbf 591
+Sources/AppFeedback.swift
+  s_9dd6a64ae5544c::t_c01f633451ade6 304,306,309-310,312,314-323,325-333
+  s_9dd6a64ae5544c::t_ef555183c76ba1 297,305
+  s_9dd6a64ae5544c::t_f52547c279fcb1 307-308,311,313
+  s_9dd6a64ae5544c::t_4e1de6cc1f7fe6 357-368,378-382
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_c01f633451ade6 227-231
+  s_9dd6a64ae5544c::t_1830fd48a1af23 437-468
+  s_9dd6a64ae5544c::t_59ae2f953619a7 356-379
+  s_9dd6a64ae5544c::t_34a93dee2ab592 588-616
+  s_9dd6a64ae5544c::t_4ba22dc079d497 192-209
+  s_9dd6a64ae5544c::t_a4d529c824358f 210-226,232-234
+  s_9dd6a64ae5544c::t_fdb19c3b2dba01 407-436
+burrito.xcodeproj/project.pbxproj
+  s_9dd6a64ae5544c::t_c37e793b4fa78c 13,59,103,299
+Sources/AppCoordinator.swift
+  s_9dd6a64ae5544c::t_69abbaf7ceacc6 631-632
+  s_9dd6a64ae5544c::t_f008e8f3d6b759 25,36-37,45,131,212,637
+Sources/Settings.swift
+  s_9dd6a64ae5544c::t_db969cfdb1c277 265-269
+  s_9dd6a64ae5544c::t_8315f83289fed6 4,10,17,29-35,246,252,256-264
+Sources/Domain.swift
+  s_9dd6a64ae5544c::t_dc617918180074 152
+Tests/PersistenceAndStorageTests.swift
+  s_9dd6a64ae5544c::t_7d1e1a560a911b 252-300,498-508
+  s_9dd6a64ae5544c::t_73884dee27dc11 301-345
+  s_9dd6a64ae5544c::t_22c9e10095af74 348,390,399
+  s_9dd6a64ae5544c::t_cfc846dea228fa 509
+Sources/burritoApp.swift
+  s_9dd6a64ae5544c::t_a4db0b3f2f6916 159,289-292,308-311,332-349
+  s_9dd6a64ae5544c::t_2187277b9e63e8 323
+  s_9dd6a64ae5544c::t_0ab49a3fe8a94c 350-351
+Sources/ContentView.swift
+  s_9dd6a64ae5544c::t_6086ee7033c2f7 3094-3096,3100-3102
+  s_9dd6a64ae5544c::t_357ec988bee274 979-999,1013-1026
+  s_9dd6a64ae5544c::t_2f3d9ca1ff0349 3068,3072,3090-3093,3097-3099,3103-3104
+  s_9dd6a64ae5544c::t_2187277b9e63e8 5,10-26,68,295,319-321,936-939,3105-3106
+  s_9dd6a64ae5544c::t_77b86ee660201a 940,3107
+Sources/CalendarAccess.swift
+  s_9dd6a64ae5544c::t_368a860a91839b 253-256
+Tests/CoordinatorTests.swift
+  s_9dd6a64ae5544c::t_25ebd08818d469 17,27,534-566
+  s_9dd6a64ae5544c::t_59b65235784be2 567-568
+Tests/AppSurfaceTests.swift
+  s_9dd6a64ae5544c::t_c37e793b4fa78c 1-2,4-18,69
+  s_9dd6a64ae5544c::t_91633fcbdd57e8 50-68
+  s_9dd6a64ae5544c::t_3c4d1f91d08471 19-37
+  s_9dd6a64ae5544c::t_bd1c9f53087e19 38-49
+  s_9dd6a64ae5544c::t_961586e58e0719 3
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_30c32577726e02 322
+  s_9dd6a64ae5544c::t_fde248c16a72bf 310-311,313-321,323-333,383-388
+  s_9dd6a64ae5544c::t_76f9a6983edacd 307-308,435-447,449-456,579-584,726-731
+  s_9dd6a64ae5544c::t_650a0436ed1f51 160-164,200-306,364-371,374
+  s_9dd6a64ae5544c::t_b9cd2ff1c686ec 312
+  s_9dd6a64ae5544c::t_a8087679d24642 448
+  s_9dd6a64ae5544c::t_2b64778d1f0427 309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "86f0e355759da48d9518030b50932715f1280d90",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
