@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 private enum SidebarSelection: Hashable {
     case all
     case favorites
+    case memory
     case models
     case templates
     case settings
@@ -50,6 +51,8 @@ struct ContentView: View {
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
+    @State private var selectedMemoryCitation: MemoryCitation?
+    @State private var memoryFolderID: UUID?
     @State private var isCommandPalettePresented = false
     @State private var commandPaletteQuery = ""
     @State private var recordingDestination: RecordingDestination?
@@ -83,6 +86,8 @@ struct ContentView: View {
                 note.deletedAt == nil
             case .favorites:
                 note.deletedAt == nil && note.isFavorite
+            case .memory:
+                false
             case .models:
                 false
             case .templates:
@@ -130,12 +135,18 @@ struct ContentView: View {
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
+                    externalCitedSegmentID: selectedMemoryCitation?.noteID == selectedNote.id
+                        ? selectedMemoryCitation?.segmentID
+                        : nil,
                     relatedNotes: relatedNotes(for: selectedNote),
                     coordinator: coordinator,
                     fileStore: LocalRecordingFileStore(),
                     folders: folders,
                     exportAction: { exportMarkdown(selectedNote) },
-                    backAction: { selectedNoteID = nil },
+                    backAction: {
+                        selectedNoteID = nil
+                        selectedMemoryCitation = nil
+                    },
                     selectRelatedNote: { selectedNoteID = $0 },
                     newRecordingAction: {
                         continueRecording(selectedNote)
@@ -301,6 +312,18 @@ struct ContentView: View {
                 ModelsView(modelStore: modelStore)
             } else if sidebarSelection == .templates {
                 TemplatesView(templates: templates)
+            } else if sidebarSelection == .memory {
+                MemoryChatView(
+                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask your meetings",
+                    subtitle: memoryFolder == nil
+                        ? "Search every local transcript with cited answers."
+                        : "Search this folder's local transcripts with cited answers.",
+                    documents: memoryNotes.map(memoryDocument),
+                    languageIdentifier: defaultLanguage
+                ) { citation in
+                    selectedMemoryCitation = citation
+                    selectedNoteID = citation.noteID
+                }
             } else if sidebarSelection == .settings {
                 BurritoSettingsView(calendarAccess: calendarAccess)
             } else {
@@ -370,6 +393,15 @@ struct ContentView: View {
                         isSelected: sidebarSelection == .favorites
                     ) {
                         sidebarSelection = .favorites
+                    }
+                    SidebarNavigationButton(
+                        title: "Ask Burrito",
+                        systemImage: "sparkles",
+                        count: 0,
+                        isSelected: sidebarSelection == .memory
+                    ) {
+                        memoryFolderID = nil
+                        sidebarSelection = .memory
                     }
                     SidebarNavigationButton(
                         title: "Models",
@@ -526,12 +558,24 @@ struct ContentView: View {
             .buttonStyle(HomeToolbarButtonStyle(destructive: true))
             .disabled(visibleNotes.isEmpty)
         } else {
-            Button {
-                recordingDestination = .newNote
-            } label: {
-                Label("New recording", systemImage: "plus")
+            HStack(spacing: 8) {
+                if case .folder(let folderID) = sidebarSelection {
+                    Button {
+                        memoryFolderID = folderID
+                        sidebarSelection = .memory
+                    } label: {
+                        Label("Ask folder", systemImage: "sparkles")
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle())
+                }
+
+                Button {
+                    recordingDestination = .newNote
+                } label: {
+                    Label("New recording", systemImage: "plus")
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
             }
-            .buttonStyle(HomeToolbarButtonStyle())
         }
     }
 
@@ -602,11 +646,36 @@ struct ContentView: View {
         switch sidebarSelection ?? .all {
         case .all: "All Notes"
         case .favorites: "Favorites"
+        case .memory: "Ask Burrito"
         case .models: "Models"
         case .templates: "Templates"
         case .settings: "Settings"
         case .trash: "Trash"
         case .folder(let id): folders.first(where: { $0.id == id })?.name ?? "Folder"
+        }
+    }
+
+    private func memoryDocument(_ note: Note) -> MemoryDocument {
+        MemoryDocument(
+            noteID: note.id,
+            title: note.title,
+            updatedAt: note.updatedAt,
+            segments: note.transcriptSegments
+        )
+    }
+
+    private var memoryFolder: Folder? {
+        guard let memoryFolderID else { return nil }
+        return folders.first { $0.id == memoryFolderID }
+    }
+
+    private var memoryNotes: [Note] {
+        notes.filter { note in
+            guard note.deletedAt == nil, !note.transcriptSegments.isEmpty else {
+                return false
+            }
+            guard let memoryFolderID else { return true }
+            return note.folder?.id == memoryFolderID
         }
     }
 
@@ -4374,6 +4443,7 @@ private struct TemplatePromptDetail: View {
 private struct MarkdownNoteContent: View {
     let markdown: String
     var openTranscript: ((UUID) -> Void)?
+    var openMemory: ((MemoryCitation) -> Void)?
 
     private var document: MarkdownDocument {
         MarkdownDocument.parse(markdown)
@@ -4390,6 +4460,10 @@ private struct MarkdownNoteContent: View {
         .environment(\.openURL, OpenURLAction { url in
             if let id = TranscriptCitation.segmentID(from: url) {
                 openTranscript?(id)
+                return .handled
+            }
+            if let citation = MemoryCitation.resolve(url) {
+                openMemory?(citation)
                 return .handled
             }
             NSWorkspace.shared.open(url)
@@ -4649,6 +4723,156 @@ private struct RecordingSourceLevel: View {
     }
 }
 
+private struct MemoryChatView: View {
+    let title: String
+    let subtitle: String
+    let documents: [MemoryDocument]
+    let languageIdentifier: String
+    let openCitation: (MemoryCitation) -> Void
+
+    @State private var question = ""
+    @State private var answer: String?
+    @State private var errorMessage: String?
+    @State private var isAnswering = false
+    @FocusState private var questionFocused: Bool
+
+    private var canAsk: Bool {
+        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !documents.isEmpty
+            && !isAnswering
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 40, height: 40)
+                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.burritoDisplay(size: 25, weight: .medium))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Label("On device", systemImage: "lock.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(BurritoTheme.sage)
+            }
+            .padding(.horizontal, 38)
+            .frame(height: 78)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if documents.isEmpty {
+                        ContentUnavailableView(
+                            "No transcript evidence",
+                            systemImage: "text.magnifyingglass",
+                            description: Text("Record and transcribe a meeting before asking questions.")
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 90)
+                    } else if let answer {
+                        NoteSourceLabel(
+                            title: "Burrito answer",
+                            detail: "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
+                            systemImage: "sparkles"
+                        )
+                        MarkdownNoteContent(
+                            markdown: answer,
+                            openMemory: openCitation
+                        )
+                        .padding(20)
+                        .background(BurritoTheme.raised, in: Rectangle())
+                        .overlay {
+                            Rectangle().stroke(BurritoTheme.softBorder)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Ask about decisions, dates, owners, objections, or what changed.")
+                                .font(.burritoDisplay(size: 20))
+                            Text("Burrito retrieves a bounded set of transcript passages and refuses to fill gaps with outside knowledge.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .lineSpacing(4)
+                        }
+                        .padding(.top, 72)
+                    }
+
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 38)
+                .padding(.bottom, 30)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+
+            HStack(spacing: 10) {
+                TextField("Ask a question about your meetings…", text: $question)
+                    .textFieldStyle(.plain)
+                    .focused($questionFocused)
+                    .onSubmit(ask)
+                if isAnswering {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button("Ask", systemImage: "arrow.up", action: ask)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(BurritoIconButtonStyle())
+                        .disabled(!canAsk)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: 760, minHeight: 48)
+            .background(BurritoTheme.raised, in: Rectangle())
+            .overlay {
+                Rectangle().stroke(BurritoTheme.softBorder)
+            }
+            .padding(.horizontal, 38)
+            .padding(.vertical, 18)
+        }
+        .background(BurritoTheme.canvas)
+        .onAppear { questionFocused = true }
+    }
+
+    private func ask() {
+        guard canAsk else { return }
+        let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let evidence = LocalMemory.retrieve(
+            question: submittedQuestion,
+            from: documents
+        )
+        isAnswering = true
+        errorMessage = nil
+        Task {
+            let result = await FoundationMemoryAnswerer.shared.answer(
+                question: submittedQuestion,
+                evidence: evidence,
+                languageIdentifier: languageIdentifier
+            )
+            switch result {
+            case .success(let value):
+                answer = value
+            case .failure(let error):
+                errorMessage = error.recoveryMessage
+            }
+            isAnswering = false
+        }
+    }
+}
+
 private struct NoteProvenanceView: View {
     let userNotes: String
     let generatedNotes: String
@@ -4816,6 +5040,7 @@ private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
     @Bindable var note: Note
+    let externalCitedSegmentID: UUID?
     let relatedNotes: [Note]
     let coordinator: AppCoordinator
     let fileStore: LocalRecordingFileStore
@@ -4913,6 +5138,9 @@ private struct NoteDetailView: View {
                         EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
                             selectedTab = 1
                         }
+                        EditorTabButton(title: "Ask", isSelected: selectedTab == 2) {
+                            selectedTab = 2
+                        }
                         Spacer()
                         if selectedTab == 0 {
                             BurritoInlineButton(
@@ -4968,12 +5196,36 @@ private struct NoteDetailView: View {
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
                 }
-            } else {
+            } else if selectedTab == 1 {
                 TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
+            } else {
+                MemoryChatView(
+                    title: "Ask this meeting",
+                    subtitle: "Answers use this transcript only.",
+                    documents: [
+                        MemoryDocument(
+                            noteID: note.id,
+                            title: note.title,
+                            updatedAt: note.updatedAt,
+                            segments: note.transcriptSegments
+                        ),
+                    ],
+                    languageIdentifier: note.languageIdentifier
+                ) { citation in
+                    guard citation.noteID == note.id else { return }
+                    citedSegmentID = citation.segmentID
+                    selectedTab = 1
+                }
             }
         }
         .background(BurritoTheme.canvas)
         .navigationTitle("")
+        .onAppear {
+            openExternalCitation()
+        }
+        .onChange(of: externalCitedSegmentID) {
+            openExternalCitation()
+        }
         .overlay(alignment: .top) {
             HStack {
                 if !isRecordingThisNote {
@@ -5122,6 +5374,12 @@ private struct NoteDetailView: View {
                 }
             }
         }
+    }
+
+    private func openExternalCitation() {
+        guard let externalCitedSegmentID else { return }
+        citedSegmentID = externalCitedSegmentID
+        selectedTab = 1
     }
 
     private var isRecordingThisNote: Bool {

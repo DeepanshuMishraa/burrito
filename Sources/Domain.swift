@@ -79,6 +79,101 @@ enum TranscriptCitation {
     }
 }
 
+struct MemoryDocument: Equatable, Sendable {
+    let noteID: UUID
+    let title: String
+    let updatedAt: Date
+    let segments: [TranscriptSegment]
+}
+
+struct MemoryEvidence: Equatable, Identifiable, Sendable {
+    let noteID: UUID
+    let noteTitle: String
+    let noteUpdatedAt: Date
+    let segment: TranscriptSegment
+
+    var id: String { "\(noteID.uuidString):\(segment.id.uuidString)" }
+
+    var citationURL: URL? {
+        URL(
+            string: "burrito://memory/\(noteID.uuidString)/\(segment.id.uuidString)"
+        )
+    }
+}
+
+struct MemoryCitation: Equatable, Sendable {
+    let noteID: UUID
+    let segmentID: UUID
+
+    static func resolve(_ url: URL?) -> MemoryCitation? {
+        guard let url,
+              url.scheme == "burrito",
+              url.host == "memory"
+        else {
+            return nil
+        }
+        let values = url.path
+            .split(separator: "/")
+            .map(String.init)
+        guard values.count == 2,
+              let noteID = UUID(uuidString: values[0]),
+              let segmentID = UUID(uuidString: values[1])
+        else {
+            return nil
+        }
+        return MemoryCitation(noteID: noteID, segmentID: segmentID)
+    }
+}
+
+enum LocalMemory {
+    static func retrieve(
+        question: String,
+        from documents: [MemoryDocument],
+        limit: Int = 18
+    ) -> [MemoryEvidence] {
+        guard limit > 0 else { return [] }
+        let queryTerms = terms(in: question)
+        let candidates = documents.flatMap { document in
+            document.segments.map { segment in
+                let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+                let passageMatches = queryTerms.intersection(terms(in: segment.text)).count
+                return (
+                    evidence: MemoryEvidence(
+                        noteID: document.noteID,
+                        noteTitle: document.title,
+                        noteUpdatedAt: document.updatedAt,
+                        segment: segment
+                    ),
+                    score: (titleMatches * 3) + passageMatches
+                )
+            }
+        }
+        return candidates
+            .sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                if $0.evidence.noteUpdatedAt != $1.evidence.noteUpdatedAt {
+                    return $0.evidence.noteUpdatedAt > $1.evidence.noteUpdatedAt
+                }
+                return $0.evidence.segment.startTime < $1.evidence.segment.startTime
+            }
+            .prefix(limit)
+            .map(\.evidence)
+    }
+
+    private static func terms(in text: String) -> Set<String> {
+        let ignored = Set([
+            "a", "an", "and", "are", "did", "do", "for", "how", "in", "is",
+            "it", "of", "on", "the", "to", "was", "what", "when", "where", "who",
+        ])
+        return Set(
+            text.lowercased()
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 1 && !ignored.contains($0) }
+        )
+    }
+}
+
 enum CaptureState: Equatable, Sendable {
     case idle
     case preparing

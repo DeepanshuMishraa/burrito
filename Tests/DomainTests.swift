@@ -206,6 +206,76 @@ struct TranscriptTests {
     }
 }
 
+@Suite("Local memory")
+struct LocalMemoryTests {
+    @Test("Library questions retrieve the most relevant transcript passage")
+    func retrievesRelevantEvidence() {
+        let launch = MemoryDocument(
+            noteID: UUID(),
+            title: "Launch planning",
+            updatedAt: Date(timeIntervalSinceReferenceDate: 200),
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let hiring = MemoryDocument(
+            noteID: UUID(),
+            title: "Hiring review",
+            updatedAt: Date(timeIntervalSinceReferenceDate: 300),
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 4,
+                    duration: 2,
+                    text: "We should interview two design candidates."
+                ),
+            ]
+        )
+
+        let evidence = LocalMemory.retrieve(
+            question: "When is the launch date?",
+            from: [hiring, launch],
+            limit: 1
+        )
+
+        #expect(evidence.map(\.noteID) == [launch.noteID])
+        #expect(evidence.first?.segment.text == "The launch date is October 12.")
+    }
+
+    @Test("Memory prompts require cited answers and explicit uncertainty")
+    func promptContract() {
+        let noteID = UUID(uuidString: "B445F1FC-D124-4CD4-A157-D25201200659") ?? UUID()
+        let segmentID = UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736") ?? UUID()
+        let evidence = MemoryEvidence(
+            noteID: noteID,
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: segmentID,
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+
+        let source = MemoryPrompt.source(
+            question: "When is launch?",
+            evidence: [evidence]
+        )
+
+        #expect(MemoryPrompt.instructions.contains("evidence is insufficient"))
+        #expect(MemoryPrompt.instructions.contains("burrito://memory/<NOTE-UUID>/<SEGMENT-UUID>"))
+        #expect(source.contains("Launch planning"))
+        #expect(source.contains("burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"))
+    }
+}
+
 @Suite("Audio levels")
 struct AudioLevelTests {
     @Test("Measures interleaved microphone PCM")
