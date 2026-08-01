@@ -1,0 +1,21 @@
+Sources/Settings.swift
+  s_2fa5b4861add4a::t_a375bff367bff4 69,88,90-93,400-401,413,432,441,443-446,478,486,488-491
+Sources/ContentView.swift
+  s_2fa5b4861add4a::t_dbc6173dc07b07 1230,1340,1347,2841-2844,2891-2894,2979,3083,3087,3106,5197,5201,5221,5231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "4478c666d8be98450865445f46338ee5c4477795",
+  "prompts": {},
+  "sessions": {
+    "s_2fa5b4861add4a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fbe41-2cc7-79d3-ae1a-5e9c43707d1c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
