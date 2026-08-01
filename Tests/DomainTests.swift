@@ -487,6 +487,33 @@ struct LocalMemoryTests {
         #expect(MemoryAnswer.validated(answer, against: [evidence]) == nil)
     }
 
+    @Test("Memory answers preserve link-free insufficient-evidence explanations")
+    func preservesInsufficientEvidenceExplanation() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let explanation = "The supplied evidence does not identify who approved the launch."
+
+        let answer = try #require(
+            MemoryAnswer.validated(
+                "INSUFFICIENT_EVIDENCE: \(explanation)",
+                against: [evidence]
+            )
+        )
+        #expect(answer.contains("Unverified AI answer"))
+        #expect(answer.contains(explanation))
+        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+    }
+
     @Test("Memory answers label claim grounding as unverified")
     func labelsUnverifiedGrounding() throws {
         let evidence = MemoryEvidence(

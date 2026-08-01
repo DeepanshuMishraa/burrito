@@ -170,7 +170,8 @@ enum MemoryPrompt {
         - Cite every factual claim with the supplied evidence link in the exact form
           `[source](burrito://memory/<NOTE-UUID>/<SEGMENT-UUID>)`.
         - Never invent or alter a citation URL.
-        - If the evidence is insufficient, say that plainly and state what could not be verified.
+        - If the evidence is insufficient, start with `INSUFFICIENT_EVIDENCE:` and state what could
+          not be verified. Do not add a citation for unsupported claims.
         - Preserve uncertainty, disagreement, names, dates, quantities, and ownership.
         - Do not use outside knowledge.
         """
@@ -308,6 +309,7 @@ enum MemoryPrompt {
 }
 
 enum MemoryAnswer {
+    private static let insufficientEvidencePrefix = "INSUFFICIENT_EVIDENCE:"
     private static let groundingNotice = """
         > **Unverified AI answer:** Citation destinations are valid, but Burrito has not independently verified every claim against the linked passages.
 
@@ -322,8 +324,17 @@ enum MemoryAnswer {
         }
         let destinations = Set(rendered.runs.compactMap { $0.link?.absoluteString })
         let allowed = Set(evidence.compactMap { $0.citationURL?.absoluteString })
-        guard !destinations.isEmpty, destinations.isSubset(of: allowed) else {
+        guard destinations.isSubset(of: allowed) else {
             return nil
+        }
+        if destinations.isEmpty {
+            let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix(insufficientEvidencePrefix) else { return nil }
+            let explanation = trimmed
+                .dropFirst(insufficientEvidencePrefix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !explanation.isEmpty else { return nil }
+            return groundingNotice + explanation
         }
         return groundingNotice + answer
     }
