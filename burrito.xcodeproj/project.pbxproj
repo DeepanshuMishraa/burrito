@@ -13,6 +13,7 @@
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
 		1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
+		2C7993E84252BAF80DD73906 /* AITesting in Frameworks */ = {isa = PBXBuildFile; productRef = 95676C287AC51B2EA5887B1D /* AITesting */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
@@ -26,6 +27,7 @@
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
+		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
@@ -95,6 +97,15 @@
 				1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */,
 				7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */,
 				5EE81FD4567D9697A350137B /* Lottie in Frameworks */,
+				BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EED2DA7C397DE92C900678E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2C7993E84252BAF80DD73906 /* AITesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +210,7 @@
 				299A838A7B8892CA4C7945E3 /* Sparkle */,
 				64DA2926F2A0EF333C410B58 /* FluidAudio */,
 				ECFA337F1032D11A4CC3842E /* Lottie */,
+				BF1585C55A8225C58A754212 /* AI */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -209,6 +221,7 @@
 			buildConfigurationList = 1CAF57C2AE0567F0E7E258E5 /* Build configuration list for PBXNativeTarget "BurritoTests" */;
 			buildPhases = (
 				AC038B67B6FB10E4E0FE5A8B /* Sources */,
+				6EED2DA7C397DE92C900678E /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -217,6 +230,7 @@
 			);
 			name = BurritoTests;
 			packageProductDependencies = (
+				95676C287AC51B2EA5887B1D /* AITesting */,
 			);
 			productName = BurritoTests;
 			productReference = B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */;
@@ -254,6 +268,7 @@
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
+				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 89BA562FB69766E4020166D8 /* Products */;
@@ -588,6 +603,14 @@
 				minimumVersion = 4.6.1;
 			};
 		};
+		50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/zaidmukaddam/swift-ai-sdk.git";
+			requirement = {
+				kind = revision;
+				revision = 9a8ea7e5f718af957f222c12ba09caff79caf3d0;
+			};
+		};
 		7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -616,6 +639,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		95676C287AC51B2EA5887B1D /* AITesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */;
+			productName = AITesting;
+		};
+		BF1585C55A8225C58A754212 /* AI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */;
+			productName = AI;
 		};
 		ECFA337F1032D11A4CC3842E /* Lottie */ = {
 			isa = XCSwiftPackageProductDependency;

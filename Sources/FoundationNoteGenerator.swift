@@ -1,3 +1,4 @@
+import AI
 import Foundation
 import FoundationModels
 
@@ -351,7 +352,7 @@ actor FoundationMemoryAnswerer {
     static let shared = FoundationMemoryAnswerer()
 
     private let model = SystemLanguageModel.default
-    private let adapter = AppleModelAdapter()
+    private let adapter = FoundationModelAdapter()
 
     func answer(
         question: String,
@@ -401,7 +402,9 @@ actor FoundationMemoryAnswerer {
             }
             return .success(supported)
         } catch {
-            return .failure(.generationFailed(details: error.localizedDescription))
+            return .failure(
+                .generationFailed(details: FoundationModelFailure.details(for: error))
+            )
         }
     }
 }
@@ -474,17 +477,44 @@ enum FallbackTokenEstimate {
     }
 }
 
-actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
-    private let model = SystemLanguageModel(
-        useCase: .general,
-        guardrails: .permissiveContentTransformations
-    )
+enum FoundationModelFailure {
+    static func details(for error: Error) -> String {
+        if let error = error as? AIError {
+            return error.description
+        }
+        if case .generationFailed(let details) = error as? BurritoError {
+            return details
+        }
+        return error.localizedDescription
+    }
+}
 
-    var contextSize: Int { model.contextSize }
+actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
+    private let systemModel: SystemLanguageModel
+    private let model: any AI.LanguageModel
+
+    init() {
+        let systemModel = SystemLanguageModel(
+            useCase: .general,
+            guardrails: .permissiveContentTransformations
+        )
+        self.systemModel = systemModel
+        model = FoundationModelsModel(systemModel: systemModel)
+    }
+
+    init(model: any AI.LanguageModel) {
+        systemModel = SystemLanguageModel(
+            useCase: .general,
+            guardrails: .permissiveContentTransformations
+        )
+        self.model = model
+    }
+
+    var contextSize: Int { systemModel.contextSize }
 
     func tokenCount(_ text: String) async throws -> Int {
         if #available(macOS 26.4, *) {
-            return try await model.tokenCount(for: text)
+            return try await systemModel.tokenCount(for: text)
         }
         return FallbackTokenEstimate.count(text)
     }
@@ -494,13 +524,11 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
         prompt: String,
         maximumResponseTokens: Int
     ) async throws -> String {
-        let session = LanguageModelSession(model: model, instructions: instructions)
-        let options = GenerationOptions(
-            sampling: nil,
-            temperature: nil,
+        try await response(
+            instructions: instructions,
+            prompt: prompt,
             maximumResponseTokens: maximumResponseTokens
         )
-        return try await session.respond(to: prompt, options: options).content
     }
 
     func completeNote(
@@ -508,13 +536,11 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
         prompt: String,
         maximumResponseTokens: Int
     ) async throws -> GeneratedNote {
-        let session = LanguageModelSession(model: model, instructions: instructions)
-        let options = GenerationOptions(
-            sampling: nil,
-            temperature: nil,
+        let response = try await response(
+            instructions: instructions,
+            prompt: prompt,
             maximumResponseTokens: maximumResponseTokens
         )
-        let response = try await session.respond(to: prompt, options: options).content
         guard let generated = GeneratedNote.parseLabeledResponse(response) else {
             throw BurritoError.generationFailed(
                 details: "The model returned an unexpected note format."
@@ -528,13 +554,34 @@ actor AppleModelAdapter: PromptTokenMeasuring, TextCompleting {
         prompt: String,
         maximumResponseTokens: Int
     ) async throws -> String {
-        let session = LanguageModelSession(model: model, instructions: instructions)
-        let options = GenerationOptions(
-            sampling: nil,
-            temperature: 0.2,
-            maximumResponseTokens: maximumResponseTokens
+        try await response(
+            instructions: instructions,
+            prompt: prompt,
+            maximumResponseTokens: maximumResponseTokens,
+            temperature: 0.2
         )
-        return try await session.respond(to: prompt, options: options).content
+    }
+
+    private func response(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int,
+        temperature: Double? = nil
+    ) async throws -> String {
+        let result = try await generateText(
+            model: model,
+            system: instructions,
+            prompt: prompt,
+            maxOutputTokens: maximumResponseTokens,
+            temperature: temperature,
+            maxSteps: 1
+        )
+        guard result.finishReason != .contentFilter else {
+            throw BurritoError.generationFailed(
+                details: "The on-device model could not process this source. Your transcript and notes remain unchanged."
+            )
+        }
+        return result.text
     }
 }
 
@@ -549,9 +596,9 @@ struct FoundationNoteGenerator: NoteGenerating {
     }
 
     private let model = SystemLanguageModel.default
-    private let adapter: AppleModelAdapter
+    private let adapter: FoundationModelAdapter
 
-    init(adapter: AppleModelAdapter = AppleModelAdapter()) {
+    init(adapter: FoundationModelAdapter = FoundationModelAdapter()) {
         self.adapter = adapter
     }
 
@@ -627,7 +674,9 @@ struct FoundationNoteGenerator: NoteGenerating {
         } catch let error as BurritoError {
             return .failure(error)
         } catch {
-            return .failure(.generationFailed(details: error.localizedDescription))
+            return .failure(
+                .generationFailed(details: FoundationModelFailure.details(for: error))
+            )
         }
     }
 
@@ -656,7 +705,9 @@ struct FoundationNoteGenerator: NoteGenerating {
             }
             return .success(title)
         } catch {
-            return .failure(.generationFailed(details: error.localizedDescription))
+            return .failure(
+                .generationFailed(details: FoundationModelFailure.details(for: error))
+            )
         }
     }
 

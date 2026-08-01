@@ -1,3 +1,4 @@
+import AITesting
 import AVFoundation
 import EventKit
 import Foundation
@@ -631,6 +632,30 @@ private struct CharacterTokenMeasurer: PromptTokenMeasuring {
     let size: Int
     var contextSize: Int { get async { size } }
     func tokenCount(_ text: String) async throws -> Int { text.count }
+}
+
+@Suite("Foundation model adapter")
+struct FoundationModelAdapterTests {
+    @Test("Routes prompts through the Swift AI SDK")
+    func routesPromptsThroughSDK() async throws {
+        let model = MockLanguageModel(text: "A concise factual digest.")
+        let adapter = FoundationModelAdapter(model: model)
+
+        let response = try await adapter.complete(
+            instructions: "Use only supplied facts.",
+            prompt: "Summarize this transcript.",
+            maximumResponseTokens: 384
+        )
+
+        #expect(response == "A concise factual digest.")
+        let request = try #require(model.requests.first)
+        #expect(request.maxOutputTokens == 384)
+        #expect(request.messages.map(\.role) == [.system, .user])
+        #expect(request.messages.map(\.text) == [
+            "Use only supplied facts.",
+            "Summarize this transcript.",
+        ])
+    }
 }
 
 @Suite("Fallback token estimation")
