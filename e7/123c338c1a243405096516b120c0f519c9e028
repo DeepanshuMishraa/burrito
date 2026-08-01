@@ -1,0 +1,23 @@
+Tests/DomainTests.swift
+  s_9dd6a64ae5544c::t_b567006b6ea24f 490-506,511-513,515-516
+  s_9dd6a64ae5544c::t_9ef6b6f18d322b 507-510,514
+Sources/FoundationNoteGenerator.swift
+  s_9dd6a64ae5544c::t_9ef6b6f18d322b 173-174,312,327,330-337
+  s_9dd6a64ae5544c::t_549dee73bd403d 338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "e7123c338c1a243405096516b120c0f519c9e028",
+  "prompts": {},
+  "sessions": {
+    "s_9dd6a64ae5544c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb27f-efc8-73c1-ab49-537d03a42b27",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
