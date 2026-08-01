@@ -40,7 +40,7 @@ extension Font {
         return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
     }
 
-    static func burritoMono(
+    static func spline(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
@@ -50,10 +50,11 @@ extension Font {
 
     static func spline(
         size: CGFloat,
-        weight: Font.Weight = .regular
+        weight: Font.Weight = .regular,
+        relativeTo textStyle: Font.TextStyle
     ) -> Font {
         BurritoFontRegistrar.registerFontsIfNeeded()
-        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+        return .custom("Spline Sans Mono", size: size, relativeTo: textStyle).weight(weight)
     }
 }
 
@@ -176,7 +177,7 @@ struct BurritoPill: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.spline(size: 11, weight: .regular))
+            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)

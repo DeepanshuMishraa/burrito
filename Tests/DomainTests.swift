@@ -514,6 +514,33 @@ struct LocalMemoryTests {
         #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
     }
 
+    @Test("Memory answers strip insufficient-evidence markers when citations are present")
+    func stripsInsufficientEvidenceMarkerFromCitedAnswer() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let explanation = "The date is known, but the approver is not. [source](\(validURL))"
+
+        let answer = try #require(
+            MemoryAnswer.validated(
+                "INSUFFICIENT_EVIDENCE: \(explanation)",
+                against: [evidence]
+            )
+        )
+        #expect(answer.contains(explanation))
+        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+    }
+
     @Test("Memory answers label claim grounding as unverified")
     func labelsUnverifiedGrounding() throws {
         let evidence = MemoryEvidence(

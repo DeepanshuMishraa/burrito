@@ -319,7 +319,20 @@ enum MemoryAnswer {
         _ answer: String,
         against evidence: [MemoryEvidence]
     ) -> String? {
-        guard let rendered = try? AttributedString(markdown: answer) else {
+        let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isInsufficientEvidence = trimmed.hasPrefix(insufficientEvidencePrefix)
+        let normalizedAnswer: String
+        if isInsufficientEvidence {
+            let explanation = trimmed
+                .dropFirst(insufficientEvidencePrefix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !explanation.isEmpty else { return nil }
+            normalizedAnswer = explanation
+        } else {
+            normalizedAnswer = answer
+        }
+
+        guard let rendered = try? AttributedString(markdown: normalizedAnswer) else {
             return nil
         }
         let destinations = Set(rendered.runs.compactMap { $0.link?.absoluteString })
@@ -328,15 +341,9 @@ enum MemoryAnswer {
             return nil
         }
         if destinations.isEmpty {
-            let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.hasPrefix(insufficientEvidencePrefix) else { return nil }
-            let explanation = trimmed
-                .dropFirst(insufficientEvidencePrefix.count)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !explanation.isEmpty else { return nil }
-            return groundingNotice + explanation
+            guard isInsufficientEvidence else { return nil }
         }
-        return groundingNotice + answer
+        return groundingNotice + normalizedAnswer
     }
 }
 

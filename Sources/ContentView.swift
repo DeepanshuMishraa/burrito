@@ -1416,6 +1416,7 @@ private struct CommandPaletteRowButtonStyle: ButtonStyle {
 }
 
 private struct SidebarAccountCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: MacUserProfile
     @Binding var appearanceRawValue: String
     @Bindable var updater: BurritoUpdateManager
@@ -1437,8 +1438,12 @@ private struct SidebarAccountCard: View {
                     ForEach(BurritoAppearance.allCases) { option in
                         Button {
                             BurritoHaptics.trigger(.alignment)
-                            withAnimation(.burritoSpring) {
+                            if reduceMotion {
                                 appearanceRawValue = option.rawValue
+                            } else {
+                                withAnimation(.burritoSpring) {
+                                    appearanceRawValue = option.rawValue
+                                }
                             }
                         } label: {
                             Image(systemName: option.systemImage)
@@ -2286,6 +2291,7 @@ private struct PermissionRow: View {
 }
 
 private struct BurritoActionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
     let prominent: Bool
 
@@ -2306,7 +2312,10 @@ private struct BurritoActionButtonStyle: ButtonStyle {
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .animation(.burritoSpring, value: configuration.isPressed)
+            .animation(
+                reduceMotion ? nil : .burritoSpring,
+                value: configuration.isPressed
+            )
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed { BurritoHaptics.trigger(.generic) }
             }
@@ -2314,6 +2323,7 @@ private struct BurritoActionButtonStyle: ButtonStyle {
 }
 
 private struct HomeToolbarButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
     var destructive = false
 
@@ -2335,7 +2345,10 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
             }
             .opacity(isEnabled ? 1 : 0.35)
             .scaleEffect(configuration.isPressed && isEnabled ? 0.965 : 1)
-            .animation(.burritoSpring, value: configuration.isPressed)
+            .animation(
+                reduceMotion ? nil : .burritoSpring,
+                value: configuration.isPressed
+            )
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed { BurritoHaptics.trigger(.generic) }
             }
@@ -2343,6 +2356,7 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
 }
 
 private struct BurritoDestructiveButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -2354,7 +2368,10 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .background(Color.red.opacity(0.78), in: Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .animation(.burritoSpring, value: configuration.isPressed)
+            .animation(
+                reduceMotion ? nil : .burritoSpring,
+                value: configuration.isPressed
+            )
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed { BurritoHaptics.trigger(.levelChange) }
             }
@@ -2362,6 +2379,7 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
 }
 
 private struct BurritoIconButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -2373,7 +2391,10 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.burritoSpring, value: configuration.isPressed)
+            .animation(
+                reduceMotion ? nil : .burritoSpring,
+                value: configuration.isPressed
+            )
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed { BurritoHaptics.trigger(.generic) }
             }
@@ -2825,6 +2846,7 @@ private struct SidebarItemLabel: View {
 }
 
 private struct SidebarNavigationButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String
     var markerColor: Color? = nil
@@ -2885,8 +2907,11 @@ private struct SidebarNavigationButton: View {
             isSelected ? BurritoTheme.controlFill : (isHovered ? BurritoTheme.controlFill.opacity(0.45) : Color.clear),
             in: Rectangle()
         )
-        .animation(.burritoSpring, value: isSelected)
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: isHovered
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -5641,6 +5666,7 @@ private struct NoteDetailView: View {
 }
 
 private struct EditorTabButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let isSelected: Bool
     let select: () -> Void
@@ -5672,8 +5698,11 @@ private struct EditorTabButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .animation(.burritoSpring, value: isSelected)
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: isHovered
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
