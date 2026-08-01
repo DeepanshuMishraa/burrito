@@ -1,0 +1,38 @@
+Sources/FoundationNoteGenerator.swift
+  s_2fa5b4861add4a::t_dc3459fba05b9a 1,355,492-493,495-502,511,513,517,527-529,539-541,557-577,579-584,599,601
+  s_2fa5b4861add4a::t_9f923cce2f7690 480-491,677-679,708-710
+  s_2fa5b4861add4a::t_d12e7432f48984 494,503-510
+  s_2fa5b4861add4a::t_6c807845e600b8 405-407
+burrito.xcodeproj/project.pbxproj
+  s_2fa5b4861add4a::t_43543f45fb78e3 610-611
+  s_2fa5b4861add4a::t_a5a209508edc7e 16,104-108,224,233,643-646
+  s_2fa5b4861add4a::t_b3ba31ccc0762f 30,100,103,213,271,606-609,612-613,647-652
+  s_2fa5b4861add4a::t_d716cc2ea58e97 101-102
+Tests/DomainTests.swift
+  s_2fa5b4861add4a::t_d12e7432f48984 1,637-658
+  s_2fa5b4861add4a::t_59a2982c3bd402 659-660
+project.yml
+  s_2fa5b4861add4a::t_d12e7432f48984 66-67
+  s_2fa5b4861add4a::t_dc3459fba05b9a 20-21,37-38
+  s_2fa5b4861add4a::t_9845dc77121355 22-23
+burrito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  s_2fa5b4861add4a::t_43543f45fb78e3 36
+  s_2fa5b4861add4a::t_41a741b543fd5b 2,30-35
+  s_2fa5b4861add4a::t_a99ff2a9b01676 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "04752380fb897d9d63445a2ecebd2c34785c7f93",
+  "prompts": {},
+  "sessions": {
+    "s_2fa5b4861add4a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fbe41-2cc7-79d3-ae1a-5e9c43707d1c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
