@@ -4931,6 +4931,28 @@ private struct RecordingSourceLevel: View {
     }
 }
 
+private struct MemoryChatMessage: Identifiable, Equatable {
+    let id: UUID
+    let isUser: Bool
+    let text: String
+    let timestamp: Date
+    let errorMessage: String?
+
+    init(
+        id: UUID = UUID(),
+        isUser: Bool,
+        text: String,
+        timestamp: Date = Date(),
+        errorMessage: String? = nil
+    ) {
+        self.id = id
+        self.isUser = isUser
+        self.text = text
+        self.timestamp = timestamp
+        self.errorMessage = errorMessage
+    }
+}
+
 private struct MemoryChatView: View {
     let title: String
     let subtitle: String
@@ -4938,16 +4960,25 @@ private struct MemoryChatView: View {
     let languageIdentifier: String
     let openCitation: (MemoryCitation) -> Void
 
+    @State private var messages: [MemoryChatMessage] = []
     @State private var question = ""
-    @State private var answer: String?
-    @State private var errorMessage: String?
     @State private var isAnswering = false
+    @State private var copiedMessageID: UUID?
     @FocusState private var questionFocused: Bool
 
     private var canAsk: Bool {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !documents.isEmpty
             && !isAnswering
+    }
+
+    private var suggestedPrompts: [String] {
+        [
+            "What were the key decisions made?",
+            "List all action items and assignees.",
+            "What were the main objections or concerns?",
+            "Summarize the next steps and deadlines."
+        ]
     }
 
     var body: some View {
@@ -4960,15 +4991,38 @@ private struct MemoryChatView: View {
                     .background(BurritoTheme.accentSoft, in: Rectangle())
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.burritoDisplay(size: 25, weight: .medium))
+                        .font(.burritoDisplay(size: 24, weight: .medium))
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.spline(size: 11, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Label("On device", systemImage: "lock.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(BurritoTheme.sage)
+
+                HStack(spacing: 12) {
+                    if !messages.isEmpty {
+                        Button {
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) {
+                                messages.removeAll()
+                            }
+                        } label: {
+                            Label("Clear chat", systemImage: "trash")
+                                .font(.spline(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .frame(height: 28)
+                                .background(BurritoTheme.controlFill, in: Rectangle())
+                                .overlay {
+                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Label("On device", systemImage: "lock.fill")
+                        .font(.spline(size: 11, weight: .semibold))
+                        .foregroundStyle(BurritoTheme.sage)
+                }
             }
             .padding(.horizontal, 38)
             .frame(height: 78)
@@ -4977,69 +5031,127 @@ private struct MemoryChatView: View {
                 .fill(BurritoTheme.softBorder)
                 .frame(height: 1)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if documents.isEmpty {
-                        ContentUnavailableView(
-                            "No transcript evidence",
-                            systemImage: "text.magnifyingglass",
-                            description: Text("Record and transcribe a meeting before asking questions.")
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 90)
-                    } else if let answer {
-                        NoteSourceLabel(
-                            title: "Burrito answer",
-                            detail: "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
-                            systemImage: "sparkles"
-                        )
-                        MarkdownNoteContent(
-                            markdown: answer,
-                            openMemory: openCitation
-                        )
-                        .padding(20)
-                        .background(BurritoTheme.raised, in: Rectangle())
-                        .overlay {
-                            Rectangle().stroke(BurritoTheme.softBorder)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Ask about decisions, dates, owners, objections, or what changed.")
-                                .font(.burritoDisplay(size: 20))
-                            Text("Burrito retrieves a bounded set of transcript passages and refuses to fill gaps with outside knowledge.")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineSpacing(4)
-                        }
-                        .padding(.top, 72)
-                    }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if documents.isEmpty {
+                            ContentUnavailableView(
+                                "No transcript evidence",
+                                systemImage: "text.magnifyingglass",
+                                description: Text("Record and transcribe a meeting before asking questions.")
+                                    .font(.spline(size: 12, weight: .regular))
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 90)
+                        } else if messages.isEmpty {
+                            VStack(alignment: .leading, spacing: 22) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Ask anything about your meetings")
+                                        .font(.burritoDisplay(size: 22, weight: .medium))
+                                    Text("Burrito retrieves grounded transcript passages and provides cited answers using local AI.")
+                                        .font(.spline(size: 13, weight: .regular))
+                                        .foregroundStyle(.secondary)
+                                        .lineSpacing(4)
+                                }
 
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("SUGGESTED QUESTIONS")
+                                        .font(.spline(size: 9, weight: .semibold))
+                                        .tracking(0.7)
+                                        .foregroundStyle(.tertiary)
+
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                        ForEach(suggestedPrompts, id: \.self) { prompt in
+                                            Button {
+                                                BurritoHaptics.trigger(.alignment)
+                                                submitPrompt(prompt)
+                                            } label: {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: "sparkles")
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(BurritoTheme.accent)
+                                                    Text(prompt)
+                                                        .font(.spline(size: 12, weight: .regular))
+                                                        .foregroundStyle(.primary)
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
+                                                    Spacer()
+                                                    Image(systemName: "arrow.up.right")
+                                                        .font(.system(size: 10))
+                                                        .foregroundStyle(.tertiary)
+                                                }
+                                                .padding(12)
+                                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                                .background(BurritoTheme.raised, in: Rectangle())
+                                                .overlay {
+                                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.top, 42)
+                        } else {
+                            ForEach(messages) { msg in
+                                if msg.isUser {
+                                    userMessageBubble(msg)
+                                        .id(msg.id)
+                                } else {
+                                    assistantMessageCard(msg)
+                                        .id(msg.id)
+                                }
+                            }
+
+                            if isAnswering {
+                                thinkingCard
+                                    .id("thinking-indicator")
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, 38)
+                    .padding(.top, 24)
+                    .padding(.bottom, 30)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: messages) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: isAnswering) { _, answering in
+                    if answering {
+                        scrollToBottom(proxy: proxy)
                     }
                 }
-                .frame(maxWidth: 760, alignment: .leading)
-                .padding(.horizontal, 38)
-                .padding(.bottom, 30)
-                .frame(maxWidth: .infinity)
             }
-            .scrollIndicators(.hidden)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 TextField("Ask a question about your meetings…", text: $question)
                     .textFieldStyle(.plain)
+                    .font(.spline(size: 13, weight: .regular))
                     .focused($questionFocused)
                     .onSubmit(ask)
+
                 if isAnswering {
                     ProgressView()
                         .controlSize(.small)
+                        .padding(.horizontal, 4)
                 } else {
-                    Button("Ask", systemImage: "arrow.up", action: ask)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(BurritoIconButtonStyle())
-                        .disabled(!canAsk)
+                    Button(action: ask) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(canAsk ? .white : Color.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
+                                in: Rectangle()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canAsk)
+                    .help("Send question")
                 }
             }
             .padding(.horizontal, 14)
@@ -5055,28 +5167,163 @@ private struct MemoryChatView: View {
         .onAppear { questionFocused = true }
     }
 
+    private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
+        HStack {
+            Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("YOU")
+                        .font(.spline(size: 9, weight: .semibold))
+                        .foregroundStyle(BurritoTheme.accent)
+                    Text(msg.timestamp, format: .dateTime.hour().minute())
+                        .font(.spline(size: 9, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                }
+                Text(msg.text)
+                    .font(.spline(size: 13, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .padding(14)
+                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .overlay {
+                        Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                    }
+            }
+        }
+    }
+
+    private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                NoteSourceLabel(
+                    title: "Burrito answer",
+                    detail: "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
+                    systemImage: "sparkles"
+                )
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(msg.text, forType: .string)
+                    BurritoHaptics.trigger(.alignment)
+                    withAnimation(.burritoSpring) {
+                        copiedMessageID = msg.id
+                    }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        if copiedMessageID == msg.id {
+                            copiedMessageID = nil
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                        Text(copiedMessageID == msg.id ? "Copied" : "Copy")
+                            .font(.spline(size: 10, weight: .regular))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(BurritoTheme.controlFill, in: Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let error = msg.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.red)
+            } else {
+                MarkdownNoteContent(
+                    markdown: msg.text,
+                    openMemory: openCitation
+                )
+            }
+        }
+        .padding(18)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private var thinkingCard: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Burrito is analyzing transcripts…")
+                    .font(.spline(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text("Searching bounded passages on-device")
+                    .font(.spline(size: 10, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(BurritoTheme.raised.opacity(0.7), in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        if let lastID = messages.last?.id {
+            withAnimation(.burritoSpring) {
+                proxy.scrollTo(lastID, anchor: .bottom)
+            }
+        } else if isAnswering {
+            withAnimation(.burritoSpring) {
+                proxy.scrollTo("thinking-indicator", anchor: .bottom)
+            }
+        }
+    }
+
+    private func submitPrompt(_ prompt: String) {
+        question = prompt
+        ask()
+    }
+
     private func ask() {
         guard canAsk else { return }
         let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        question = ""
+        BurritoHaptics.trigger(.alignment)
+
+        let userMsg = MemoryChatMessage(isUser: true, text: submittedQuestion)
+        withAnimation(.burritoSpring) {
+            messages.append(userMsg)
+        }
+
         let evidence = LocalMemory.retrieve(
             question: submittedQuestion,
             from: documents
         )
         isAnswering = true
-        errorMessage = nil
+
         Task {
             let result = await FoundationMemoryAnswerer.shared.answer(
                 question: submittedQuestion,
                 evidence: evidence,
                 languageIdentifier: languageIdentifier
             )
-            switch result {
-            case .success(let value):
-                answer = value
-            case .failure(let error):
-                errorMessage = error.recoveryMessage
+
+            withAnimation(.burritoSpring) {
+                switch result {
+                case .success(let value):
+                    let botMsg = MemoryChatMessage(isUser: false, text: value)
+                    messages.append(botMsg)
+                case .failure(let error):
+                    let botMsg = MemoryChatMessage(
+                        isUser: false,
+                        text: "Could not retrieve answer.",
+                        errorMessage: error.recoveryMessage
+                    )
+                    messages.append(botMsg)
+                }
+                isAnswering = false
             }
-            isAnswering = false
+            BurritoHaptics.trigger(.levelChange)
         }
     }
 }
