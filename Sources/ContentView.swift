@@ -184,6 +184,7 @@ struct ContentView: View {
         .frame(minWidth: 1_020, minHeight: 640)
         .tint(BurritoTheme.accent)
         .preferredColorScheme(appearance.colorScheme)
+        .font(.spline(size: 13, weight: .regular))
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -1171,7 +1172,7 @@ private struct CommandPaletteView: View {
 
                     TextField("Search notes and commands", text: $query)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 16, weight: .regular))
+                        .font(.spline(size: 16, weight: .regular))
                         .focused($queryFocused)
                         .onSubmit(performFirstResult)
                         .onKeyPress(.downArrow) {
@@ -1184,7 +1185,7 @@ private struct CommandPaletteView: View {
                         }
 
                     Text("ESC")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(.spline(size: 9, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 7)
                         .frame(height: 22)
@@ -1224,9 +1225,9 @@ private struct CommandPaletteView: View {
                                         .font(.system(size: 20, weight: .light))
                                         .foregroundStyle(.tertiary)
                                     Text("Nothing found")
-                                        .font(.system(size: 13, weight: .regular))
+                                        .font(.spline(size: 13, weight: .regular))
                                     Text("Try a note title or command.")
-                                        .font(.caption)
+                                        .font(.spline(size: 11, weight: .regular))
                                         .foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -1272,7 +1273,7 @@ private struct CommandPaletteView: View {
 
     private func paletteSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .font(.spline(size: 9, weight: .semibold))
             .tracking(0.8)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 18)
@@ -1295,13 +1296,13 @@ private struct CommandPaletteView: View {
                     ? (isSidebarVisible ? "Hide sidebar" : "Show sidebar")
                     : command.title
                 )
-                .font(.system(size: 13, weight: .regular))
+                .font(.spline(size: 13, weight: .regular))
 
                 Spacer()
 
                 if let shortcut = command.shortcut {
                     Text(shortcut)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1333,17 +1334,17 @@ private struct CommandPaletteView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(note.title)
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.spline(size: 13, weight: .regular))
                         .lineLimit(1)
                     Text(note.templateName)
-                        .font(.caption)
+                        .font(.spline(size: 11, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
 
                 Spacer()
 
                 Text(PaletteNoteAge.label(updatedAt: note.updatedAt))
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
@@ -1369,6 +1370,7 @@ private struct CommandPaletteView: View {
 
     private func performFirstResult() {
         let result = selectedResult ?? resultIDs.first
+        BurritoHaptics.trigger(.levelChange)
         switch result {
         case .command(let command):
             selectCommand(command)
@@ -1391,10 +1393,13 @@ private struct CommandPaletteView: View {
     }
 
     private func updateSelection(_ result: ResultID) {
+        if selectedResult != result {
+            BurritoHaptics.trigger(.alignment)
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             selectedResult = result
         } else {
-            withAnimation(.easeInOut(duration: 0.1)) {
+            withAnimation(.burritoSpring) {
                 selectedResult = result
             }
         }
@@ -1424,14 +1429,17 @@ private struct SidebarAccountCard: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("APPEARANCE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.spline(size: 9, weight: .semibold))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
 
                 HStack(spacing: 2) {
                     ForEach(BurritoAppearance.allCases) { option in
                         Button {
-                            appearanceRawValue = option.rawValue
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) {
+                                appearanceRawValue = option.rawValue
+                            }
                         } label: {
                             Image(systemName: option.systemImage)
                                 .font(.system(size: 11, weight: .semibold))
@@ -1476,18 +1484,18 @@ private struct SidebarAccountCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.spline(size: 13, weight: .semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Text("Local account")
-                            .font(.system(size: 10))
+                            .font(.spline(size: 10, weight: .regular))
                             .foregroundStyle(.tertiary)
                     }
 
                     Spacer()
 
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.spline(size: 10, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityLabel("Account and updates")
                 }
@@ -1525,9 +1533,9 @@ private struct AccountPopover: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.spline(size: 13, weight: .semibold))
                     Text("Private on this Mac")
-                        .font(.system(size: 10))
+                        .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1541,9 +1549,9 @@ private struct AccountPopover: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Burrito \(updater.currentVersion)")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.spline(size: 12, weight: .medium))
                         Text(updateDetail)
-                            .font(.system(size: 10))
+                            .font(.spline(size: 10, weight: .regular))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1639,7 +1647,7 @@ private struct UpdateAvailableCard: View {
 private struct UpdateActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .semibold))
             .frame(maxWidth: .infinity)
             .frame(height: 28)
             .foregroundStyle(.primary)
@@ -2297,7 +2305,11 @@ private struct BurritoActionButtonStyle: ButtonStyle {
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .animation(.burritoSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(.generic) }
+            }
     }
 }
 
@@ -2322,8 +2334,11 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
-            .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.965 : 1)
+            .animation(.burritoSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(.generic) }
+            }
     }
 }
 
@@ -2338,7 +2353,11 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .frame(height: 38)
             .background(Color.red.opacity(0.78), in: Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .animation(.burritoSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(.levelChange) }
+            }
     }
 }
 
@@ -2353,7 +2372,11 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .background(BurritoTheme.controlFill, in: Rectangle())
             .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.burritoSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(.generic) }
+            }
     }
 }
 
@@ -2415,7 +2438,7 @@ private struct BurritoInlineButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 12, weight: .medium))
+                .font(.spline(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
@@ -2789,11 +2812,12 @@ private struct SidebarItemLabel: View {
     var body: some View {
         HStack(spacing: 8) {
             Label(title, systemImage: systemImage)
+                .font(.spline(size: 13, weight: .regular))
                 .lineLimit(1)
             Spacer()
             if count > 0 {
                 Text("\(count)")
-                    .font(.caption.monospacedDigit())
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -2808,39 +2832,61 @@ private struct SidebarNavigationButton: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if isSelected {
+                    Rectangle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 3, height: 16)
+                        .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
+                }
                 Group {
                     if let markerColor {
                         Rectangle()
                             .fill(markerColor)
-                            .frame(width: 9, height: 9)
+                            .frame(width: 8, height: 8)
                     } else {
                         Image(systemName: systemImage)
+                            .foregroundStyle(isSelected ? BurritoTheme.accent : (isHovered ? .primary : .secondary))
                     }
                 }
                 .frame(width: 18)
                 Text(title)
+                    .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
                     .lineLimit(1)
                 Spacer()
                 if count > 0 {
                     Text("\(count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(isSelected ? BurritoTheme.accent : Color.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(
+                            isSelected ? BurritoTheme.accentSoft : (isHovered ? BurritoTheme.controlFill : Color.clear),
+                            in: Rectangle()
+                        )
                 }
             }
             .foregroundStyle(isSelected ? .primary : .secondary)
-            .font(.system(size: 13))
+            .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
             .padding(.horizontal, 9)
             .frame(height: 32)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .background(
-            isSelected ? BurritoTheme.controlFill : Color.clear,
+            isSelected ? BurritoTheme.controlFill : (isHovered ? BurritoTheme.controlFill.opacity(0.45) : Color.clear),
             in: Rectangle()
         )
+        .animation(.burritoSpring, value: isSelected)
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -2859,9 +2905,9 @@ private struct CalendarCard: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(BurritoTheme.accent)
                 Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.spline(size: 12, weight: .semibold))
                 Text("Recent & upcoming meetings")
-                    .font(.system(size: 12))
+                    .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
                 Spacer()
                 if calendarAccess.state == .authorized {
@@ -2871,7 +2917,7 @@ private struct CalendarCard: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.spline(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .help("Refresh upcoming Calendar events")
                 }
@@ -2899,7 +2945,7 @@ private struct CalendarCard: View {
                         ProgressView()
                             .controlSize(.small)
                         Text("Connecting Calendar…")
-                            .font(.callout)
+                            .font(.spline(size: 13, weight: .regular))
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2969,9 +3015,9 @@ private struct CalendarConnectionState: View {
                 .font(.system(size: 18, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.spline(size: 13, weight: .semibold))
             Text(detail)
-                .font(.system(size: 11))
+                .font(.spline(size: 11, weight: .regular))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -3003,11 +3049,11 @@ private struct UpcomingEventRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.startDate.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .font(.spline(size: 12, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()
                 Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
-                    .font(.caption2)
+                    .font(.spline(size: 10, weight: .regular))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
@@ -3019,14 +3065,14 @@ private struct UpcomingEventRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .semibold))
                     .lineLimit(1)
                 Text(
                     event.endDate < .now
                         ? "Earlier · \(event.calendarName)"
                         : event.calendarName
                 )
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -3157,12 +3203,16 @@ private struct TimelineNoteItem: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Button(action: open) {
+            Button {
+                BurritoHaptics.trigger(.alignment)
+                open()
+            } label: {
                 TimelineNoteRow(note: note)
             }
             .buttonStyle(.plain)
 
             Button {
+                BurritoHaptics.trigger(.generic)
                 showingActions.toggle()
             } label: {
                 Image(systemName: "ellipsis")
@@ -5109,15 +5159,15 @@ private struct MeetingContextPanel: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(event.startDate, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.spline(size: 12, weight: .semibold))
                     Text(
                         "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
                     )
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
                     if let peopleSummary {
                         Text(peopleSummary)
-                            .font(.caption)
+                            .font(.spline(size: 11, weight: .regular))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -5137,7 +5187,7 @@ private struct MeetingContextPanel: View {
                 Divider()
                 HStack(spacing: 8) {
                     Text("Related")
-                        .font(.caption.weight(.semibold))
+                        .font(.spline(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                     ForEach(relatedNotes.prefix(3)) { relatedNote in
                         Button {
@@ -5147,7 +5197,7 @@ private struct MeetingContextPanel: View {
                                 .lineLimit(1)
                         }
                         .buttonStyle(.plain)
-                        .font(.caption)
+                        .font(.spline(size: 11, weight: .regular))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(BurritoTheme.controlFill, in: Rectangle())
@@ -5595,18 +5645,35 @@ private struct EditorTabButton: View {
     let isSelected: Bool
     let select: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
-        Button(action: select) {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            select()
+        } label: {
             VStack(spacing: 7) {
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-                Rectangle()
-                    .fill(isSelected ? BurritoTheme.accent : Color.clear)
-                    .frame(height: 2)
+                    .font(.spline(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .primary : (isHovered ? .primary : .secondary))
+                ZStack {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 2)
+                    if isSelected {
+                        Rectangle()
+                            .fill(BurritoTheme.accent)
+                            .frame(height: 2)
+                            .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
+                    }
+                }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.burritoSpring, value: isSelected)
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

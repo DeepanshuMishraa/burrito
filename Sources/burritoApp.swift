@@ -7,6 +7,7 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     private let updater = BurritoUpdateManager.shared
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        BurritoFontRegistrar.registerFontsIfNeeded()
         _ = BurritoAppFeedback.shared
     }
 
@@ -35,6 +36,7 @@ struct burritoApp: App {
                 coordinator: coordinator,
                 calendarAccess: calendarAccess
             )
+            .font(.spline(size: 13, weight: .regular))
         }
         .modelContainer(container)
         .defaultSize(width: 1_180, height: 760)

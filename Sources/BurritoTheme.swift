@@ -1,14 +1,73 @@
 import AppKit
 import SwiftUI
 
+enum BurritoFontRegistrar {
+    private nonisolated(unsafe) static var hasRegistered = false
+
+    nonisolated static func registerFontsIfNeeded() {
+        guard !hasRegistered else { return }
+        hasRegistered = true
+
+        let fontNames = ["SplineSansMono-Variable.ttf", "SplineSansMono-Italic-Variable.ttf"]
+        
+        for fontName in fontNames {
+            if let fontURL = Bundle.main.url(forResource: fontName, withExtension: nil) ??
+                             Bundle.main.url(forResource: fontName, withExtension: nil, subdirectory: "Fonts") {
+                CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+            }
+        }
+
+        let localFontsDir = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/Fonts")
+        
+        for fontName in fontNames {
+            let fontURL = localFontsDir.appendingPathComponent(fontName)
+            if FileManager.default.fileExists(atPath: fontURL.path) {
+                CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+            }
+        }
+    }
+}
+
 extension Font {
     static func burritoDisplay(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
-        .custom("Avenir Next", fixedSize: size)
-            .weight(weight)
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
     }
+
+    static func burritoMono(
+        size: CGFloat,
+        weight: Font.Weight = .regular
+    ) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+    }
+
+    static func spline(
+        size: CGFloat,
+        weight: Font.Weight = .regular
+    ) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+    }
+}
+
+enum BurritoHaptics {
+    @MainActor
+    static func trigger(_ pattern: NSHapticFeedbackManager.FeedbackPattern = .generic) {
+        NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .now)
+    }
+}
+
+extension Animation {
+    static let burritoSpring = Animation.spring(response: 0.22, dampingFraction: 0.78)
+    static let burritoSubtleSpring = Animation.spring(response: 0.3, dampingFraction: 0.85)
+    static let burritoBouncySpring = Animation.spring(response: 0.25, dampingFraction: 0.68)
 }
 
 enum BurritoAppearance: String, CaseIterable, Identifiable {
@@ -105,7 +164,7 @@ struct BurritoSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .semibold))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }
@@ -117,7 +176,7 @@ struct BurritoPill: View {
 
     var body: some View {
         Label(title, systemImage: systemImage)
-            .font(.caption)
+            .font(.spline(size: 11, weight: .regular))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
@@ -152,14 +211,14 @@ struct BurritoLanguagePicker: View {
             HStack(spacing: 12) {
                 if showsLabel {
                     Text("Language")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: .medium))
                         .foregroundStyle(.primary)
                 }
 
                 Spacer()
 
                 Text(selectedLanguage.compactTitle)
-                    .font(.system(size: 12))
+                    .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
 
                 Image(systemName: "chevron.down")
@@ -215,12 +274,13 @@ struct BurritoLanguagePicker: View {
 
     private func languageRow(_ language: TranscriptionLanguage) -> some View {
         Button {
+            BurritoHaptics.trigger(.alignment)
             selection = language.identifier
             isPresented = false
         } label: {
             HStack(spacing: 9) {
                 Text(language.title)
-                    .font(.system(size: 12))
+                    .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.primary)
                 Spacer()
                 if selection == language.identifier {

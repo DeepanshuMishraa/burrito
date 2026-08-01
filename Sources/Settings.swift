@@ -83,9 +83,14 @@ struct BurritoSettingsView: View {
                 HStack(spacing: 8) {
                     ForEach(SettingsTab.allCases) { tab in
                         Button {
-                            selected = tab
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) {
+                                selected = tab
+                            }
                         } label: {
                             Label(tab.title, systemImage: tab.symbol)
+                                .font(.spline(size: 13, weight: selected == tab ? .semibold : .regular))
+                                .foregroundStyle(selected == tab ? .primary : .secondary)
                                 .padding(.horizontal, 12)
                                 .frame(height: 36)
                                 .background(
@@ -229,9 +234,9 @@ private struct OwnershipSettingsCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .semibold))
                     Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
-                        .font(.caption)
+                        .font(.spline(size: 11, weight: .regular))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -263,7 +268,7 @@ private struct OwnershipSettingsCard: View {
                     }
                     Text(status.message)
                 }
-                .font(.caption)
+                .font(.spline(size: 11, weight: .regular))
                 .foregroundStyle(
                     status.isFailure ? Color.red : Color.secondary
                 )
@@ -271,7 +276,7 @@ private struct OwnershipSettingsCard: View {
             }
 
             Text("Imports skip matching IDs and never overwrite local edits.")
-                .font(.caption2)
+                .font(.spline(size: 10, weight: .regular))
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
@@ -295,9 +300,9 @@ private struct LanguageCoverageCard: View {
                 .background(BurritoTheme.accentSoft, in: Rectangle())
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .semibold))
                 Text(language.engineCoverage.detail)
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -326,9 +331,9 @@ private struct CalendarConnectionSettingsRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.spline(size: 14, weight: .semibold))
                 Text(detail)
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
             }
 
@@ -360,7 +365,7 @@ private struct CalendarConnectionSettingsRow: View {
                 .frame(width: 120)
         case .authorized:
             Label("Connected", systemImage: "checkmark")
-                .font(.system(size: 13, weight: .medium))
+                .font(.spline(size: 13, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
         case .denied:
             Button("Open System Settings") {
@@ -389,7 +394,7 @@ private struct CalendarConnectionSettingsRow: View {
 private struct SettingsActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .semibold))
+            .font(.spline(size: 12, weight: .semibold))
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(BurritoTheme.controlFill, in: Rectangle())
@@ -397,6 +402,11 @@ private struct SettingsActionButtonStyle: ButtonStyle {
                 Rectangle().stroke(BurritoTheme.softBorder)
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .animation(.burritoSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(.generic) }
+            }
     }
 }
 
@@ -418,7 +428,12 @@ private struct SettingsChoice: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(.burritoSpring) {
+                action()
+            }
+        } label: {
             HStack(spacing: 10) {
                 Image(systemName: symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
@@ -454,12 +469,15 @@ private struct SettingsToggleRow: View {
 
     var body: some View {
         Button {
-            isOn.toggle()
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(.burritoSpring) {
+                isOn.toggle()
+            }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).foregroundStyle(.primary)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                    Text(detail).font(.spline(size: 11, weight: .regular)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Rectangle()
@@ -493,7 +511,7 @@ private struct SettingsFootnote: View {
 
     var body: some View {
         Label(text, systemImage: "lock.shield")
-            .font(.caption)
+            .font(.spline(size: 11, weight: .regular))
             .foregroundStyle(.secondary)
     }
 }
