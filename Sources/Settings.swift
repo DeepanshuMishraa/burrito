@@ -66,6 +66,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 }
 
 struct BurritoSettingsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var calendarAccess: CalendarAccess
     let exportLibrary: () -> Void
     let importLibrary: () -> Void
@@ -84,8 +85,12 @@ struct BurritoSettingsView: View {
                     ForEach(SettingsTab.allCases) { tab in
                         Button {
                             BurritoHaptics.trigger(.alignment)
-                            withAnimation(.burritoSpring) {
+                            if reduceMotion {
                                 selected = tab
+                            } else {
+                                withAnimation(.burritoSpring) {
+                                    selected = tab
+                                }
                             }
                         } label: {
                             Label(tab.title, systemImage: tab.symbol)
@@ -392,6 +397,8 @@ private struct CalendarConnectionSettingsRow: View {
 }
 
 private struct SettingsActionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.spline(size: 12, weight: .semibold))
@@ -403,7 +410,7 @@ private struct SettingsActionButtonStyle: ButtonStyle {
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .animation(.burritoSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .burritoSpring, value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed { BurritoHaptics.trigger(.generic) }
             }
@@ -422,6 +429,7 @@ private struct SettingsChoiceGrid<Content: View>: View {
 }
 
 private struct SettingsChoice: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let symbol: String
     let isSelected: Bool
@@ -430,8 +438,12 @@ private struct SettingsChoice: View {
     var body: some View {
         Button {
             BurritoHaptics.trigger(.alignment)
-            withAnimation(.burritoSpring) {
+            if reduceMotion {
                 action()
+            } else {
+                withAnimation(.burritoSpring) {
+                    action()
+                }
             }
         } label: {
             HStack(spacing: 10) {
@@ -463,6 +475,7 @@ private struct SettingsChoice: View {
 }
 
 private struct SettingsToggleRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String
     @Binding var isOn: Bool
@@ -470,8 +483,12 @@ private struct SettingsToggleRow: View {
     var body: some View {
         Button {
             BurritoHaptics.trigger(.alignment)
-            withAnimation(.burritoSpring) {
+            if reduceMotion {
                 isOn.toggle()
+            } else {
+                withAnimation(.burritoSpring) {
+                    isOn.toggle()
+                }
             }
         } label: {
             HStack {

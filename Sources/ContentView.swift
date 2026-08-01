@@ -1227,7 +1227,7 @@ private struct CommandPaletteView: View {
                                     Text("Nothing found")
                                         .font(.spline(size: 13, weight: .regular))
                                     Text("Try a note title or command.")
-                                        .font(.spline(size: 11, weight: .regular))
+                                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                                         .foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -1337,14 +1337,14 @@ private struct CommandPaletteView: View {
                         .font(.spline(size: 13, weight: .regular))
                         .lineLimit(1)
                     Text(note.templateName)
-                        .font(.spline(size: 11, weight: .regular))
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.tertiary)
                 }
 
                 Spacer()
 
                 Text(PaletteNoteAge.label(updatedAt: note.updatedAt))
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
@@ -2838,7 +2838,10 @@ private struct SidebarItemLabel: View {
             Spacer()
             if count > 0 {
                 Text("\(count)")
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(
+                        .spline(size: 11, weight: .regular, relativeTo: .caption)
+                            .monospacedDigit()
+                    )
                     .foregroundStyle(.tertiary)
             }
         }
@@ -2885,7 +2888,10 @@ private struct SidebarNavigationButton: View {
                 Spacer()
                 if count > 0 {
                     Text("\(count)")
-                        .font(.spline(size: 11, weight: .regular))
+                        .font(
+                            .spline(size: 11, weight: .regular, relativeTo: .caption)
+                                .monospacedDigit()
+                        )
                         .foregroundStyle(isSelected ? BurritoTheme.accent : Color.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
@@ -2970,7 +2976,7 @@ private struct CalendarCard: View {
                         ProgressView()
                             .controlSize(.small)
                         Text("Connecting Calendar…")
-                            .font(.spline(size: 13, weight: .regular))
+                            .font(.spline(size: 13, weight: .regular, relativeTo: .callout))
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -3074,11 +3080,11 @@ private struct UpcomingEventRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.startDate.formatted(date: .omitted, time: .shortened))
-                    .font(.spline(size: 12, weight: .semibold))
+                    .font(.spline(size: 12, weight: .semibold).monospacedDigit())
                     .lineLimit(1)
                     .fixedSize()
                 Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
-                    .font(.spline(size: 10, weight: .regular))
+                    .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
@@ -3097,7 +3103,7 @@ private struct UpcomingEventRow: View {
                         ? "Earlier · \(event.calendarName)"
                         : event.calendarName
                 )
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -5188,11 +5194,11 @@ private struct MeetingContextPanel: View {
                     Text(
                         "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
                     )
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
                     if let peopleSummary {
                         Text(peopleSummary)
-                            .font(.spline(size: 11, weight: .regular))
+                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -5212,7 +5218,7 @@ private struct MeetingContextPanel: View {
                 Divider()
                 HStack(spacing: 8) {
                     Text("Related")
-                        .font(.spline(size: 11, weight: .semibold))
+                        .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
                         .foregroundStyle(.secondary)
                     ForEach(relatedNotes.prefix(3)) { relatedNote in
                         Button {
@@ -5222,7 +5228,7 @@ private struct MeetingContextPanel: View {
                                 .lineLimit(1)
                         }
                         .buttonStyle(.plain)
-                        .font(.spline(size: 11, weight: .regular))
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(BurritoTheme.controlFill, in: Rectangle())
