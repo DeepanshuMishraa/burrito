@@ -2291,7 +2291,6 @@ private struct PermissionRow: View {
 }
 
 private struct BurritoActionButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
     let prominent: Bool
 
@@ -2311,19 +2310,14 @@ private struct BurritoActionButtonStyle: ButtonStyle {
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .animation(
-                reduceMotion ? nil : .burritoSpring,
-                value: configuration.isPressed
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.965 : 1
             )
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed { BurritoHaptics.trigger(.generic) }
-            }
     }
 }
 
 private struct HomeToolbarButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
     var destructive = false
 
@@ -2344,19 +2338,14 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
-            .scaleEffect(configuration.isPressed && isEnabled ? 0.965 : 1)
-            .animation(
-                reduceMotion ? nil : .burritoSpring,
-                value: configuration.isPressed
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed && isEnabled ? 0.965 : 1
             )
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed { BurritoHaptics.trigger(.generic) }
-            }
     }
 }
 
 private struct BurritoDestructiveButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -2367,19 +2356,15 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .frame(height: 38)
             .background(Color.red.opacity(0.78), in: Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .animation(
-                reduceMotion ? nil : .burritoSpring,
-                value: configuration.isPressed
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.965 : 1,
+                haptic: .levelChange
             )
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed { BurritoHaptics.trigger(.levelChange) }
-            }
     }
 }
 
 private struct BurritoIconButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -2390,14 +2375,41 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .background(BurritoTheme.controlFill, in: Rectangle())
             .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(
-                reduceMotion ? nil : .burritoSpring,
-                value: configuration.isPressed
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.95 : 1
             )
-            .onChange(of: configuration.isPressed) { _, isPressed in
-                if isPressed { BurritoHaptics.trigger(.generic) }
+    }
+}
+
+private struct BurritoPressFeedbackModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let isPressed: Bool
+    let scale: CGFloat
+    let haptic: NSHapticFeedbackManager.FeedbackPattern
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .animation(reduceMotion ? nil : .burritoSpring, value: isPressed)
+            .onChange(of: isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(haptic) }
             }
+    }
+}
+
+private extension View {
+    func burritoPressFeedback(
+        isPressed: Bool,
+        scale: CGFloat,
+        haptic: NSHapticFeedbackManager.FeedbackPattern = .generic
+    ) -> some View {
+        modifier(BurritoPressFeedbackModifier(
+            isPressed: isPressed,
+            scale: scale,
+            haptic: haptic
+        ))
     }
 }
 
@@ -4963,6 +4975,7 @@ private struct MemoryChatView: View {
     @State private var messages: [MemoryChatMessage] = []
     @State private var question = ""
     @State private var isAnswering = false
+    @State private var answerTask: Task<Void, Never>?
     @State private var copiedMessageID: UUID?
     @FocusState private var questionFocused: Bool
 
@@ -5002,6 +5015,9 @@ private struct MemoryChatView: View {
                     if !messages.isEmpty {
                         Button {
                             BurritoHaptics.trigger(.alignment)
+                            answerTask?.cancel()
+                            answerTask = nil
+                            isAnswering = false
                             withAnimation(.burritoSpring) {
                                 messages.removeAll()
                             }
@@ -5151,6 +5167,7 @@ private struct MemoryChatView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canAsk)
+                    .accessibilityLabel("Ask question")
                     .help("Send question")
                 }
             }
@@ -5165,6 +5182,11 @@ private struct MemoryChatView: View {
         }
         .background(BurritoTheme.canvas)
         .onAppear { questionFocused = true }
+        .onDisappear {
+            answerTask?.cancel()
+            answerTask = nil
+            isAnswering = false
+        }
     }
 
     private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
@@ -5301,12 +5323,14 @@ private struct MemoryChatView: View {
         )
         isAnswering = true
 
-        Task {
+        answerTask = Task {
             let result = await FoundationMemoryAnswerer.shared.answer(
                 question: submittedQuestion,
                 evidence: evidence,
                 languageIdentifier: languageIdentifier
             )
+
+            guard !Task.isCancelled else { return }
 
             withAnimation(.burritoSpring) {
                 switch result {
@@ -5322,6 +5346,7 @@ private struct MemoryChatView: View {
                     messages.append(botMsg)
                 }
                 isAnswering = false
+                answerTask = nil
             }
             BurritoHaptics.trigger(.levelChange)
         }

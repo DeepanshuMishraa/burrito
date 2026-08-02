@@ -241,7 +241,7 @@ private struct OwnershipSettingsCard: View {
                     Text("Your library, in open files")
                         .font(.spline(size: 14, weight: .semibold))
                     Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
-                        .font(.spline(size: 11, weight: .regular))
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -273,7 +273,7 @@ private struct OwnershipSettingsCard: View {
                     }
                     Text(status.message)
                 }
-                .font(.spline(size: 11, weight: .regular))
+                .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                 .foregroundStyle(
                     status.isFailure ? Color.red : Color.secondary
                 )
@@ -281,7 +281,7 @@ private struct OwnershipSettingsCard: View {
             }
 
             Text("Imports skip matching IDs and never overwrite local edits.")
-                .font(.spline(size: 10, weight: .regular))
+                .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
@@ -307,7 +307,7 @@ private struct LanguageCoverageCard: View {
                 Text("\(language.title) · \(language.engineCoverage.title)")
                     .font(.spline(size: 13, weight: .semibold))
                 Text(language.engineCoverage.detail)
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -338,7 +338,7 @@ private struct CalendarConnectionSettingsRow: View {
                 Text("Apple Calendar")
                     .font(.spline(size: 14, weight: .semibold))
                 Text(detail)
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
@@ -494,7 +494,7 @@ private struct SettingsToggleRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).foregroundStyle(.primary)
-                    Text(detail).font(.spline(size: 11, weight: .regular)).foregroundStyle(.secondary)
+                    Text(detail).font(.spline(size: 11, weight: .regular, relativeTo: .caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Rectangle()
@@ -528,7 +528,7 @@ private struct SettingsFootnote: View {
 
     var body: some View {
         Label(text, systemImage: "lock.shield")
-            .font(.spline(size: 11, weight: .regular))
+            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
     }
 }

@@ -2,9 +2,13 @@ import AppKit
 import SwiftUI
 
 enum BurritoFontRegistrar {
+    private static let registrationLock = NSLock()
     private nonisolated(unsafe) static var hasRegistered = false
 
     nonisolated static func registerFontsIfNeeded() {
+        registrationLock.lock()
+        defer { registrationLock.unlock() }
+
         guard !hasRegistered else { return }
         hasRegistered = true
 
@@ -13,18 +17,6 @@ enum BurritoFontRegistrar {
         for fontName in fontNames {
             if let fontURL = Bundle.main.url(forResource: fontName, withExtension: nil) ??
                              Bundle.main.url(forResource: fontName, withExtension: nil, subdirectory: "Fonts") {
-                CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-            }
-        }
-
-        let localFontsDir = URL(fileURLWithPath: #file)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources/Fonts")
-        
-        for fontName in fontNames {
-            let fontURL = localFontsDir.appendingPathComponent(fontName)
-            if FileManager.default.fileExists(atPath: fontURL.path) {
                 CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
             }
         }
