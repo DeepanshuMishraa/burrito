@@ -55,6 +55,7 @@ final class Note {
     var processingStageRawValue: String?
     var title: String
     var markdownBody: String
+    var userNotes: String = ""
     var transcriptData: Data
     var createdAt: Date
     var updatedAt: Date
@@ -74,6 +75,7 @@ final class Note {
     var generatedFromTranscriptRevision: Int
     var userEditedNotes: Bool
     var lastErrorMessage: String?
+    var calendarEventData: Data?
     var folder: Folder?
 
     init(
@@ -81,18 +83,21 @@ final class Note {
         lifecycle: NoteLifecycle = .recording,
         title: String = "New Recording",
         markdownBody: String = "",
+        userNotes: String = "",
         transcriptSegments: [TranscriptSegment] = [],
         createdAt: Date = .now,
         languageIdentifier: String,
         template: TemplateSnapshot,
         recordingMode: RecordingMode = .listenAlong,
-        retainsAudio: Bool
+        retainsAudio: Bool,
+        calendarEvent: CalendarEventSnapshot? = nil
     ) {
         self.id = id
         self.lifecycleRawValue = lifecycle.rawValue
         self.processingStageRawValue = nil
         self.title = title
         self.markdownBody = markdownBody
+        self.userNotes = userNotes
         self.transcriptData = (try? JSONEncoder().encode(transcriptSegments)) ?? Data()
         self.createdAt = createdAt
         self.updatedAt = createdAt
@@ -112,6 +117,7 @@ final class Note {
         self.generatedFromTranscriptRevision = 0
         self.userEditedNotes = false
         self.lastErrorMessage = nil
+        self.calendarEventData = calendarEvent.flatMap { try? JSONEncoder().encode($0) }
         self.folder = nil
     }
 
@@ -139,6 +145,17 @@ final class Note {
         set { recordingModeRawValue = newValue.rawValue }
     }
 
+    var calendarEvent: CalendarEventSnapshot? {
+        get {
+            calendarEventData.flatMap {
+                try? JSONDecoder().decode(CalendarEventSnapshot.self, from: $0)
+            }
+        }
+        set {
+            calendarEventData = newValue.flatMap { try? JSONEncoder().encode($0) }
+        }
+    }
+
     var continuationRecordingOptions: RecordingOptions {
         RecordingOptions(
             template: templateSnapshot,
@@ -150,6 +167,26 @@ final class Note {
 
     var notesMayBeOutdated: Bool {
         transcriptRevision != generatedFromTranscriptRevision
+    }
+
+    var exportedMarkdown: String {
+        let human = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generated = markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !human.isEmpty else { return generated }
+        guard !generated.isEmpty else {
+            return "## Your notes\n\n\(human)"
+        }
+        return """
+            ## Your notes
+
+            \(human)
+
+            ---
+
+            ## Burrito notes
+
+            \(generated)
+            """
     }
 
     func replaceTranscript(with segments: [TranscriptSegment], marksEdited: Bool) {

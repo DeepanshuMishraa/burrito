@@ -54,7 +54,7 @@ final class SystemAudioCapture: AudioCapturing {
                 exceptingWindows: []
             )
             let configuration = SCStreamConfiguration()
-            configuration.capturesAudio = mode == .listenAlong
+            configuration.capturesAudio = true
             configuration.excludesCurrentProcessAudio = true
             configuration.sampleRate = 48_000
             configuration.channelCount = 2
@@ -259,25 +259,57 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     }
 }
 
-private enum AudioLevel {
+enum AudioLevel {
     static func measure(_ buffer: AVAudioPCMBuffer) -> Double {
-        guard let channels = buffer.floatChannelData,
-              buffer.frameLength > 0
-        else {
-            return 0
-        }
+        guard buffer.frameLength > 0 else { return 0 }
 
-        let frameCount = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
         var sumOfSquares = 0.0
-        for channel in 0..<channelCount {
-            let samples = channels[channel]
-            for frame in 0..<frameCount {
-                let sample = Double(samples[frame])
-                sumOfSquares += sample * sample
+        var sampleCount = 0
+        let buffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+
+        for audioBuffer in buffers {
+            guard let data = audioBuffer.mData else { continue }
+            switch buffer.format.commonFormat {
+            case .pcmFormatFloat32:
+                let samples = data.assumingMemoryBound(to: Float.self)
+                let count = Int(audioBuffer.mDataByteSize) / MemoryLayout<Float>.stride
+                for index in 0..<count {
+                    let sample = Double(samples[index])
+                    sumOfSquares += sample * sample
+                }
+                sampleCount += count
+            case .pcmFormatFloat64:
+                let samples = data.assumingMemoryBound(to: Double.self)
+                let count = Int(audioBuffer.mDataByteSize) / MemoryLayout<Double>.stride
+                for index in 0..<count {
+                    let sample = samples[index]
+                    sumOfSquares += sample * sample
+                }
+                sampleCount += count
+            case .pcmFormatInt16:
+                let samples = data.assumingMemoryBound(to: Int16.self)
+                let count = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int16>.stride
+                for index in 0..<count {
+                    let sample = Double(samples[index]) / Double(Int16.max)
+                    sumOfSquares += sample * sample
+                }
+                sampleCount += count
+            case .pcmFormatInt32:
+                let samples = data.assumingMemoryBound(to: Int32.self)
+                let count = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int32>.stride
+                for index in 0..<count {
+                    let sample = Double(samples[index]) / Double(Int32.max)
+                    sumOfSquares += sample * sample
+                }
+                sampleCount += count
+            case .otherFormat:
+                continue
+            @unknown default:
+                continue
             }
         }
-        let sampleCount = max(1, frameCount * channelCount)
+
+        guard sampleCount > 0 else { return 0 }
         let rootMeanSquare = sqrt(sumOfSquares / Double(sampleCount))
         guard rootMeanSquare > 0 else { return 0 }
         let decibels = 20 * log10(rootMeanSquare)

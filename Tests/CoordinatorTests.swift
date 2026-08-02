@@ -14,6 +14,7 @@ private final class CaptureSpyingStub: AudioCapturing {
     private(set) var modes: [RecordingMode] = []
     var startResult: Result<Void, BurritoError> = .success(())
     var stopResult: Result<Void, BurritoError> = .success(())
+    var didStart: (() -> Void)?
 
     func start(
         files: RecordingFiles,
@@ -23,6 +24,7 @@ private final class CaptureSpyingStub: AudioCapturing {
         starts += 1
         languageIdentifiers.append(languageIdentifier)
         modes.append(mode)
+        didStart?()
         return startResult
     }
 
@@ -87,6 +89,8 @@ private struct GeneratorStub: NoteGenerating {
 
     func generate(
         segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -99,6 +103,35 @@ private struct GeneratorStub: NoteGenerating {
         languageIdentifier: String
     ) async -> Result<String, BurritoError> {
         .success(suggestedTitle)
+    }
+}
+
+private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
+    let receivedUserNotes = Mutex<[String]>([])
+    let receivedMeetingContexts = Mutex<[CalendarEventSnapshot?]>([])
+
+    func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func generate(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
+        template: TemplateSnapshot,
+        languageIdentifier: String
+    ) async -> Result<GeneratedNote, BurritoError> {
+        receivedUserNotes.withLock { $0.append(userNotes) }
+        receivedMeetingContexts.withLock { $0.append(meetingContext) }
+        return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        .success("Guided meeting")
     }
 }
 
@@ -116,6 +149,8 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
 
     func generate(
         segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
@@ -149,7 +184,7 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
         .success(
             RecordingFiles(
                 sessionID: id,
-                systemAudioURL: mode == .listenAlong ? root.appending(path: "system.m4a") : nil,
+                systemAudioURL: root.appending(path: "system.m4a"),
                 microphoneAudioURL: mode == .meeting ? root.appending(path: "microphone.m4a") : nil
             )
         )
@@ -162,6 +197,20 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
         removeCount.withLock { $0 += 1 }
         return .success(())
     }
+}
+
+private func sampleCalendarEvent() -> CalendarEventSnapshot {
+    CalendarEventSnapshot(
+        eventIdentifier: "event-42",
+        title: "Product weekly",
+        startDate: Date(timeIntervalSince1970: 1_800_000_000),
+        endDate: Date(timeIntervalSince1970: 1_800_003_600),
+        meetingURL: URL(string: "https://meet.google.com/abc-defg-hij"),
+        attendeeNames: ["Ari", "Sam"],
+        organizerName: "Ari",
+        recurrenceIdentifier: "product-weekly",
+        calendarName: "Work"
+    )
 }
 
 @MainActor
@@ -242,12 +291,94 @@ struct CoordinatorTests {
         #expect(capture.stops == 1)
         #expect(note.lifecycle == .ready)
         #expect(note.title == "Generated title")
-        #expect(note.transcriptSegments.count == 1)
+        #expect(note.transcriptSegments.count == 2)
+        #expect(note.transcriptSegments.map(\.source) == [.microphone, .system])
         #expect(fileStore.removeCount.withLock { $0 } == 1)
         #expect(
             feedback.events
                 == ["recordingStarted", "recordingStopped", "noteReady:Generated title"]
         )
+    }
+
+    @Test("Human notes written during capture guide generation and remain intact")
+    func humanNotesGuideGeneration() async throws {
+        let context = try makeContext()
+        let generator = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "text.alignleft",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        note.userNotes = "- The launch date is the key decision."
+        await coordinator.stop(context: context)
+
+        #expect(
+            generator.receivedUserNotes.withLock { $0 }
+                == ["- The launch date is the key decision."]
+        )
+        #expect(note.userNotes == "- The launch date is the key decision.")
+        #expect(note.markdownBody == "# Generated")
+    }
+
+    @Test("Calendar recordings preserve event identity and supply meeting context")
+    func calendarRecordingUsesEventContext() async throws {
+        let context = try makeContext()
+        let generator = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Meeting",
+                symbol: "person.3",
+                instructions: "Capture decisions."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+        let event = sampleCalendarEvent()
+
+        await coordinator.start(
+            options: options,
+            destination: .calendarEvent(event),
+            context: context
+        )
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+
+        #expect(note.title == event.title)
+        #expect(note.calendarEvent == event)
+
+        await coordinator.stop(context: context)
+
+        #expect(note.lifecycle == .ready)
+        #expect(note.title == event.title)
+        #expect(generator.receivedMeetingContexts.withLock { $0 } == [event])
+
+        note.title = "My product review"
+        await coordinator.generate(note: note, context: context)
+
+        #expect(note.title == "My product review")
+        #expect(generator.receivedMeetingContexts.withLock { $0 } == [event, event])
     }
 
     @Test("Continuing a note appends transcript and duration without creating another note")
@@ -302,7 +433,10 @@ struct CoordinatorTests {
 
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 1)
-        #expect(note.transcriptSegments.map(\.text) == ["Existing text", "Microphone text"])
+        #expect(
+            note.transcriptSegments.map(\.text)
+                == ["Existing text", "Microphone text", "System text"]
+        )
         #expect(note.transcriptSegments.last?.startTime == 4)
         #expect(note.duration >= 10)
         #expect(note.title == "Generated title")
@@ -395,6 +529,41 @@ struct CoordinatorTests {
 
         await coordinator.stop(context: context)
         #expect(coordinator.activity == .silent)
+    }
+
+    @Test("Capture startup time does not count as recording silence")
+    func captureStartupDoesNotCountAsSilence() async throws {
+        let context = try makeContext()
+        let clock = Mutex(Date(timeIntervalSinceReferenceDate: 100))
+        let capture = CaptureSpyingStub()
+        capture.didStart = {
+            clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 160) }
+        }
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true },
+            now: { clock.withLock { $0 } }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        try await Task.sleep(for: .milliseconds(120))
+
+        #expect(coordinator.silentFor == 0)
+
+        await coordinator.stop(context: context)
     }
 
     @Test("Silent recordings do not create transcripts or generated notes")

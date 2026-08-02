@@ -2,15 +2,35 @@ import AppKit
 import AVFAudio
 import Collaboration
 import Lottie
+import Observation
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
+@Observable
+final class RecordingDestinationInbox {
+    static let shared = RecordingDestinationInbox()
+
+    private(set) var pending: RecordingDestination?
+
+    func submit(_ destination: RecordingDestination) {
+        pending = destination
+    }
+
+    func consume() -> RecordingDestination? {
+        defer { pending = nil }
+        return pending
+    }
+}
+
 private enum SidebarSelection: Hashable {
     case all
     case favorites
+    case memory
     case models
     case templates
+    case settings
     case trash
     case folder(UUID)
 }
@@ -40,22 +60,30 @@ struct ContentView: View {
     @Query(sort: \Folder.order) private var folders: [Folder]
     @Query(sort: \NoteTemplate.createdAt) private var templates: [NoteTemplate]
 
-    @State private var coordinator = AppCoordinator.live()
+    let coordinator: AppCoordinator
     @State private var permissions = PermissionAccess()
-    @State private var calendarAccess = CalendarAccess()
+    let calendarAccess: CalendarAccess
     @State private var notificationAccess = NotificationAccess.shared
+    @State private var meetingActionInbox = MeetingActionInbox.shared
+    @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
+    @State private var selectedMemoryCitation: MemoryCitation?
+    @State private var memoryFolderID: UUID?
     @State private var isCommandPalettePresented = false
     @State private var commandPaletteQuery = ""
     @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
+    @State private var ownershipStatus: OwnershipOperationStatus?
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
+    @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
+    @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
+    @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
     private let userProfile = MacUserProfile.current
@@ -79,9 +107,13 @@ struct ContentView: View {
                 note.deletedAt == nil
             case .favorites:
                 note.deletedAt == nil && note.isFavorite
+            case .memory:
+                false
             case .models:
                 false
             case .templates:
+                false
+            case .settings:
                 false
             case .trash:
                 note.deletedAt != nil
@@ -107,7 +139,10 @@ struct ContentView: View {
     var body: some View {
         Group {
             if !permissionOnboardingCompleted || !permissions.allGranted {
-                PermissionGateView(permissions: permissions) {
+                PermissionGateView(
+                    permissions: permissions,
+                    calendarAccess: calendarAccess
+                ) {
                     permissionOnboardingCompleted = true
                 }
             } else if let activeProcessingNote,
@@ -121,11 +156,19 @@ struct ContentView: View {
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
+                    externalCitedSegmentID: selectedMemoryCitation?.noteID == selectedNote.id
+                        ? selectedMemoryCitation?.segmentID
+                        : nil,
+                    relatedNotes: relatedNotes(for: selectedNote),
                     coordinator: coordinator,
                     fileStore: LocalRecordingFileStore(),
                     folders: folders,
                     exportAction: { exportMarkdown(selectedNote) },
-                    backAction: { selectedNoteID = nil },
+                    backAction: {
+                        selectedNoteID = nil
+                        selectedMemoryCitation = nil
+                    },
+                    selectRelatedNote: { selectedNoteID = $0 },
                     newRecordingAction: {
                         continueRecording(selectedNote)
                     }
@@ -141,10 +184,12 @@ struct ContentView: View {
         .frame(minWidth: 1_020, minHeight: 640)
         .tint(BurritoTheme.accent)
         .preferredColorScheme(appearance.colorScheme)
+        .font(.spline(size: 13, weight: .regular))
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
                 modelStore: modelStore,
+                calendarEvent: destination.calendarEvent,
                 openModels: {
                     recordingDestination = nil
                     selectedNoteID = nil
@@ -201,6 +246,19 @@ struct ContentView: View {
                         }
                     )
                 }
+            } else if coordinator.smartStopStatus == .suggested {
+                BurritoModalBackdrop {
+                    BurritoMessageDialog(
+                        title: "Is the meeting finished?",
+                        message: "The scheduled meeting has ended and Burrito has heard sustained silence. Stop now to build the note, or keep recording.",
+                        confirmTitle: "Stop recording",
+                        isDestructive: false,
+                        cancel: { coordinator.keepRecording() },
+                        confirm: {
+                            Task { await coordinator.stop(context: modelContext) }
+                        }
+                    )
+                }
             } else if let error = coordinator.lastError {
                 BurritoModalBackdrop {
                     if case .languageAssetMissing = error {
@@ -233,6 +291,9 @@ struct ContentView: View {
             permissions.refresh()
             calendarAccess.refresh()
             Task { await notificationAccess.refresh() }
+            synchronizeMeetingReminders()
+            handlePendingMeetingAction()
+            handlePendingRecordingDestination()
         }
         .task {
             await updater.checkIfDue()
@@ -242,7 +303,22 @@ struct ContentView: View {
                 permissions.refresh()
                 calendarAccess.refresh()
                 Task { await notificationAccess.refresh() }
+                synchronizeMeetingReminders()
             }
+        }
+        .onChange(of: calendarAccess.upcomingEvents) {
+            synchronizeMeetingReminders()
+        }
+        .onChange(of: notificationAccess.state) {
+            if notificationAccess.canDeliverAlerts {
+                synchronizeMeetingReminders()
+            }
+        }
+        .onChange(of: meetingActionInbox.pending) {
+            handlePendingMeetingAction()
+        }
+        .onChange(of: recordingDestinationInbox.pending) {
+            handlePendingRecordingDestination()
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
             recordingDestination = .newNote
@@ -258,6 +334,17 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoExportMarkdown)) { _ in
             if let selectedNote { exportMarkdown(selectedNote) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoOpenSettings)) { _ in
+            selectedNoteID = nil
+            sidebarSelection = .settings
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoStopRecording)) { _ in
+            guard coordinator.captureState.isRecording else { return }
+            Task { await coordinator.stop(context: modelContext) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoKeepRecording)) { _ in
+            coordinator.keepRecording()
         }
     }
 
@@ -285,6 +372,25 @@ struct ContentView: View {
                 ModelsView(modelStore: modelStore)
             } else if sidebarSelection == .templates {
                 TemplatesView(templates: templates)
+            } else if sidebarSelection == .memory {
+                MemoryChatView(
+                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask your meetings",
+                    subtitle: memoryFolder == nil
+                        ? "Search every local transcript with cited answers."
+                        : "Search this folder's local transcripts with cited answers.",
+                    documents: memoryNotes.map(memoryDocument),
+                    languageIdentifier: defaultLanguage
+                ) { citation in
+                    selectedMemoryCitation = citation
+                    selectedNoteID = citation.noteID
+                }
+            } else if sidebarSelection == .settings {
+                BurritoSettingsView(
+                    calendarAccess: calendarAccess,
+                    exportLibrary: exportLibrary,
+                    importLibrary: importLibrary,
+                    ownershipStatus: ownershipStatus
+                )
             } else {
                 noteList
             }
@@ -354,6 +460,15 @@ struct ContentView: View {
                         sidebarSelection = .favorites
                     }
                     SidebarNavigationButton(
+                        title: "Ask Burrito",
+                        systemImage: "at",
+                        count: 0,
+                        isSelected: sidebarSelection == .memory
+                    ) {
+                        memoryFolderID = nil
+                        sidebarSelection = .memory
+                    }
+                    SidebarNavigationButton(
                         title: "Models",
                         systemImage: "waveform",
                         count: 0,
@@ -376,6 +491,14 @@ struct ContentView: View {
                         isSelected: sidebarSelection == .trash
                     ) {
                         sidebarSelection = .trash
+                    }
+                    SidebarNavigationButton(
+                        title: "Settings",
+                        systemImage: "gearshape",
+                        count: 0,
+                        isSelected: sidebarSelection == .settings
+                    ) {
+                        sidebarSelection = .settings
                     }
 
                     HStack {
@@ -453,7 +576,7 @@ struct ContentView: View {
 
                             CalendarCard(
                                 calendarAccess: calendarAccess,
-                                startRecording: { recordingDestination = .newNote },
+                                startRecording: startCalendarRecording,
                                 openSettings: openCalendarSettings
                             )
                             .padding(.bottom, 26)
@@ -480,6 +603,7 @@ struct ContentView: View {
                 .hidesEnclosingScrollIndicators()
             }
             .scrollIndicators(.hidden)
+            .hidesEnclosingScrollIndicators()
         }
         .overlay(alignment: .topTrailing) {
             noteListAction
@@ -499,12 +623,24 @@ struct ContentView: View {
             .buttonStyle(HomeToolbarButtonStyle(destructive: true))
             .disabled(visibleNotes.isEmpty)
         } else {
-            Button {
-                recordingDestination = .newNote
-            } label: {
-                Label("New recording", systemImage: "plus")
+            HStack(spacing: 8) {
+                if case .folder(let folderID) = sidebarSelection {
+                    Button {
+                        memoryFolderID = folderID
+                        sidebarSelection = .memory
+                    } label: {
+                        Label("Ask folder", systemImage: "at")
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle())
+                }
+
+                Button {
+                    recordingDestination = .newNote
+                } label: {
+                    Label("New recording", systemImage: "plus")
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
             }
-            .buttonStyle(HomeToolbarButtonStyle())
         }
     }
 
@@ -575,10 +711,36 @@ struct ContentView: View {
         switch sidebarSelection ?? .all {
         case .all: "All Notes"
         case .favorites: "Favorites"
+        case .memory: "Ask Burrito"
         case .models: "Models"
         case .templates: "Templates"
+        case .settings: "Settings"
         case .trash: "Trash"
         case .folder(let id): folders.first(where: { $0.id == id })?.name ?? "Folder"
+        }
+    }
+
+    private func memoryDocument(_ note: Note) -> MemoryDocument {
+        MemoryDocument(
+            noteID: note.id,
+            title: note.title,
+            updatedAt: note.updatedAt,
+            segments: note.transcriptSegments
+        )
+    }
+
+    private var memoryFolder: Folder? {
+        guard let memoryFolderID else { return nil }
+        return folders.first { $0.id == memoryFolderID }
+    }
+
+    private var memoryNotes: [Note] {
+        notes.filter { note in
+            guard note.deletedAt == nil, !note.transcriptSegments.isEmpty else {
+                return false
+            }
+            guard let memoryFolderID else { return true }
+            return note.folder?.id == memoryFolderID
         }
     }
 
@@ -675,7 +837,8 @@ struct ContentView: View {
         case .toggleSidebar:
             isSidebarVisible.toggle()
         case .settings:
-            SettingsWindowController.show()
+            selectedNoteID = nil
+            sidebarSelection = .settings
         }
     }
 
@@ -704,9 +867,76 @@ struct ContentView: View {
     }
 
     private func openCalendarSettings() {
-        NSWorkspace.shared.open(
-            URL(fileURLWithPath: "/System/Applications/System Settings.app")
-        )
+        calendarAccess.openSystemSettings()
+    }
+
+    private func relatedNotes(for note: Note) -> [Note] {
+        guard let event = note.calendarEvent else { return [] }
+        return notes.filter { candidate in
+            guard candidate.id != note.id,
+                  candidate.deletedAt == nil,
+                  let candidateEvent = candidate.calendarEvent
+            else {
+                return false
+            }
+            return candidateEvent.relatedMeetingIdentifier == event.relatedMeetingIdentifier
+        }
+        .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func startCalendarRecording(_ event: UpcomingCalendarEvent) {
+        startCalendarRecording(event.snapshot, joinsMeeting: true)
+    }
+
+    private func startCalendarRecording(
+        _ event: CalendarEventSnapshot,
+        joinsMeeting: Bool
+    ) {
+        if joinsMeeting, let meetingURL = event.meetingURL {
+            NSWorkspace.shared.open(meetingURL)
+        }
+        guard let template = templates.first(where: {
+            $0.builtInID == BuiltInTemplate.meeting.rawValue
+        })
+            ?? templates.first(where: { $0.builtInID == defaultTemplateID })
+            ?? templates.first
+        else {
+            recordingDestination = .calendarEvent(event)
+            return
+        }
+        Task {
+            await coordinator.start(
+                options: RecordingOptions(
+                    template: template.snapshot,
+                    languageIdentifier: defaultLanguage,
+                    mode: .meeting,
+                    retainsAudio: defaultRetainsAudio
+                ),
+                destination: .calendarEvent(event),
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
+        }
+    }
+
+    private func synchronizeMeetingReminders() {
+        let events = calendarAccess.upcomingEvents
+        Task {
+            await MeetingReminderScheduler.shared.synchronize(events: events)
+        }
+    }
+
+    private func handlePendingMeetingAction() {
+        guard let action = meetingActionInbox.consume() else { return }
+        switch action {
+        case .record(let event, let joinsMeeting):
+            startCalendarRecording(event, joinsMeeting: joinsMeeting)
+        }
+    }
+
+    private func handlePendingRecordingDestination() {
+        guard let destination = recordingDestinationInbox.consume() else { return }
+        recordingDestination = destination
     }
 
     private func exportMarkdown(_ note: Note) {
@@ -717,11 +947,92 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(note.title).md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try note.markdownBody.write(to: url, atomically: true, encoding: .utf8)
+            try note.exportedMarkdown.write(to: url, atomically: true, encoding: .utf8)
         } catch {
             let alert = NSAlert(error: error)
             alert.runModal()
         }
+    }
+
+    private func exportLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Export Burrito Library"
+        panel.message = "Choose where Burrito should create the backup folder."
+        panel.prompt = "Export Here"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let parent = panel.url else { return }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HHmm"
+        let baseName = "Burrito Export \(formatter.string(from: .now))"
+        var destination = parent.appending(path: baseName, directoryHint: .isDirectory)
+        if FileManager.default.fileExists(atPath: destination.path()) {
+            destination = parent.appending(
+                path: "\(baseName) \(UUID().uuidString.prefix(4))",
+                directoryHint: .isDirectory
+            )
+        }
+
+        let recordingStore = LocalRecordingFileStore()
+        let input = BurritoArchivePackage.prepareExport(
+            notes: notes,
+            folders: folders,
+            templates: templates,
+            recordingStore: recordingStore
+        )
+        ownershipStatus = .running("Exporting your library…")
+        Task {
+            do {
+                let report = try await BurritoArchivePackage.export(
+                    input,
+                    to: destination
+                )
+                ownershipStatus = .success(
+                    "Exported \(report.notesExported) notes and \(report.audioFilesExported) audio files to \(destination.lastPathComponent)."
+                )
+                NSWorkspace.shared.activateFileViewerSelecting([destination])
+            } catch {
+                ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+            }
+        }
+    }
+
+    private func importLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Burrito Backup"
+        panel.message = "Choose a Burrito export folder or its burrito.json file."
+        panel.prompt = "Import"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+
+        ownershipStatus = .running("Validating and importing your backup…")
+        Task {
+            do {
+                let report = try await BurritoArchivePackage.restore(
+                    from: source,
+                    into: modelContext,
+                    recordingStore: LocalRecordingFileStore()
+                )
+                ownershipStatus = .success(
+                    "Imported \(report.notesInserted) notes, \(report.foldersInserted) folders, \(report.templatesInserted) templates, and \(report.audioFilesRestored) audio files. Skipped \(report.duplicatesSkipped) existing items."
+                )
+            } catch {
+                ownershipStatus = .failure(ownershipRecoveryMessage(for: error))
+            }
+        }
+    }
+
+    private func ownershipRecoveryMessage(for error: Error) -> String {
+        if let archiveError = error as? BurritoArchiveError {
+            return archiveError.recoveryMessage
+        }
+        return "Burrito could not complete the library operation: \(error.localizedDescription) Existing notes were not changed."
     }
 }
 
@@ -828,6 +1139,9 @@ private struct CommandPaletteView: View {
             candidates.filter {
                 $0.title.localizedStandardContains(normalizedQuery)
                     || $0.markdownBody.localizedStandardContains(normalizedQuery)
+                    || $0.userNotes.localizedStandardContains(normalizedQuery)
+                    || ($0.calendarEvent?.generationContext
+                        .localizedStandardContains(normalizedQuery) ?? false)
                     || Transcript.rendered($0.transcriptSegments)
                         .localizedStandardContains(normalizedQuery)
             }
@@ -858,7 +1172,7 @@ private struct CommandPaletteView: View {
 
                     TextField("Search notes and commands", text: $query)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 16, weight: .regular))
+                        .font(.spline(size: 16, weight: .regular))
                         .focused($queryFocused)
                         .onSubmit(performFirstResult)
                         .onKeyPress(.downArrow) {
@@ -871,7 +1185,7 @@ private struct CommandPaletteView: View {
                         }
 
                     Text("ESC")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(.spline(size: 9, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 7)
                         .frame(height: 22)
@@ -911,9 +1225,9 @@ private struct CommandPaletteView: View {
                                         .font(.system(size: 20, weight: .light))
                                         .foregroundStyle(.tertiary)
                                     Text("Nothing found")
-                                        .font(.system(size: 13, weight: .regular))
+                                        .font(.spline(size: 13, weight: .regular))
                                     Text("Try a note title or command.")
-                                        .font(.caption)
+                                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                                         .foregroundStyle(.tertiary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -959,7 +1273,7 @@ private struct CommandPaletteView: View {
 
     private func paletteSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .font(.spline(size: 9, weight: .semibold))
             .tracking(0.8)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 18)
@@ -982,13 +1296,13 @@ private struct CommandPaletteView: View {
                     ? (isSidebarVisible ? "Hide sidebar" : "Show sidebar")
                     : command.title
                 )
-                .font(.system(size: 13, weight: .regular))
+                .font(.spline(size: 13, weight: .regular))
 
                 Spacer()
 
                 if let shortcut = command.shortcut {
                     Text(shortcut)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1020,17 +1334,17 @@ private struct CommandPaletteView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(note.title)
-                        .font(.system(size: 13, weight: .regular))
+                        .font(.spline(size: 13, weight: .regular))
                         .lineLimit(1)
                     Text(note.templateName)
-                        .font(.caption)
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.tertiary)
                 }
 
                 Spacer()
 
                 Text(PaletteNoteAge.label(updatedAt: note.updatedAt))
-                    .font(.caption)
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
@@ -1056,6 +1370,7 @@ private struct CommandPaletteView: View {
 
     private func performFirstResult() {
         let result = selectedResult ?? resultIDs.first
+        BurritoHaptics.trigger(.levelChange)
         switch result {
         case .command(let command):
             selectCommand(command)
@@ -1078,10 +1393,13 @@ private struct CommandPaletteView: View {
     }
 
     private func updateSelection(_ result: ResultID) {
+        if selectedResult != result {
+            BurritoHaptics.trigger(.alignment)
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             selectedResult = result
         } else {
-            withAnimation(.easeInOut(duration: 0.1)) {
+            withAnimation(.burritoSpring) {
                 selectedResult = result
             }
         }
@@ -1098,6 +1416,7 @@ private struct CommandPaletteRowButtonStyle: ButtonStyle {
 }
 
 private struct SidebarAccountCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: MacUserProfile
     @Binding var appearanceRawValue: String
     @Bindable var updater: BurritoUpdateManager
@@ -1111,14 +1430,21 @@ private struct SidebarAccountCard: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("APPEARANCE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.spline(size: 9, weight: .semibold))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
 
                 HStack(spacing: 2) {
                     ForEach(BurritoAppearance.allCases) { option in
                         Button {
-                            appearanceRawValue = option.rawValue
+                            BurritoHaptics.trigger(.alignment)
+                            if reduceMotion {
+                                appearanceRawValue = option.rawValue
+                            } else {
+                                withAnimation(.burritoSpring) {
+                                    appearanceRawValue = option.rawValue
+                                }
+                            }
                         } label: {
                             Image(systemName: option.systemImage)
                                 .font(.system(size: 11, weight: .semibold))
@@ -1163,18 +1489,18 @@ private struct SidebarAccountCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.spline(size: 13, weight: .semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Text("Local account")
-                            .font(.system(size: 10))
+                            .font(.spline(size: 10, weight: .regular))
                             .foregroundStyle(.tertiary)
                     }
 
                     Spacer()
 
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.spline(size: 10, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .accessibilityLabel("Account and updates")
                 }
@@ -1212,9 +1538,9 @@ private struct AccountPopover: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.spline(size: 13, weight: .semibold))
                     Text("Private on this Mac")
-                        .font(.system(size: 10))
+                        .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1228,9 +1554,9 @@ private struct AccountPopover: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Burrito \(updater.currentVersion)")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.spline(size: 12, weight: .medium))
                         Text(updateDetail)
-                            .font(.system(size: 10))
+                            .font(.spline(size: 10, weight: .regular))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1326,7 +1652,7 @@ private struct UpdateAvailableCard: View {
 private struct UpdateActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .semibold))
             .frame(maxWidth: .infinity)
             .frame(height: 28)
             .foregroundStyle(.primary)
@@ -1758,6 +2084,7 @@ private struct ScooterGenerationLoader: View {
 
 private struct PermissionGateView: View {
     @Bindable var permissions: PermissionAccess
+    @Bindable var calendarAccess: CalendarAccess
     let continueAction: () -> Void
 
     var body: some View {
@@ -1801,6 +2128,8 @@ private struct PermissionGateView: View {
                     ) {
                         permissions.requestSystemAudio()
                     }
+                    Divider().opacity(0.45)
+                    CalendarPermissionRow(calendarAccess: calendarAccess)
                 }
                 .background(BurritoTheme.raised, in: Rectangle())
                 .overlay {
@@ -1809,7 +2138,11 @@ private struct PermissionGateView: View {
                 }
 
                 HStack {
-                    Text(permissions.allGranted ? "Everything stays on this Mac." : "Grant both permissions to continue.")
+                    Text(
+                        permissions.allGranted
+                            ? "Calendar is optional. Everything stays on this Mac."
+                            : "Grant both audio permissions to continue. Calendar is optional."
+                    )
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()
@@ -1825,6 +2158,85 @@ private struct PermissionGateView: View {
                 Rectangle()
                     .stroke(BurritoTheme.softBorder)
             }
+        }
+    }
+}
+
+private struct CalendarPermissionRow: View {
+    @Bindable var calendarAccess: CalendarAccess
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "calendar")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(
+                    calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
+                )
+                .frame(width: 36, height: 36)
+                .background(BurritoTheme.controlFill, in: Rectangle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Show upcoming meetings")
+                    .font(.system(size: 14, weight: .medium))
+                Text(calendarDetail)
+                    .font(.caption)
+                    .foregroundStyle(
+                        calendarAccess.state == .denied ? Color.red : Color.secondary.opacity(0.7)
+                    )
+            }
+
+            Spacer()
+            calendarAction
+        }
+        .padding(.horizontal, 20)
+        .frame(minHeight: 82)
+    }
+
+    @ViewBuilder
+    private var calendarAction: some View {
+        switch calendarAccess.state {
+        case .authorized:
+            HStack(spacing: 7) {
+                ZStack {
+                    Rectangle().fill(BurritoTheme.accent)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 18, height: 18)
+                Text("Connected")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+        case .requesting:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 100)
+        case .denied:
+            Button("Open Settings") {
+                calendarAccess.openSystemSettings()
+            }
+            .buttonStyle(BurritoActionButtonStyle(prominent: false))
+        case .notDetermined, .failed:
+            Button("Connect Calendar") {
+                Task { await calendarAccess.requestAccess() }
+            }
+            .buttonStyle(BurritoActionButtonStyle(prominent: false))
+        }
+    }
+
+    private var calendarDetail: String {
+        switch calendarAccess.state {
+        case .notDetermined:
+            "Calendar · Optional"
+        case .requesting:
+            "Waiting for macOS permission…"
+        case .authorized:
+            "Calendar access allowed"
+        case .denied:
+            "Access denied — allow Burrito in System Settings."
+        case .failed(let message):
+            "Couldn’t connect: \(message)"
         }
     }
 }
@@ -1898,7 +2310,10 @@ private struct BurritoActionButtonStyle: ButtonStyle {
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.965 : 1
+            )
     }
 }
 
@@ -1923,8 +2338,10 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
-            .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed && isEnabled ? 0.965 : 1
+            )
     }
 }
 
@@ -1939,7 +2356,11 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .frame(height: 38)
             .background(Color.red.opacity(0.78), in: Rectangle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.965 : 1,
+                haptic: .levelChange
+            )
     }
 }
 
@@ -1954,7 +2375,41 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .background(BurritoTheme.controlFill, in: Rectangle())
             .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .burritoPressFeedback(
+                isPressed: configuration.isPressed,
+                scale: configuration.isPressed ? 0.95 : 1
+            )
+    }
+}
+
+private struct BurritoPressFeedbackModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let isPressed: Bool
+    let scale: CGFloat
+    let haptic: NSHapticFeedbackManager.FeedbackPattern
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .animation(reduceMotion ? nil : .burritoSpring, value: isPressed)
+            .onChange(of: isPressed) { _, isPressed in
+                if isPressed { BurritoHaptics.trigger(haptic) }
+            }
+    }
+}
+
+private extension View {
+    func burritoPressFeedback(
+        isPressed: Bool,
+        scale: CGFloat,
+        haptic: NSHapticFeedbackManager.FeedbackPattern = .generic
+    ) -> some View {
+        modifier(BurritoPressFeedbackModifier(
+            isPressed: isPressed,
+            scale: scale,
+            haptic: haptic
+        ))
     }
 }
 
@@ -2016,7 +2471,7 @@ private struct BurritoInlineButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: 12, weight: .medium))
+                .font(.spline(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
@@ -2264,6 +2719,8 @@ private struct ScrollIndicatorHider: NSViewRepresentable {
             if scrollView.hasHorizontalScroller {
                 scrollView.hasHorizontalScroller = false
             }
+            scrollView.verticalScroller = nil
+            scrollView.horizontalScroller = nil
             scrollView.autohidesScrollers = true
         }
     }
@@ -2388,11 +2845,15 @@ private struct SidebarItemLabel: View {
     var body: some View {
         HStack(spacing: 8) {
             Label(title, systemImage: systemImage)
+                .font(.spline(size: 13, weight: .regular))
                 .lineLimit(1)
             Spacer()
             if count > 0 {
                 Text("\(count)")
-                    .font(.caption.monospacedDigit())
+                    .font(
+                        .spline(size: 11, weight: .regular, relativeTo: .caption)
+                            .monospacedDigit()
+                    )
                     .foregroundStyle(.tertiary)
             }
         }
@@ -2400,6 +2861,7 @@ private struct SidebarItemLabel: View {
 }
 
 private struct SidebarNavigationButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String
     var markerColor: Color? = nil
@@ -2407,38 +2869,66 @@ private struct SidebarNavigationButton: View {
     let isSelected: Bool
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if isSelected {
+                    Rectangle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 3, height: 16)
+                        .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
+                }
                 Group {
                     if let markerColor {
                         Rectangle()
                             .fill(markerColor)
-                            .frame(width: 9, height: 9)
+                            .frame(width: 8, height: 8)
                     } else {
                         Image(systemName: systemImage)
+                            .foregroundStyle(isSelected ? BurritoTheme.accent : (isHovered ? .primary : .secondary))
                     }
                 }
                 .frame(width: 18)
                 Text(title)
+                    .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
                     .lineLimit(1)
                 Spacer()
                 if count > 0 {
                     Text("\(count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .font(
+                            .spline(size: 11, weight: .regular, relativeTo: .caption)
+                                .monospacedDigit()
+                        )
+                        .foregroundStyle(isSelected ? BurritoTheme.accent : Color.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(
+                            isSelected ? BurritoTheme.accentSoft : (isHovered ? BurritoTheme.controlFill : Color.clear),
+                            in: Rectangle()
+                        )
                 }
             }
             .foregroundStyle(isSelected ? .primary : .secondary)
-            .font(.system(size: 13))
+            .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
             .padding(.horizontal, 9)
             .frame(height: 32)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .background(
-            isSelected ? BurritoTheme.controlFill : Color.clear,
+            isSelected ? BurritoTheme.controlFill : (isHovered ? BurritoTheme.controlFill.opacity(0.45) : Color.clear),
             in: Rectangle()
+        )
+        .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: isHovered
         )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -2446,28 +2936,41 @@ private struct SidebarNavigationButton: View {
 
 private struct CalendarCard: View {
     let calendarAccess: CalendarAccess
-    let startRecording: () -> Void
+    let startRecording: (UpcomingCalendarEvent) -> Void
     let openSettings: () -> Void
 
     private var today: Date { .now }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(today.formatted(.dateTime.day()))
-                    .font(.burritoDisplay(size: 34, weight: .regular))
-                Text(today.formatted(.dateTime.month(.abbreviated)))
-                    .font(.system(size: 12, weight: .semibold))
-                Text(today.formatted(.dateTime.weekday(.wide)))
-                    .font(.system(size: 11))
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(BurritoTheme.accent)
+                Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
+                    .font(.spline(size: 12, weight: .semibold))
+                Text("Recent & upcoming meetings")
+                    .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
+                Spacer()
+                if calendarAccess.state == .authorized {
+                    Button {
+                        calendarAccess.refresh()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.spline(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .help("Refresh upcoming Calendar events")
+                }
             }
-            .frame(width: 112, alignment: .leading)
-            .padding(18)
+            .padding(.horizontal, 18)
+            .frame(height: 46)
 
             Rectangle()
                 .fill(BurritoTheme.softBorder.opacity(0.75))
-                .frame(width: 1)
+                .frame(height: 1)
 
             Group {
                 switch calendarAccess.state {
@@ -2485,7 +2988,7 @@ private struct CalendarCard: View {
                         ProgressView()
                             .controlSize(.small)
                         Text("Connecting Calendar…")
-                            .font(.callout)
+                            .font(.spline(size: 13, weight: .regular, relativeTo: .callout))
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -2493,16 +2996,17 @@ private struct CalendarCard: View {
                     if calendarAccess.upcomingEvents.isEmpty {
                         CalendarConnectionState(
                             symbol: "calendar.badge.clock",
-                            title: "No upcoming events",
-                            detail: "Your next seven days are clear.",
+                            title: "No recent or upcoming meetings",
+                            detail: "No timed events were found from the last 24 hours onward.",
                             buttonTitle: nil,
                             action: {}
                         )
                     } else {
                         VStack(spacing: 0) {
-                            ForEach(calendarAccess.upcomingEvents) { event in
+                            ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
+                                index, event in
                                 UpcomingEventRow(event: event, startRecording: startRecording)
-                                if event.id != calendarAccess.upcomingEvents.last?.id {
+                                if index < calendarAccess.upcomingEvents.count - 1 {
                                     Rectangle()
                                         .fill(BurritoTheme.softBorder)
                                         .frame(height: 1)
@@ -2530,7 +3034,7 @@ private struct CalendarCard: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 156)
+            .frame(maxWidth: .infinity, minHeight: 110)
         }
         .background(BurritoTheme.raised.opacity(0.58))
         .overlay {
@@ -2554,9 +3058,9 @@ private struct CalendarConnectionState: View {
                 .font(.system(size: 18, weight: .light))
                 .foregroundStyle(.tertiary)
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.spline(size: 13, weight: .semibold))
             Text(detail)
-                .font(.system(size: 11))
+                .font(.spline(size: 11, weight: .regular))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -2582,20 +3086,21 @@ private struct CalendarConnectionState: View {
 
 private struct UpcomingEventRow: View {
     let event: UpcomingCalendarEvent
-    let startRecording: () -> Void
+    let startRecording: (UpcomingCalendarEvent) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(event.startDate, format: .dateTime.hour().minute())
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                if !Calendar.current.isDateInToday(event.startDate) {
-                    Text(event.startDate, format: .dateTime.weekday(.abbreviated))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.startDate.formatted(date: .omitted, time: .shortened))
+                    .font(.spline(size: 12, weight: .semibold).monospacedDigit())
+                    .lineLimit(1)
+                    .fixedSize()
+                Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                    .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-            .frame(width: 54, alignment: .trailing)
+            .frame(width: 76, alignment: .leading)
 
             Rectangle()
                 .fill(BurritoTheme.accent)
@@ -2603,18 +3108,27 @@ private struct UpcomingEventRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .semibold))
                     .lineLimit(1)
-                Text(event.isAllDay ? "All day · \(event.calendarName)" : event.calendarName)
-                    .font(.caption)
+                Text(
+                    event.endDate < .now
+                        ? "Earlier · \(event.calendarName)"
+                        : event.calendarName
+                )
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
-            Button("Record", systemImage: "waveform", action: startRecording)
+            Button(
+                event.meetingURL == nil ? "Record" : "Join + Record",
+                systemImage: event.meetingURL == nil ? "waveform" : "video"
+            ) {
+                startRecording(event)
+            }
                 .buttonStyle(HomeToolbarButtonStyle())
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: 58)
     }
 }
 
@@ -2640,10 +3154,11 @@ private struct TimelineNoteRow: View {
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
-                Text(note.processingStage?.rawValue ?? note.templateSnapshot.name)
+                Text(note.processingStage?.rawValue ?? NoteExcerpt.text(for: note))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .tracking(0.25)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
             Spacer()
             if let folder = note.folder {
@@ -2658,6 +3173,24 @@ private struct TimelineNoteRow: View {
         .padding(.horizontal, 8)
         .frame(height: 52)
         .contentShape(Rectangle())
+    }
+}
+
+enum NoteExcerpt {
+    static func text(for note: Note) -> String {
+        let markdown = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !markdown.isEmpty {
+            return markdown
+                .replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let humanNotes = note.userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !humanNotes.isEmpty {
+            return humanNotes
+                .replacingOccurrences(of: "#", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return note.transcriptSegments.first?.text ?? "Recording ready for your notes."
     }
 }
 
@@ -2713,12 +3246,16 @@ private struct TimelineNoteItem: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Button(action: open) {
+            Button {
+                BurritoHaptics.trigger(.alignment)
+                open()
+            } label: {
                 TimelineNoteRow(note: note)
             }
             .buttonStyle(.plain)
 
             Button {
+                BurritoHaptics.trigger(.generic)
                 showingActions.toggle()
             } label: {
                 Image(systemName: "ellipsis")
@@ -2948,66 +3485,6 @@ private struct WelcomeWorkspaceView: View {
             }
             .padding(40)
         }
-    }
-}
-
-private struct NoteRow: View {
-    let note: Note
-    let isSelected: Bool
-
-    private var excerpt: String {
-        let body = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty {
-            return body.replacingOccurrences(of: "#", with: "")
-        }
-        return note.transcriptSegments.first?.text ?? "Recording ready for your notes."
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text(note.title)
-                    .font(.burritoDisplay(size: 15, weight: .medium))
-                    .lineLimit(1)
-                Spacer()
-                if note.isFavorite {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundStyle(BurritoTheme.accent)
-                        .accessibilityLabel("Favorite")
-                }
-            }
-            Text(excerpt)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .lineSpacing(2)
-            HStack(spacing: 6) {
-                if let stage = note.processingStage {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text(stage.rawValue)
-                } else {
-                    Text(note.updatedAt, style: .date)
-                    Text("•")
-                    Text(Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)))
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            if let message = note.lastErrorMessage {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-            }
-        }
-        .padding(12)
-        .background(
-            isSelected ? BurritoTheme.accentSoft : Color.clear,
-            in: Rectangle()
-        )
-        .contentShape(Rectangle())
     }
 }
 
@@ -3308,6 +3785,7 @@ private struct RecordingSetupView: View {
     @Environment(\.dismiss) private var dismiss
     let templates: [NoteTemplate]
     @Bindable var modelStore: ParakeetModelStore
+    let calendarEvent: CalendarEventSnapshot?
     let openModels: () -> Void
     let start: (RecordingOptions) -> Void
 
@@ -3343,9 +3821,13 @@ private struct RecordingSetupView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("New recording")
+                    Text(calendarEvent?.title ?? "New recording")
                         .font(.burritoDisplay(size: 30, weight: .regular))
-                    Text("Choose what Burrito should listen for.")
+                    Text(
+                        calendarEvent == nil
+                            ? "Choose what Burrito should listen for."
+                            : "This event will guide the title and generated notes."
+                    )
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
@@ -3354,6 +3836,41 @@ private struct RecordingSetupView: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(BurritoIconButtonStyle())
                     .keyboardShortcut(.cancelAction)
+            }
+
+            if let calendarEvent {
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 18))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(
+                            calendarEvent.startDate.formatted(
+                                .dateTime.weekday(.wide).month(.abbreviated).day()
+                                    .hour().minute()
+                            )
+                        )
+                        .font(.system(size: 13, weight: .semibold))
+                        Text(calendarEvent.calendarName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if !calendarEvent.attendeeNames.isEmpty {
+                        Label(
+                            "\(calendarEvent.attendeeNames.count)",
+                            systemImage: "person.2"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(BurritoTheme.controlFill.opacity(0.6), in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+                }
             }
 
             VStack(spacing: 0) {
@@ -4145,6 +4662,8 @@ private struct TemplatePromptDetail: View {
 
 private struct MarkdownNoteContent: View {
     let markdown: String
+    var openTranscript: ((UUID) -> Void)?
+    var openMemory: ((MemoryCitation) -> Void)?
 
     private var document: MarkdownDocument {
         MarkdownDocument.parse(markdown)
@@ -4158,6 +4677,18 @@ private struct MarkdownNoteContent: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.openURL, OpenURLAction { url in
+            if let id = TranscriptCitation.segmentID(from: url) {
+                openTranscript?(id)
+                return .handled
+            }
+            if let citation = MemoryCitation.resolve(url) {
+                openMemory?(citation)
+                return .handled
+            }
+            NSWorkspace.shared.open(url)
+            return .handled
+        })
     }
 
     @ViewBuilder
@@ -4262,15 +4793,930 @@ private struct MarkdownNoteContent: View {
     }
 }
 
+private struct NoteSourceLabel: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    var isHuman = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+            Text(title.uppercased())
+                .fontWeight(.semibold)
+            Text(detail)
+                .foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .tracking(0.8)
+        .foregroundStyle(isHuman ? BurritoTheme.accent : Color.secondary)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct RecordingNotepadView: View {
+    @Binding var title: String
+    @Binding var userNotes: String
+    let elapsed: TimeInterval
+    let systemLevel: Double
+    let microphoneLevel: Double
+    let recordingMode: RecordingMode
+
+    @FocusState private var notesFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: 7, height: 7)
+                    Text("RECORDING")
+                        .fontWeight(.semibold)
+                }
+                Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
+                    .monospacedDigit()
+                Label(
+                    recordingMode == .meeting ? "CALL + MIC · ON DEVICE" : "MAC AUDIO · ON DEVICE",
+                    systemImage: "lock.fill"
+                )
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(BurritoTheme.sage)
+                Spacer()
+                RecordingSourceLevel(
+                    title: "MAC",
+                    systemImage: "speaker.wave.2.fill",
+                    level: systemLevel
+                )
+                RecordingSourceLevel(
+                    title: "MIC",
+                    systemImage: "mic.fill",
+                    level: microphoneLevel
+                )
+            }
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: 820)
+            .padding(.horizontal, 44)
+            .padding(.top, 28)
+            .frame(maxWidth: .infinity)
+
+            VStack(alignment: .leading, spacing: 18) {
+                TextField("Untitled note", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(.burritoDisplay(size: 34, weight: .regular))
+
+                NoteSourceLabel(
+                    title: "Your notes",
+                    detail: "Markdown · guides what Burrito writes",
+                    systemImage: "person.fill",
+                    isHuman: true
+                )
+
+                ZStack(alignment: .topLeading) {
+                    if userNotes.isEmpty {
+                        Text("Write Markdown—fragments, questions, headings, and lists are enough.")
+                            .font(.system(size: 15, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextEditor(text: $userNotes)
+                        .font(.system(size: 15, design: .monospaced))
+                        .lineSpacing(5)
+                        .scrollContentBackground(.hidden)
+                        .focused($notesFocused)
+                        .accessibilityLabel("Your Markdown meeting notes")
+                        .accessibilityHint(
+                            "Markdown is rendered after recording and guides Burrito's generated result"
+                        )
+                }
+                .padding(14)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle()
+                        .stroke(
+                            notesFocused
+                                ? BurritoTheme.accent.opacity(0.65)
+                                : BurritoTheme.softBorder,
+                            lineWidth: notesFocused ? 1.25 : 1
+                        )
+                }
+            }
+            .frame(maxWidth: 820, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 44)
+            .padding(.top, 24)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            notesFocused = true
+        }
+    }
+}
+
+private struct RecordingSourceLevel: View {
+    let title: String
+    let systemImage: String
+    let level: Double
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+            Text(title)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(BurritoTheme.softBorder)
+                    Rectangle()
+                        .fill(BurritoTheme.accent)
+                        .frame(width: proxy.size.width * min(1, max(0, level)))
+                }
+            }
+            .frame(width: 34, height: 3)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) audio level")
+        .accessibilityValue("\(Int(min(1, max(0, level)) * 100)) percent")
+    }
+}
+
+private struct MemoryChatMessage: Identifiable, Equatable {
+    let id: UUID
+    let isUser: Bool
+    let text: String
+    let timestamp: Date
+    let errorMessage: String?
+    let scopeTitle: String?
+
+    init(
+        id: UUID = UUID(),
+        isUser: Bool,
+        text: String,
+        timestamp: Date = Date(),
+        errorMessage: String? = nil,
+        scopeTitle: String? = nil
+    ) {
+        self.id = id
+        self.isUser = isUser
+        self.text = text
+        self.timestamp = timestamp
+        self.errorMessage = errorMessage
+        self.scopeTitle = scopeTitle
+    }
+}
+
+private struct MemoryChatView: View {
+    let title: String
+    let subtitle: String
+    let documents: [MemoryDocument]
+    let languageIdentifier: String
+    let openCitation: (MemoryCitation) -> Void
+
+    @State private var messages: [MemoryChatMessage] = []
+    @State private var question = ""
+    @State private var isAnswering = false
+    @State private var answerTask: Task<Void, Never>?
+    @State private var copiedMessageID: UUID?
+    @State private var scopedDocument: MemoryDocument?
+    @State private var mentionSelectionIndex = 0
+    @FocusState private var questionFocused: Bool
+
+    private var canAsk: Bool {
+        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !documents.isEmpty
+            && !isAnswering
+            && highlightedMentionDocument == nil
+    }
+
+    private var mentionQuery: String? {
+        guard scopedDocument == nil else { return nil }
+        return MemoryMention.query(in: question)
+    }
+
+    private var matchingMentionDocuments: [MemoryDocument] {
+        guard let mentionQuery else { return [] }
+        let candidates = documents.sorted { $0.updatedAt > $1.updatedAt }
+        guard !mentionQuery.isEmpty else {
+            return Array(candidates.prefix(6))
+        }
+        return Array(
+            candidates
+                .filter { $0.title.localizedStandardContains(mentionQuery) }
+                .prefix(6)
+        )
+    }
+
+    private var highlightedMentionDocument: MemoryDocument? {
+        guard matchingMentionDocuments.indices.contains(mentionSelectionIndex) else {
+            return nil
+        }
+        return matchingMentionDocuments[mentionSelectionIndex]
+    }
+
+    private var suggestedPrompts: [String] {
+        [
+            "What were the key decisions made?",
+            "List all action items and assignees.",
+            "What were the main objections or concerns?",
+            "Summarize the next steps and deadlines."
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                Text("@")
+                    .font(.burritoDisplay(size: 28, weight: .semibold))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 30, alignment: .leading)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.burritoDisplay(size: 24, weight: .medium))
+                    Text(subtitle)
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+
+                HStack(spacing: 12) {
+                    if !messages.isEmpty {
+                        Button {
+                            BurritoHaptics.trigger(.alignment)
+                            answerTask?.cancel()
+                            answerTask = nil
+                            isAnswering = false
+                            withAnimation(.burritoSpring) {
+                                messages.removeAll()
+                            }
+                        } label: {
+                            Label("Clear chat", systemImage: "trash")
+                                .font(.spline(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .frame(height: 28)
+                                .background(BurritoTheme.controlFill, in: Rectangle())
+                                .overlay {
+                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Label("On device", systemImage: "lock.fill")
+                        .font(.spline(size: 11, weight: .semibold))
+                        .foregroundStyle(BurritoTheme.sage)
+                }
+            }
+            .padding(.horizontal, 38)
+            .frame(height: 78)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if documents.isEmpty {
+                            ContentUnavailableView(
+                                "No transcript evidence",
+                                systemImage: "text.magnifyingglass",
+                                description: Text("Record and transcribe a meeting before asking questions.")
+                                    .font(.spline(size: 12, weight: .regular))
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 90)
+                        } else if messages.isEmpty {
+                            VStack(alignment: .leading, spacing: 22) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Ask anything about your meetings")
+                                        .font(.burritoDisplay(size: 22, weight: .medium))
+                                    Text("Burrito retrieves grounded transcript passages and provides cited answers using local AI.")
+                                        .font(.spline(size: 13, weight: .regular))
+                                        .foregroundStyle(.secondary)
+                                        .lineSpacing(4)
+                                }
+
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("SUGGESTED QUESTIONS")
+                                        .font(.spline(size: 9, weight: .semibold))
+                                        .tracking(0.7)
+                                        .foregroundStyle(.tertiary)
+
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                        ForEach(suggestedPrompts, id: \.self) { prompt in
+                                            Button {
+                                                BurritoHaptics.trigger(.alignment)
+                                                submitPrompt(prompt)
+                                            } label: {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: "text.bubble")
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(BurritoTheme.accent)
+                                                    Text(prompt)
+                                                        .font(.spline(size: 12, weight: .regular))
+                                                        .foregroundStyle(.primary)
+                                                        .lineLimit(2)
+                                                        .multilineTextAlignment(.leading)
+                                                    Spacer()
+                                                    Image(systemName: "arrow.up.right")
+                                                        .font(.system(size: 10))
+                                                        .foregroundStyle(.tertiary)
+                                                }
+                                                .padding(12)
+                                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                                .background(BurritoTheme.raised, in: Rectangle())
+                                                .overlay {
+                                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.top, 42)
+                        } else {
+                            ForEach(messages) { msg in
+                                if msg.isUser {
+                                    userMessageBubble(msg)
+                                        .id(msg.id)
+                                } else {
+                                    assistantMessageCard(msg)
+                                        .id(msg.id)
+                                }
+                            }
+
+                            if isAnswering {
+                                thinkingCard
+                                    .id("thinking-indicator")
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .padding(.horizontal, 38)
+                    .padding(.top, 24)
+                    .padding(.bottom, 30)
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: messages) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: isAnswering) { _, answering in
+                    if answering {
+                        scrollToBottom(proxy: proxy)
+                    }
+                }
+            }
+
+            VStack(spacing: 8) {
+                if mentionQuery != nil {
+                    mentionPicker
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
+                HStack(spacing: 10) {
+                    if let scopedDocument {
+                        Button {
+                            self.scopedDocument = nil
+                            questionFocused = true
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text("@")
+                                    .fontWeight(.semibold)
+                                Text(scopedDocument.title)
+                                    .lineLimit(1)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 8)
+                            .frame(height: 28)
+                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .overlay {
+                                Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove meeting scope")
+                        .accessibilityLabel("Remove meeting scope: \(scopedDocument.title)")
+                    }
+
+                    TextField(
+                        scopedDocument.map { "Ask about \($0.title)…" }
+                            ?? "Ask anything — type @ to choose a meeting",
+                        text: $question
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.spline(size: 13, weight: .regular))
+                    .focused($questionFocused)
+                    .onSubmit(submitComposer)
+                    .onKeyPress(.downArrow) {
+                        guard mentionQuery != nil else { return .ignored }
+                        moveMentionSelection(by: 1)
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow) {
+                        guard mentionQuery != nil else { return .ignored }
+                        moveMentionSelection(by: -1)
+                        return .handled
+                    }
+                    .onChange(of: question) { _, _ in
+                        mentionSelectionIndex = 0
+                    }
+
+                    if isAnswering {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.horizontal, 4)
+                    } else {
+                        Button(action: ask) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(canAsk ? .white : Color.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
+                                    in: Rectangle()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canAsk)
+                        .accessibilityLabel("Ask question")
+                        .help("Send question")
+                    }
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder)
+                }
+            }
+            .frame(maxWidth: 760)
+            .padding(.horizontal, 38)
+            .padding(.vertical, 18)
+        }
+        .background(BurritoTheme.canvas)
+        .onAppear { questionFocused = true }
+        .onDisappear {
+            answerTask?.cancel()
+            answerTask = nil
+            isAnswering = false
+        }
+    }
+
+    private var mentionPicker: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("CHOOSE A MEETING")
+                    .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                    .tracking(0.7)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("↑↓  RETURN")
+                    .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            if matchingMentionDocuments.isEmpty {
+                Text("No meeting matches “\(mentionQuery ?? "")”")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            } else {
+                ForEach(
+                    Array(matchingMentionDocuments.enumerated()),
+                    id: \.element.noteID
+                ) { index, document in
+                    Button {
+                        selectMention(document)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text("@")
+                                .font(.spline(size: 13, weight: .semibold))
+                                .foregroundStyle(BurritoTheme.accent)
+                                .frame(width: 18)
+                            Text(document.title)
+                                .font(.spline(size: 12, weight: .medium, relativeTo: .callout))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(document.updatedAt, format: .dateTime.month(.abbreviated).day())
+                                .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(
+                            index == mentionSelectionIndex
+                                ? BurritoTheme.accentSoft
+                                : Color.clear,
+                            in: Rectangle()
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
+        HStack {
+            Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("YOU")
+                        .font(.spline(size: 9, weight: .semibold))
+                        .foregroundStyle(BurritoTheme.accent)
+                    Text(msg.timestamp, format: .dateTime.hour().minute())
+                        .font(.spline(size: 9, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    if let scopeTitle = msg.scopeTitle {
+                        Text("@\(scopeTitle)")
+                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                            .foregroundStyle(BurritoTheme.accent)
+                    }
+                    Text(msg.text)
+                        .font(.spline(size: 13, weight: .regular))
+                        .foregroundStyle(.primary)
+                }
+                .padding(14)
+                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                }
+            }
+        }
+    }
+
+    private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                NoteSourceLabel(
+                    title: "Burrito answer",
+                    detail: msg.scopeTitle.map { "Scoped to \($0)" }
+                        ?? "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
+                    systemImage: "text.bubble"
+                )
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(msg.text, forType: .string)
+                    BurritoHaptics.trigger(.alignment)
+                    withAnimation(.burritoSpring) {
+                        copiedMessageID = msg.id
+                    }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        if copiedMessageID == msg.id {
+                            copiedMessageID = nil
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                        Text(copiedMessageID == msg.id ? "Copied" : "Copy")
+                            .font(.spline(size: 10, weight: .regular))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(BurritoTheme.controlFill, in: Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let error = msg.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.red)
+            } else {
+                MarkdownNoteContent(
+                    markdown: msg.text,
+                    openMemory: openCitation
+                )
+            }
+        }
+        .padding(18)
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private var thinkingCard: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Burrito is analyzing transcripts…")
+                    .font(.spline(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                Text("Searching bounded passages on-device")
+                    .font(.spline(size: 10, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(BurritoTheme.raised.opacity(0.7), in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        if let lastID = messages.last?.id {
+            withAnimation(.burritoSpring) {
+                proxy.scrollTo(lastID, anchor: .bottom)
+            }
+        } else if isAnswering {
+            withAnimation(.burritoSpring) {
+                proxy.scrollTo("thinking-indicator", anchor: .bottom)
+            }
+        }
+    }
+
+    private func submitComposer() {
+        if let highlightedMentionDocument {
+            selectMention(highlightedMentionDocument)
+            return
+        }
+        ask()
+    }
+
+    private func moveMentionSelection(by offset: Int) {
+        guard !matchingMentionDocuments.isEmpty else { return }
+        let count = matchingMentionDocuments.count
+        mentionSelectionIndex = (mentionSelectionIndex + offset + count) % count
+    }
+
+    private func selectMention(_ document: MemoryDocument) {
+        scopedDocument = document
+        question = MemoryMention.questionWithoutQuery(in: question)
+        mentionSelectionIndex = 0
+        questionFocused = true
+        BurritoHaptics.trigger(.alignment)
+    }
+
+    private func submitPrompt(_ prompt: String) {
+        question = prompt
+        ask()
+    }
+
+    private func ask() {
+        guard canAsk else { return }
+        let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedScope = scopedDocument
+        question = ""
+        scopedDocument = nil
+        BurritoHaptics.trigger(.alignment)
+
+        let userMsg = MemoryChatMessage(
+            isUser: true,
+            text: submittedQuestion,
+            scopeTitle: submittedScope?.title
+        )
+        withAnimation(.burritoSpring) {
+            messages.append(userMsg)
+        }
+
+        let evidence = submittedScope.map {
+            LocalMemory.retrieve(question: submittedQuestion, scopedTo: $0)
+        } ?? LocalMemory.retrieve(question: submittedQuestion, from: documents)
+        isAnswering = true
+
+        answerTask = Task {
+            let result = await FoundationMemoryAnswerer.shared.answer(
+                question: submittedQuestion,
+                evidence: evidence,
+                languageIdentifier: languageIdentifier
+            )
+
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.burritoSpring) {
+                switch result {
+                case .success(let value):
+                    let botMsg = MemoryChatMessage(
+                        isUser: false,
+                        text: value,
+                        scopeTitle: submittedScope?.title
+                    )
+                    messages.append(botMsg)
+                case .failure(let error):
+                    let botMsg = MemoryChatMessage(
+                        isUser: false,
+                        text: "Could not retrieve answer.",
+                        errorMessage: error.recoveryMessage,
+                        scopeTitle: submittedScope?.title
+                    )
+                    messages.append(botMsg)
+                }
+                isAnswering = false
+                answerTask = nil
+            }
+            BurritoHaptics.trigger(.levelChange)
+        }
+    }
+}
+
+private struct NoteProvenanceView: View {
+    let userNotes: String
+    let generatedNotes: String
+    let openTranscript: (UUID) -> Void
+
+    private var hasHumanNotes: Bool {
+        !userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if hasHumanNotes {
+                NoteSourceLabel(
+                    title: "Your notes",
+                    detail: "Written by you",
+                    systemImage: "person.fill",
+                    isHuman: true
+                )
+                MarkdownNoteContent(markdown: userNotes, openTranscript: openTranscript)
+                    .padding(20)
+                    .background(BurritoTheme.raised, in: Rectangle())
+                    .overlay {
+                        Rectangle().stroke(BurritoTheme.accent.opacity(0.22))
+                    }
+
+                Rectangle()
+                    .fill(BurritoTheme.softBorder)
+                    .frame(height: 1)
+                    .padding(.vertical, 4)
+            }
+
+            NoteSourceLabel(
+                title: "Burrito notes",
+                detail: "Generated on this Mac",
+                systemImage: "sparkles"
+            )
+            MarkdownNoteContent(markdown: generatedNotes, openTranscript: openTranscript)
+        }
+    }
+}
+
+private struct NoteEditingView: View {
+    @Binding var userNotes: String
+    @Binding var generatedNotes: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NoteSourceLabel(
+                title: "Your notes",
+                detail: "Used as guidance when regenerating",
+                systemImage: "person.fill",
+                isHuman: true
+            )
+            TextEditor(text: $userNotes)
+                .font(.system(size: 14, design: .monospaced))
+                .lineSpacing(5)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 110, maxHeight: 190)
+                .padding(12)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                }
+
+            NoteSourceLabel(
+                title: "Burrito notes",
+                detail: "Generated, then editable by you",
+                systemImage: "sparkles"
+            )
+            TextEditor(text: $generatedNotes)
+                .font(.system(size: 14, design: .monospaced))
+                .lineSpacing(5)
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: .infinity)
+                .padding(12)
+                .background(BurritoTheme.controlFill, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder)
+                }
+        }
+        .frame(maxWidth: 820, maxHeight: .infinity)
+        .padding(.horizontal, 44)
+        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct MeetingContextPanel: View {
+    let event: CalendarEventSnapshot
+    let relatedNotes: [Note]
+    let selectNote: (UUID) -> Void
+
+    private var peopleSummary: String? {
+        if !event.attendeeNames.isEmpty {
+            return event.attendeeNames.joined(separator: ", ")
+        }
+        return event.organizerName.map { "Organized by \($0)" }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 16))
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(event.startDate, format: .dateTime.weekday(.wide).month(.abbreviated).day())
+                        .font(.spline(size: 12, weight: .semibold))
+                    Text(
+                        "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
+                    )
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    if let peopleSummary {
+                        Text(peopleSummary)
+                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                if let meetingURL = event.meetingURL {
+                    Button("Join meeting", systemImage: "video") {
+                        NSWorkspace.shared.open(meetingURL)
+                    }
+                    .buttonStyle(HomeToolbarButtonStyle())
+                }
+            }
+
+            if !relatedNotes.isEmpty {
+                Divider()
+                HStack(spacing: 8) {
+                    Text("Related")
+                        .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
+                    ForEach(relatedNotes.prefix(3)) { relatedNote in
+                        Button {
+                            selectNote(relatedNote.id)
+                        } label: {
+                            Text(relatedNote.title)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(BurritoTheme.controlFill, in: Rectangle())
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(BurritoTheme.raised.opacity(0.6), in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+        }
+    }
+}
+
 private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
     @Bindable var note: Note
+    let externalCitedSegmentID: UUID?
+    let relatedNotes: [Note]
     let coordinator: AppCoordinator
     let fileStore: LocalRecordingFileStore
     let folders: [Folder]
     let exportAction: () -> Void
     let backAction: () -> Void
+    let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
 
     @State private var selectedTab = 0
@@ -4281,6 +5727,7 @@ private struct NoteDetailView: View {
     @State private var didCopyNotes = false
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var player: AVAudioPlayer?
+    @State private var citedSegmentID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -4345,12 +5792,23 @@ private struct NoteDetailView: View {
                         .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
                     }
 
+                    if let calendarEvent = note.calendarEvent {
+                        MeetingContextPanel(
+                            event: calendarEvent,
+                            relatedNotes: relatedNotes,
+                            selectNote: selectRelatedNote
+                        )
+                    }
+
                     HStack(spacing: 20) {
                         EditorTabButton(title: "Notes", isSelected: selectedTab == 0) {
                             selectedTab = 0
                         }
                         EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
                             selectedTab = 1
+                        }
+                        EditorTabButton(title: "Ask", isSelected: selectedTab == 2) {
+                            selectedTab = 2
                         }
                         Spacer()
                         if selectedTab == 0 {
@@ -4373,26 +5831,32 @@ private struct NoteDetailView: View {
             }
 
             if isRecordingThisNote {
-                ActiveRecordingStage(
+                RecordingNotepadView(
+                    title: titleBinding,
+                    userNotes: userNotesBinding,
                     elapsed: coordinator.elapsed,
                     systemLevel: coordinator.activity.system,
-                    microphoneLevel: coordinator.activity.microphone
+                    microphoneLevel: coordinator.activity.microphone,
+                    recordingMode: note.recordingMode
                 )
                 .transition(.opacity)
             } else if selectedTab == 0 {
                 if isEditingMarkdown {
-                    TextEditor(text: notesBinding)
-                        .font(.system(size: 14, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .lineSpacing(5)
-                        .frame(maxWidth: 820)
-                        .padding(.horizontal, 44)
-                        .padding(.vertical, 24)
-                        .frame(maxWidth: .infinity)
+                    NoteEditingView(
+                        userNotes: userNotesBinding,
+                        generatedNotes: notesBinding
+                    )
                         .transition(.opacity)
                 } else {
                     ScrollView {
-                        MarkdownNoteContent(markdown: note.markdownBody)
+                        NoteProvenanceView(
+                            userNotes: note.userNotes,
+                            generatedNotes: note.markdownBody,
+                            openTranscript: { id in
+                                citedSegmentID = id
+                                selectedTab = 1
+                            }
+                        )
                             .frame(maxWidth: 820, alignment: .leading)
                             .padding(.horizontal, 44)
                             .padding(.vertical, 30)
@@ -4401,12 +5865,36 @@ private struct NoteDetailView: View {
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
                 }
+            } else if selectedTab == 1 {
+                TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
             } else {
-                TranscriptEditor(note: note)
+                MemoryChatView(
+                    title: "Ask this meeting",
+                    subtitle: "Answers use this transcript only.",
+                    documents: [
+                        MemoryDocument(
+                            noteID: note.id,
+                            title: note.title,
+                            updatedAt: note.updatedAt,
+                            segments: note.transcriptSegments
+                        ),
+                    ],
+                    languageIdentifier: note.languageIdentifier
+                ) { citation in
+                    guard citation.noteID == note.id else { return }
+                    citedSegmentID = citation.segmentID
+                    selectedTab = 1
+                }
             }
         }
         .background(BurritoTheme.canvas)
         .navigationTitle("")
+        .onAppear {
+            openExternalCitation()
+        }
+        .onChange(of: externalCitedSegmentID) {
+            openExternalCitation()
+        }
         .overlay(alignment: .top) {
             HStack {
                 if !isRecordingThisNote {
@@ -4451,7 +5939,7 @@ private struct NoteDetailView: View {
                         arrowEdge: .top
                     ) {
                         BurritoPopoverPanel {
-                            ShareLink(item: note.markdownBody) {
+                            ShareLink(item: note.exportedMarkdown) {
                                 BurritoPopoverRowLabel(
                                     title: "Share",
                                     systemImage: "paperplane"
@@ -4557,6 +6045,12 @@ private struct NoteDetailView: View {
         }
     }
 
+    private func openExternalCitation() {
+        guard let externalCitedSegmentID else { return }
+        citedSegmentID = externalCitedSegmentID
+        selectedTab = 1
+    }
+
     private var isRecordingThisNote: Bool {
         coordinator.captureState.isRecording && coordinator.activeNoteID == note.id
     }
@@ -4582,6 +6076,16 @@ private struct NoteDetailView: View {
         )
     }
 
+    private var userNotesBinding: Binding<String> {
+        Binding(
+            get: { note.userNotes },
+            set: {
+                note.userNotes = $0
+                note.updatedAt = .now
+            }
+        )
+    }
+
     private func regenerate() {
         Task {
             await coordinator.generate(
@@ -4594,7 +6098,7 @@ private struct NoteDetailView: View {
 
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(note.markdownBody, forType: .string)
+        NSPasteboard.general.setString(note.exportedMarkdown, forType: .string)
         copyFeedbackTask?.cancel()
         withAnimation(.smooth(duration: 0.18)) {
             didCopyNotes = true
@@ -4629,22 +6133,43 @@ private struct NoteDetailView: View {
 }
 
 private struct EditorTabButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let isSelected: Bool
     let select: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
-        Button(action: select) {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            select()
+        } label: {
             VStack(spacing: 7) {
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-                Rectangle()
-                    .fill(isSelected ? BurritoTheme.accent : Color.clear)
-                    .frame(height: 2)
+                    .font(.spline(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .primary : (isHovered ? .primary : .secondary))
+                ZStack {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 2)
+                    if isSelected {
+                        Rectangle()
+                            .fill(BurritoTheme.accent)
+                            .frame(height: 2)
+                            .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
+                    }
+                }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: isHovered
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -4867,11 +6392,13 @@ private struct TemplateSymbolPicker: View {
 
 private struct TranscriptEditor: View {
     @Bindable var note: Note
+    let focusedSegmentID: UUID?
     @State private var hoveredSegmentID: UUID?
 
     var body: some View {
-        ScrollView {
-            if note.transcriptSegments.isEmpty {
+        ScrollViewReader { proxy in
+            ScrollView {
+                if note.transcriptSegments.isEmpty {
                 VStack(spacing: 14) {
                     TranscriptSignalMark(tint: BurritoTheme.accent)
                         .frame(width: 34, height: 28)
@@ -4885,8 +6412,8 @@ private struct TranscriptEditor: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 88)
-            } else {
-                LazyVStack(spacing: 0) {
+                } else {
+                    LazyVStack(spacing: 0) {
                     HStack(spacing: 18) {
                         HStack(spacing: 8) {
                             TranscriptSignalMark(tint: BurritoTheme.accent)
@@ -4896,8 +6423,14 @@ private struct TranscriptEditor: View {
                         }
                         Spacer()
                         HStack(spacing: 12) {
-                            sourceKey(title: "Computer", tint: BurritoTheme.accent)
-                            sourceKey(title: "You", tint: BurritoTheme.sage)
+                            sourceKey(
+                                title: note.recordingMode == .meeting ? "Person 2" : "Computer",
+                                tint: BurritoTheme.accent
+                            )
+                            sourceKey(
+                                title: note.recordingMode == .meeting ? "Person 1" : "You",
+                                tint: BurritoTheme.sage
+                            )
                         }
                         Text("\(note.transcriptSegments.count) passages")
                             .font(.system(size: 10, weight: .medium))
@@ -4951,11 +6484,16 @@ private struct TranscriptEditor: View {
 
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack(spacing: 8) {
-                                    Text(sourceTitle(for: segment.source))
+                                    TextField(
+                                        sourceTitle(for: segment.source),
+                                        text: speakerBinding(for: segment.id)
+                                    )
+                                        .textFieldStyle(.plain)
+                                        .frame(maxWidth: 120)
                                         .font(.system(size: 10, weight: .semibold))
                                         .tracking(0.5)
-                                        .textCase(.uppercase)
                                         .foregroundStyle(sourceTint(for: segment.source))
+                                        .help("Edit this passage’s speaker name")
                                     Text(durationLabel(for: segment.duration))
                                         .font(.system(size: 9, design: .monospaced))
                                         .monospacedDigit()
@@ -4980,25 +6518,38 @@ private struct TranscriptEditor: View {
                         .padding(.top, 5)
                         .background(
                             sourceTint(for: segment.source).opacity(
-                                hoveredSegmentID == segment.id ? 0.055 : 0
+                                focusedSegmentID == segment.id
+                                    ? 0.16
+                                    : hoveredSegmentID == segment.id ? 0.055 : 0
                             ),
                             in: Rectangle()
                         )
+                        .id(segment.id)
                         .animation(.easeOut(duration: 0.14), value: hoveredSegmentID)
                         .onHover { isHovered in
                             hoveredSegmentID = isHovered ? segment.id : nil
                         }
                     }
+                    }
+                    .frame(maxWidth: 760)
+                    .padding(.horizontal, 44)
+                    .padding(.vertical, 26)
+                    .frame(maxWidth: .infinity)
+                    .hidesEnclosingScrollIndicators()
                 }
-                .frame(maxWidth: 760)
-                .padding(.horizontal, 44)
-                .padding(.vertical, 26)
-                .frame(maxWidth: .infinity)
-                .hidesEnclosingScrollIndicators()
             }
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .onAppear { scrollToCitation(using: proxy) }
+            .onChange(of: focusedSegmentID) { scrollToCitation(using: proxy) }
         }
-        .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
+    }
+
+    private func scrollToCitation(using proxy: ScrollViewProxy) {
+        guard let focusedSegmentID else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(focusedSegmentID, anchor: .center)
+        }
     }
 
     private func sourceKey(title: String, tint: Color) -> some View {
@@ -5014,8 +6565,8 @@ private struct TranscriptEditor: View {
 
     private func sourceTitle(for source: AudioSource) -> String {
         switch source {
-        case .system: "Computer"
-        case .microphone: "You"
+        case .system: note.recordingMode == .meeting ? "Person 2" : "Computer"
+        case .microphone: note.recordingMode == .meeting ? "Person 1" : "You"
         }
     }
 
@@ -5040,6 +6591,21 @@ private struct TranscriptEditor: View {
                 var segments = note.transcriptSegments
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 segments[index].text = newValue
+                note.replaceTranscript(with: segments, marksEdited: true)
+            }
+        )
+    }
+
+    private func speakerBinding(for id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                note.transcriptSegments.first(where: { $0.id == id })?.speakerName ?? ""
+            },
+            set: { newValue in
+                var segments = note.transcriptSegments
+                guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                segments[index].speakerName = trimmed.isEmpty ? nil : trimmed
                 note.replaceTranscript(with: segments, marksEdited: true)
             }
         )

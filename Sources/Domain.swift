@@ -11,19 +11,22 @@ struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
     var startTime: TimeInterval
     var duration: TimeInterval
     var text: String
+    var speakerName: String?
 
     init(
         id: UUID = UUID(),
         source: AudioSource,
         startTime: TimeInterval,
         duration: TimeInterval,
-        text: String
+        text: String,
+        speakerName: String? = nil
     ) {
         self.id = id
         self.source = source
         self.startTime = startTime
         self.duration = duration
         self.text = text
+        self.speakerName = speakerName
     }
 }
 
@@ -43,7 +46,12 @@ enum Transcript {
     static func rendered(_ segments: [TranscriptSegment]) -> String {
         segments.map {
             let timestamp = Duration.seconds($0.startTime).formatted(.time(pattern: .minuteSecond))
-            return "[\(timestamp)] \($0.source.rawValue): \($0.text)"
+            let correctedSpeaker = $0.speakerName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let speaker = correctedSpeaker?.isEmpty == false
+                ? correctedSpeaker ?? $0.source.rawValue
+                : $0.source.rawValue
+            return "[\(timestamp)] [source:\($0.id.uuidString)] \(speaker): \($0.text)"
         }
         .joined(separator: "\n")
     }
@@ -58,6 +66,161 @@ enum Transcript {
     }
 }
 
+enum TranscriptCitation {
+    static func segmentID(from url: URL?) -> UUID? {
+        guard let url,
+              url.scheme == "burrito",
+              url.host == "transcript"
+        else {
+            return nil
+        }
+        let value = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return UUID(uuidString: value)
+    }
+}
+
+struct MemoryDocument: Equatable, Sendable {
+    let noteID: UUID
+    let title: String
+    let updatedAt: Date
+    let segments: [TranscriptSegment]
+}
+
+enum MemoryMention {
+    static func query(in text: String) -> String? {
+        guard let start = queryStart(in: text) else { return nil }
+        let valueStart = text.index(after: start)
+        return String(text[valueStart...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func questionWithoutQuery(in text: String) -> String {
+        guard let start = queryStart(in: text) else { return text }
+        return String(text[..<start])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func queryStart(in text: String) -> String.Index? {
+        guard let start = text.lastIndex(of: "@") else { return nil }
+        guard start == text.startIndex
+                || text[text.index(before: start)].isWhitespace
+        else {
+            return nil
+        }
+        return start
+    }
+}
+
+struct MemoryEvidence: Equatable, Identifiable, Sendable {
+    let noteID: UUID
+    let noteTitle: String
+    let noteUpdatedAt: Date
+    let segment: TranscriptSegment
+
+    var id: String { "\(noteID.uuidString):\(segment.id.uuidString)" }
+
+    var citationURL: URL? {
+        URL(
+            string: "burrito://memory/\(noteID.uuidString)/\(segment.id.uuidString)"
+        )
+    }
+}
+
+struct MemoryCitation: Equatable, Sendable {
+    let noteID: UUID
+    let segmentID: UUID
+
+    static func resolve(_ url: URL?) -> MemoryCitation? {
+        guard let url,
+              url.scheme == "burrito",
+              url.host == "memory"
+        else {
+            return nil
+        }
+        let values = url.path
+            .split(separator: "/")
+            .map(String.init)
+        guard values.count == 2,
+              let noteID = UUID(uuidString: values[0]),
+              let segmentID = UUID(uuidString: values[1])
+        else {
+            return nil
+        }
+        return MemoryCitation(noteID: noteID, segmentID: segmentID)
+    }
+}
+
+enum LocalMemory {
+    static func retrieve(
+        question: String,
+        from documents: [MemoryDocument],
+        limit: Int = 18
+    ) -> [MemoryEvidence] {
+        guard limit > 0 else { return [] }
+        let queryTerms = terms(in: question)
+        let candidates = documents.flatMap { document in
+            document.segments.map { segment in
+                let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+                let passageMatches = queryTerms.intersection(terms(in: segment.text)).count
+                return (
+                    evidence: MemoryEvidence(
+                        noteID: document.noteID,
+                        noteTitle: document.title,
+                        noteUpdatedAt: document.updatedAt,
+                        segment: segment
+                    ),
+                    score: (titleMatches * 3) + passageMatches
+                )
+            }
+        }
+        return candidates
+            .filter { $0.score > 0 }
+            .sorted {
+                if $0.score != $1.score { return $0.score > $1.score }
+                if $0.evidence.noteUpdatedAt != $1.evidence.noteUpdatedAt {
+                    return $0.evidence.noteUpdatedAt > $1.evidence.noteUpdatedAt
+                }
+                return $0.evidence.segment.startTime < $1.evidence.segment.startTime
+            }
+            .prefix(limit)
+            .map(\.evidence)
+    }
+
+    static func retrieve(
+        question: String,
+        scopedTo document: MemoryDocument,
+        limit: Int = 18
+    ) -> [MemoryEvidence] {
+        guard limit > 0 else { return [] }
+        let ranked = retrieve(question: question, from: [document], limit: limit)
+        guard ranked.isEmpty else { return ranked }
+        return document.segments
+            .sorted { $0.startTime < $1.startTime }
+            .prefix(limit)
+            .map { segment in
+                MemoryEvidence(
+                    noteID: document.noteID,
+                    noteTitle: document.title,
+                    noteUpdatedAt: document.updatedAt,
+                    segment: segment
+                )
+            }
+    }
+
+    private static func terms(in text: String) -> Set<String> {
+        let ignored = Set([
+            "a", "an", "and", "are", "did", "do", "for", "how", "in", "is",
+            "it", "of", "on", "the", "to", "was", "what", "when", "where", "who",
+        ])
+        return Set(
+            text.lowercased()
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 1 && !ignored.contains($0) }
+        )
+    }
+}
+
 enum CaptureState: Equatable, Sendable {
     case idle
     case preparing
@@ -67,6 +230,45 @@ enum CaptureState: Equatable, Sendable {
 
     var isRecording: Bool {
         if case .recording = self { true } else { false }
+    }
+}
+
+enum SmartStopDecision: Equatable, Sendable {
+    case keepRecording
+    case suggestStop
+}
+
+enum SmartStopStatus: Equatable, Sendable {
+    case monitoring
+    case suggested
+    case dismissed
+
+    var wasSuggested: Bool {
+        self != .monitoring
+    }
+}
+
+enum SmartStopPolicy {
+    static let meetingEndGrace: TimeInterval = 60
+    static let requiredSilence: TimeInterval = 45
+    static let minimumRecordingDuration: TimeInterval = 2 * 60
+
+    static func decision(
+        now: Date,
+        eventEnd: Date?,
+        recordingElapsed: TimeInterval,
+        silentFor: TimeInterval,
+        alreadySuggested: Bool
+    ) -> SmartStopDecision {
+        guard !alreadySuggested,
+              recordingElapsed >= minimumRecordingDuration,
+              silentFor >= requiredSilence,
+              let eventEnd,
+              now >= eventEnd.addingTimeInterval(meetingEndGrace)
+        else {
+            return .keepRecording
+        }
+        return .suggestStop
     }
 }
 
@@ -488,12 +690,39 @@ enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendab
     }
 }
 
+enum TranscriptionEngineCoverage: Equatable, Sendable {
+    case downloadableLocalModel
+    case appleSpeech
+
+    var title: String {
+        switch self {
+        case .downloadableLocalModel: "Parakeet model available"
+        case .appleSpeech: "Apple Speech"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .downloadableLocalModel:
+            "Uses an installed on-device Parakeet model, with Apple Speech as fallback."
+        case .appleSpeech:
+            "Availability is verified by macOS before recording starts."
+        }
+    }
+}
+
 struct TranscriptionLanguage: Identifiable, Equatable, Sendable {
     let identifier: String
     let title: String
     let compactTitle: String
 
     var id: String { identifier }
+
+    var engineCoverage: TranscriptionEngineCoverage {
+        ParakeetModelVariant.candidates(languageIdentifier: identifier).isEmpty
+            ? .appleSpeech
+            : .downloadableLocalModel
+    }
 
     static let supported = [
         TranscriptionLanguage(
@@ -665,7 +894,7 @@ enum RecordingMode: String, CaseIterable, Identifiable, Sendable {
     var description: String {
         switch self {
         case .listenAlong: "Capture audio playing on this Mac."
-        case .meeting: "Capture the room through your microphone."
+        case .meeting: "Capture the call and your microphone separately."
         }
     }
 
@@ -684,17 +913,53 @@ struct RecordingOptions: Equatable, Sendable {
     var retainsAudio: Bool
 }
 
+struct CalendarEventSnapshot: Codable, Equatable, Sendable {
+    var eventIdentifier: String
+    var title: String
+    var startDate: Date
+    var endDate: Date
+    var meetingURL: URL?
+    var attendeeNames: [String]
+    var organizerName: String?
+    var recurrenceIdentifier: String?
+    var calendarName: String
+
+    var relatedMeetingIdentifier: String {
+        recurrenceIdentifier ?? eventIdentifier
+    }
+
+    var generationContext: String {
+        let attendees = attendeeNames.isEmpty ? "Not listed" : attendeeNames.joined(separator: ", ")
+        return """
+            Title: \(title)
+            Starts: \(startDate.formatted(.iso8601))
+            Ends: \(endDate.formatted(.iso8601))
+            Calendar: \(calendarName)
+            Organizer: \(organizerName ?? "Not listed")
+            Attendees: \(attendees)
+            Meeting URL: \(meetingURL?.absoluteString ?? "Not listed")
+            """
+    }
+}
+
 enum RecordingDestination: Equatable, Identifiable, Sendable {
     case newNote
+    case calendarEvent(CalendarEventSnapshot)
     case appendToNote(id: UUID)
 
     var id: String {
         switch self {
         case .newNote:
             "new-note"
+        case .calendarEvent(let event):
+            "calendar-\(event.eventIdentifier)-\(event.startDate.timeIntervalSinceReferenceDate)"
         case .appendToNote(let id):
             "append-\(id.uuidString)"
         }
+    }
+
+    var calendarEvent: CalendarEventSnapshot? {
+        if case .calendarEvent(let event) = self { event } else { nil }
     }
 }
 

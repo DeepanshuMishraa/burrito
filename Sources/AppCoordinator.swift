@@ -10,6 +10,9 @@ final class AppCoordinator {
     private(set) var activeNoteID: UUID?
     private(set) var elapsed: TimeInterval = 0
     private(set) var activity = AudioActivity.silent
+    private(set) var silentFor: TimeInterval = 0
+    private(set) var activeCalendarEvent: CalendarEventSnapshot?
+    private(set) var smartStopStatus: SmartStopStatus = .monitoring
     private(set) var lastError: BurritoError?
     private(set) var isInstallingLanguageAsset = false
 
@@ -19,6 +22,7 @@ final class AppCoordinator {
     private let fileStore: any RecordingFileStore
     private let feedback: any AppFeedbackProviding
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
+    private let now: @MainActor @Sendable () -> Date
     private var activeFiles: RecordingFiles?
     private var appendsToExistingNote = false
     private var timerTask: Task<Void, Never>?
@@ -29,7 +33,8 @@ final class AppCoordinator {
         generator: any NoteGenerating,
         fileStore: any RecordingFileStore,
         feedback: any AppFeedbackProviding = SilentAppFeedback(),
-        requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization
+        requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization,
+        now: @escaping @MainActor @Sendable () -> Date = { .now }
     ) {
         self.capture = capture
         self.transcriber = transcriber
@@ -37,6 +42,7 @@ final class AppCoordinator {
         self.fileStore = fileStore
         self.feedback = feedback
         self.requestSpeechAuthorization = requestSpeechAuthorization
+        self.now = now
     }
 
     static func live() -> AppCoordinator {
@@ -76,7 +82,7 @@ final class AppCoordinator {
         lastError = nil
 
         let existingNote: Note? = switch destination {
-        case .newNote:
+        case .newNote, .calendarEvent:
             nil
         case .appendToNote(let id):
             fetchNote(id: id, context: context)
@@ -122,7 +128,7 @@ final class AppCoordinator {
             return
         }
 
-        let now = Date.now
+        let now = now()
         let note: Note
         if let existingNote {
             note = existingNote
@@ -134,11 +140,13 @@ final class AppCoordinator {
             let newNote = Note(
                 id: sessionID,
                 lifecycle: .recording,
+                title: destination.calendarEvent?.title ?? "New Recording",
                 createdAt: now,
                 languageIdentifier: options.languageIdentifier,
                 template: options.template,
                 recordingMode: recordingMode,
-                retainsAudio: options.retainsAudio
+                retainsAudio: options.retainsAudio,
+                calendarEvent: destination.calendarEvent
             )
             newNote.systemAudioRelativePath = files.systemAudioURL.map(
                 fileStore.relativePath(for:)
@@ -166,9 +174,12 @@ final class AppCoordinator {
             activeFiles = files
             activeNoteID = note.id
             appendsToExistingNote = existingNote != nil
+            activeCalendarEvent = note.calendarEvent
             captureState = .recording(sessionID: sessionID, startedAt: now)
             elapsed = 0
             activity = .silent
+            silentFor = 0
+            smartStopStatus = .monitoring
             startTimer(startedAt: now)
             feedback.recordingStarted()
         case .failure(let error):
@@ -194,10 +205,11 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = nil
         activity = .silent
+        silentFor = 0
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
-        let recordingDuration = Date.now.timeIntervalSince(startedAt)
+        let recordingDuration = now().timeIntervalSince(startedAt)
         note.updatedAt = .now
         try? context.save()
 
@@ -267,7 +279,8 @@ final class AppCoordinator {
                     source: segment.source,
                     startTime: segment.startTime + offset,
                     duration: segment.duration,
-                    text: segment.text
+                    text: segment.text,
+                    speakerName: segment.speakerName
                 )
             }
             combinedSegments = existingSegments + appendedSegments
@@ -307,10 +320,13 @@ final class AppCoordinator {
         }
         activeFiles = nil
         activeNoteID = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         captureState = .idle
         elapsed = 0
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
     }
 
     private func finishSilentRecording(
@@ -333,16 +349,21 @@ final class AppCoordinator {
         try? context.save()
         activeFiles = nil
         activeNoteID = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         captureState = .idle
         elapsed = 0
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
         let oldTitle = note.title
         let oldBody = note.markdownBody
         let transcriptSegments = note.transcriptSegments
+        let userNotes = note.userNotes
+        let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -353,24 +374,34 @@ final class AppCoordinator {
 
         async let generatedResult = generator.generate(
             segments: transcriptSegments,
+            userNotes: userNotes,
+            meetingContext: calendarEvent,
             template: template,
             languageIdentifier: languageIdentifier
         )
-        async let titleResult = generator.suggestTitle(
+        async let titleResult = suggestedTitle(
             segments: transcriptSegments,
             currentTitle: oldTitle,
-            languageIdentifier: languageIdentifier
+            languageIdentifier: languageIdentifier,
+            calendarEvent: calendarEvent
         )
         let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
         switch generatedResultValue {
         case .success(let generated):
-            note.title = await resolvedSuggestedTitle(
-                initialResult: titleResultValue,
-                segments: transcriptSegments,
-                currentTitle: oldTitle,
-                languageIdentifier: languageIdentifier
-            ) ?? generated.title
+            if let calendarEvent {
+                note.title = calendarAwareTitle(
+                    event: calendarEvent,
+                    currentTitle: oldTitle
+                )
+            } else {
+                note.title = await resolvedSuggestedTitle(
+                    initialResult: titleResultValue,
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier
+                ) ?? generated.title
+            }
             note.markdownBody = generated.markdown
             note.generatedFromTranscriptRevision = note.transcriptRevision
             note.userEditedNotes = false
@@ -403,6 +434,8 @@ final class AppCoordinator {
         let existingBody = note.markdownBody
         let hadUserEdits = note.userEditedNotes
         let completeTranscript = note.transcriptSegments
+        let userNotes = note.userNotes
+        let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
 
@@ -413,24 +446,35 @@ final class AppCoordinator {
 
         async let generatedResult = generator.generate(
             segments: segments,
+            userNotes: userNotes,
+            meetingContext: calendarEvent,
             template: template,
             languageIdentifier: languageIdentifier
         )
-        async let titleResult = generator.suggestTitle(
+        async let titleResult = suggestedTitle(
             segments: completeTranscript,
             currentTitle: existingTitle,
-            languageIdentifier: languageIdentifier
+            languageIdentifier: languageIdentifier,
+            calendarEvent: calendarEvent
         )
         let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
         switch generatedResultValue {
         case .success(let generated):
-            let updatedTitle = await resolvedSuggestedTitle(
-                initialResult: titleResultValue,
-                segments: completeTranscript,
-                currentTitle: existingTitle,
-                languageIdentifier: languageIdentifier
-            ) ?? existingTitle
+            let updatedTitle: String
+            if let calendarEvent {
+                updatedTitle = calendarAwareTitle(
+                    event: calendarEvent,
+                    currentTitle: existingTitle
+                )
+            } else {
+                updatedTitle = await resolvedSuggestedTitle(
+                    initialResult: titleResultValue,
+                    segments: completeTranscript,
+                    currentTitle: existingTitle,
+                    languageIdentifier: languageIdentifier
+                ) ?? existingTitle
+            }
             let appendedBody = """
                 ## \(generated.title)
 
@@ -456,6 +500,35 @@ final class AppCoordinator {
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    private func suggestedTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String,
+        calendarEvent: CalendarEventSnapshot?
+    ) async -> Result<String, BurritoError> {
+        if let calendarEvent {
+            return .success(
+                calendarAwareTitle(event: calendarEvent, currentTitle: currentTitle)
+            )
+        }
+        return await generator.suggestTitle(
+            segments: segments,
+            currentTitle: currentTitle,
+            languageIdentifier: languageIdentifier
+        )
+    }
+
+    private func calendarAwareTitle(
+        event: CalendarEventSnapshot,
+        currentTitle: String
+    ) -> String {
+        let current = currentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if current.isEmpty || current == "New Recording" {
+            return event.title
+        }
+        return current
     }
 
     private func resolvedSuggestedTitle(
@@ -496,6 +569,10 @@ final class AppCoordinator {
         lastError = nil
     }
 
+    func keepRecording() {
+        smartStopStatus = .dismissed
+    }
+
     func installMissingLanguageAsset() async {
         guard case .languageAssetMissing(let identifier) = lastError,
               !isInstallingLanguageAsset
@@ -517,6 +594,9 @@ final class AppCoordinator {
     private func failBeforeRecording(_ error: BurritoError) {
         captureState = .idle
         activity = .silent
+        silentFor = 0
+        activeCalendarEvent = nil
+        smartStopStatus = .monitoring
         lastError = error
     }
 
@@ -528,8 +608,11 @@ final class AppCoordinator {
         lastError = error
         captureState = .failed(sessionID: note.id, message: error.recoveryMessage)
         activeFiles = nil
+        activeCalendarEvent = nil
         appendsToExistingNote = false
         activity = .silent
+        silentFor = 0
+        smartStopStatus = .monitoring
         timerTask?.cancel()
         timerTask = nil
     }
@@ -545,12 +628,34 @@ final class AppCoordinator {
     private func startTimer(startedAt: Date) {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
+            guard let initialTick = self?.now() else { return }
+            var lastTick = initialTick
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
-                elapsed = Date.now.timeIntervalSince(startedAt)
+                let now = now()
+                let tickDuration = max(0, now.timeIntervalSince(lastTick))
+                lastTick = now
+                elapsed = now.timeIntervalSince(startedAt)
                 activity = capture.activity
+                if max(activity.system, activity.microphone) >= 0.04 {
+                    silentFor = 0
+                } else {
+                    silentFor += tickDuration
+                }
+                if SmartStopPolicy.decision(
+                    now: now,
+                    eventEnd: activeCalendarEvent?.endDate,
+                    recordingElapsed: elapsed,
+                    silentFor: silentFor,
+                    alreadySuggested: smartStopStatus.wasSuggested
+                ) == .suggestStop {
+                    smartStopStatus = .suggested
+                    feedback.smartStopSuggested(
+                        title: activeCalendarEvent?.title ?? "Your recording"
+                    )
+                }
             }
         }
     }

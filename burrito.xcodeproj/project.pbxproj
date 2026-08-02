@@ -11,7 +11,9 @@
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
+		1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
+		2C7993E84252BAF80DD73906 /* AITesting in Frameworks */ = {isa = PBXBuildFile; productRef = 95676C287AC51B2EA5887B1D /* AITesting */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
@@ -23,15 +25,19 @@
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
+		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
+		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
 		D712EE334DC9C9D6F1D94AA5 /* MarkdownDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */; };
+		D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */; };
 		E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */; };
 		EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */; };
+		F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */; };
 		F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B76BDAAD1105FDBF200FA0E /* ContentView.swift */; };
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
 		FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80312D2153FF4924DF498F98 /* CoordinatorTests.swift */; };
@@ -55,12 +61,16 @@
 		0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetTranscriber.swift; sourceTree = "<group>"; };
 		0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceAndStorageTests.swift; sourceTree = "<group>"; };
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
+		274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Variable.ttf"; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
+		315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Italic-Variable.ttf"; sourceTree = "<group>"; };
+		38EC4CD89C9CC805FF666CE0 /* Ownership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ownership.swift; sourceTree = "<group>"; };
 		3A7EDE94375DECAC98C16A4F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		3B76BDAAD1105FDBF200FA0E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
 		7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAccess.swift; sourceTree = "<group>"; };
 		728318FB3CB86222B61B8235 /* RecordingFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFileStore.swift; sourceTree = "<group>"; };
 		765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocumentTests.swift; sourceTree = "<group>"; };
@@ -87,6 +97,15 @@
 				1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */,
 				7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */,
 				5EE81FD4567D9697A350137B /* Lottie in Frameworks */,
+				BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6EED2DA7C397DE92C900678E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2C7993E84252BAF80DD73906 /* AITesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,6 +115,7 @@
 		05E85C1DB4D0CA916BC1F73E /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */,
 				D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */,
 				80312D2153FF4924DF498F98 /* CoordinatorTests.swift */,
 				0A2216874DB0B52B8350E522 /* DomainTests.swift */,
@@ -140,6 +160,7 @@
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
+				38EC4CD89C9CC805FF666CE0 /* Ownership.swift */,
 				0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */,
 				7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */,
 				728318FB3CB86222B61B8235 /* RecordingFileStore.swift */,
@@ -155,8 +176,18 @@
 			children = (
 				A516A8DE5CC1A96513E93F1E /* AppIcon.icon */,
 				7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */,
+				E3123D2A1EAB3921FFA71726 /* Fonts */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		E3123D2A1EAB3921FFA71726 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */,
+				274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -179,6 +210,7 @@
 				299A838A7B8892CA4C7945E3 /* Sparkle */,
 				64DA2926F2A0EF333C410B58 /* FluidAudio */,
 				ECFA337F1032D11A4CC3842E /* Lottie */,
+				BF1585C55A8225C58A754212 /* AI */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -189,6 +221,7 @@
 			buildConfigurationList = 1CAF57C2AE0567F0E7E258E5 /* Build configuration list for PBXNativeTarget "BurritoTests" */;
 			buildPhases = (
 				AC038B67B6FB10E4E0FE5A8B /* Sources */,
+				6EED2DA7C397DE92C900678E /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -197,6 +230,7 @@
 			);
 			name = BurritoTests;
 			packageProductDependencies = (
+				95676C287AC51B2EA5887B1D /* AITesting */,
 			);
 			productName = BurritoTests;
 			productReference = B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */;
@@ -234,6 +268,7 @@
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
+				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 89BA562FB69766E4020166D8 /* Products */;
@@ -253,6 +288,8 @@
 			files = (
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
 				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
+				1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */,
+				D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,6 +312,7 @@
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
+				9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */,
 				5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */,
 				BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */,
 				CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */,
@@ -289,6 +327,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */,
 				4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */,
 				FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */,
 				0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */,
@@ -564,6 +603,14 @@
 				minimumVersion = 4.6.1;
 			};
 		};
+		50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/zaidmukaddam/swift-ai-sdk.git";
+			requirement = {
+				kind = revision;
+				revision = 9a8ea7e5f718af957f222c12ba09caff79caf3d0;
+			};
+		};
 		7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -592,6 +639,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		95676C287AC51B2EA5887B1D /* AITesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */;
+			productName = AITesting;
+		};
+		BF1585C55A8225C58A754212 /* AI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */;
+			productName = AI;
 		};
 		ECFA337F1032D11A4CC3842E /* Lottie */ = {
 			isa = XCSwiftPackageProductDependency;

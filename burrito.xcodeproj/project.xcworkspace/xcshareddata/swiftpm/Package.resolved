@@ -1,5 +1,5 @@
 {
-  "originHash" : "64b406ef7451b1ba12631019b8f26f0a916f43cfb8ac58ca0727fad946d22b7b",
+  "originHash" : "59998bbb9c46d710214ae101f1d177b13e6d3e01120d030b0f60337ccc704044",
   "pins" : [
     {
       "identity" : "fluidaudio",
@@ -26,6 +26,14 @@
       "state" : {
         "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
         "version" : "2.9.4"
+      }
+    },
+    {
+      "identity" : "swift-ai-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/zaidmukaddam/swift-ai-sdk.git",
+      "state" : {
+        "revision" : "9a8ea7e5f718af957f222c12ba09caff79caf3d0"
       }
     }
   ],

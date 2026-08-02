@@ -19,9 +19,7 @@ struct LocalRecordingFileStore: RecordingFileStore {
             return .success(
                 RecordingFiles(
                     sessionID: id,
-                    systemAudioURL: mode == .listenAlong
-                        ? directory.appending(path: "system.m4a")
-                        : nil,
+                    systemAudioURL: directory.appending(path: "system.m4a"),
                     microphoneAudioURL: mode == .meeting
                         ? directory.appending(path: "microphone.m4a")
                         : nil

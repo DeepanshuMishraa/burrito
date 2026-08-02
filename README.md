@@ -7,7 +7,9 @@ Burrito records system audio with an optional microphone track, transcribes it l
 ## A calmer way to remember
 
 - Capture system audio and your microphone as separate, synchronized sources
-- See real upcoming Calendar events and start the right recording from home
+- Write rough notes while recording and use them to guide the generated result
+- Join upcoming calls and start event-linked recordings from Calendar
+- Keep meeting titles, times, organizers, attendees, and recurring history with each note
 - Transcribe after recording with Apple Speech or an optional local Parakeet model
 - Generate summaries, detailed notes, study guides, or meeting notes
 - Create custom note templates with your own instructions
