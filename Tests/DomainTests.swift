@@ -378,6 +378,39 @@ struct LocalMemoryTests {
         #expect(evidence.isEmpty)
     }
 
+    @Test("A scoped meeting supplies evidence for broad questions")
+    func retrievesScopedMeetingEvidence() {
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Weekly product review",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 4,
+                    duration: 2,
+                    text: "Priya will send the revised launch plan on Friday."
+                ),
+            ]
+        )
+
+        let evidence = LocalMemory.retrieve(
+            question: "What happened?",
+            scopedTo: document
+        )
+
+        #expect(evidence.map(\.noteID) == [document.noteID])
+        #expect(evidence.first?.segment.text == "Priya will send the revised launch plan on Friday.")
+    }
+
+    @Test("Meeting mention parsing recognizes and removes the active query")
+    func parsesMeetingMentionQuery() {
+        #expect(MemoryMention.query(in: "What changed in @weekly pro") == "weekly pro")
+        #expect(MemoryMention.questionWithoutQuery(in: "What changed in @weekly pro") == "What changed in")
+        #expect(MemoryMention.query(in: "email@example.com") == nil)
+        #expect(MemoryMention.query(in: "No mention here") == nil)
+    }
+
     @Test("Memory prompts require cited answers and explicit uncertainty")
     func promptContract() {
         let noteID = UUID(uuidString: "B445F1FC-D124-4CD4-A157-D25201200659") ?? UUID()

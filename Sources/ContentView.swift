@@ -461,7 +461,7 @@ struct ContentView: View {
                     }
                     SidebarNavigationButton(
                         title: "Ask Burrito",
-                        systemImage: "sparkles",
+                        systemImage: "at",
                         count: 0,
                         isSelected: sidebarSelection == .memory
                     ) {
@@ -629,7 +629,7 @@ struct ContentView: View {
                         memoryFolderID = folderID
                         sidebarSelection = .memory
                     } label: {
-                        Label("Ask folder", systemImage: "sparkles")
+                        Label("Ask folder", systemImage: "at")
                     }
                     .buttonStyle(HomeToolbarButtonStyle())
                 }
@@ -4949,19 +4949,22 @@ private struct MemoryChatMessage: Identifiable, Equatable {
     let text: String
     let timestamp: Date
     let errorMessage: String?
+    let scopeTitle: String?
 
     init(
         id: UUID = UUID(),
         isUser: Bool,
         text: String,
         timestamp: Date = Date(),
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        scopeTitle: String? = nil
     ) {
         self.id = id
         self.isUser = isUser
         self.text = text
         self.timestamp = timestamp
         self.errorMessage = errorMessage
+        self.scopeTitle = scopeTitle
     }
 }
 
@@ -4977,12 +4980,40 @@ private struct MemoryChatView: View {
     @State private var isAnswering = false
     @State private var answerTask: Task<Void, Never>?
     @State private var copiedMessageID: UUID?
+    @State private var scopedDocument: MemoryDocument?
+    @State private var mentionSelectionIndex = 0
     @FocusState private var questionFocused: Bool
 
     private var canAsk: Bool {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !documents.isEmpty
             && !isAnswering
+            && mentionQuery == nil
+    }
+
+    private var mentionQuery: String? {
+        guard scopedDocument == nil else { return nil }
+        return MemoryMention.query(in: question)
+    }
+
+    private var matchingMentionDocuments: [MemoryDocument] {
+        guard let mentionQuery else { return [] }
+        let candidates = documents.sorted { $0.updatedAt > $1.updatedAt }
+        guard !mentionQuery.isEmpty else {
+            return Array(candidates.prefix(6))
+        }
+        return Array(
+            candidates
+                .filter { $0.title.localizedStandardContains(mentionQuery) }
+                .prefix(6)
+        )
+    }
+
+    private var highlightedMentionDocument: MemoryDocument? {
+        guard matchingMentionDocuments.indices.contains(mentionSelectionIndex) else {
+            return nil
+        }
+        return matchingMentionDocuments[mentionSelectionIndex]
     }
 
     private var suggestedPrompts: [String] {
@@ -4997,11 +5028,11 @@ private struct MemoryChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 17, weight: .medium))
+                Text("@")
+                    .font(.burritoDisplay(size: 28, weight: .semibold))
                     .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 40, height: 40)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .frame(width: 30, alignment: .leading)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.burritoDisplay(size: 24, weight: .medium))
@@ -5083,7 +5114,7 @@ private struct MemoryChatView: View {
                                                 submitPrompt(prompt)
                                             } label: {
                                                 HStack(spacing: 8) {
-                                                    Image(systemName: "sparkles")
+                                                    Image(systemName: "text.bubble")
                                                         .font(.system(size: 11))
                                                         .foregroundStyle(BurritoTheme.accent)
                                                     Text(prompt)
@@ -5143,40 +5174,92 @@ private struct MemoryChatView: View {
                 }
             }
 
-            HStack(spacing: 12) {
-                TextField("Ask a question about your meetings…", text: $question)
+            VStack(spacing: 8) {
+                if mentionQuery != nil {
+                    mentionPicker
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
+                HStack(spacing: 10) {
+                    if let scopedDocument {
+                        Button {
+                            self.scopedDocument = nil
+                            questionFocused = true
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text("@")
+                                    .fontWeight(.semibold)
+                                Text(scopedDocument.title)
+                                    .lineLimit(1)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 8)
+                            .frame(height: 28)
+                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .overlay {
+                                Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove meeting scope")
+                        .accessibilityLabel("Remove meeting scope: \(scopedDocument.title)")
+                    }
+
+                    TextField(
+                        scopedDocument.map { "Ask about \($0.title)…" }
+                            ?? "Ask anything — type @ to choose a meeting",
+                        text: $question
+                    )
                     .textFieldStyle(.plain)
                     .font(.spline(size: 13, weight: .regular))
                     .focused($questionFocused)
-                    .onSubmit(ask)
-
-                if isAnswering {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.horizontal, 4)
-                } else {
-                    Button(action: ask) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(canAsk ? .white : Color.secondary)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
-                                in: Rectangle()
-                            )
+                    .onSubmit(submitComposer)
+                    .onKeyPress(.downArrow) {
+                        guard mentionQuery != nil else { return .ignored }
+                        moveMentionSelection(by: 1)
+                        return .handled
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canAsk)
-                    .accessibilityLabel("Ask question")
-                    .help("Send question")
+                    .onKeyPress(.upArrow) {
+                        guard mentionQuery != nil else { return .ignored }
+                        moveMentionSelection(by: -1)
+                        return .handled
+                    }
+                    .onChange(of: question) { _, _ in
+                        mentionSelectionIndex = 0
+                    }
+
+                    if isAnswering {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.horizontal, 4)
+                    } else {
+                        Button(action: ask) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(canAsk ? .white : Color.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
+                                    in: Rectangle()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canAsk)
+                        .accessibilityLabel("Ask question")
+                        .help("Send question")
+                    }
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(BurritoTheme.raised, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.softBorder)
                 }
             }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: 760, minHeight: 48)
-            .background(BurritoTheme.raised, in: Rectangle())
-            .overlay {
-                Rectangle().stroke(BurritoTheme.softBorder)
-            }
+            .frame(maxWidth: 760)
             .padding(.horizontal, 38)
             .padding(.vertical, 18)
         }
@@ -5186,6 +5269,72 @@ private struct MemoryChatView: View {
             answerTask?.cancel()
             answerTask = nil
             isAnswering = false
+        }
+    }
+
+    private var mentionPicker: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("CHOOSE A MEETING")
+                    .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                    .tracking(0.7)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("↑↓  RETURN")
+                    .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            if matchingMentionDocuments.isEmpty {
+                Text("No meeting matches “\(mentionQuery ?? "")”")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            } else {
+                ForEach(
+                    Array(matchingMentionDocuments.enumerated()),
+                    id: \.element.noteID
+                ) { index, document in
+                    Button {
+                        selectMention(document)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text("@")
+                                .font(.spline(size: 13, weight: .semibold))
+                                .foregroundStyle(BurritoTheme.accent)
+                                .frame(width: 18)
+                            Text(document.title)
+                                .font(.spline(size: 12, weight: .medium, relativeTo: .callout))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(document.updatedAt, format: .dateTime.month(.abbreviated).day())
+                                .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(
+                            index == mentionSelectionIndex
+                                ? BurritoTheme.accentSoft
+                                : Color.clear,
+                            in: Rectangle()
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .background(BurritoTheme.raised, in: Rectangle())
+        .overlay {
+            Rectangle().stroke(BurritoTheme.softBorder)
         }
     }
 
@@ -5201,14 +5350,21 @@ private struct MemoryChatView: View {
                         .font(.spline(size: 9, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
-                Text(msg.text)
-                    .font(.spline(size: 13, weight: .regular))
-                    .foregroundStyle(.primary)
-                    .padding(14)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
-                    .overlay {
-                        Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                VStack(alignment: .leading, spacing: 7) {
+                    if let scopeTitle = msg.scopeTitle {
+                        Text("@\(scopeTitle)")
+                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                            .foregroundStyle(BurritoTheme.accent)
                     }
+                    Text(msg.text)
+                        .font(.spline(size: 13, weight: .regular))
+                        .foregroundStyle(.primary)
+                }
+                .padding(14)
+                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .overlay {
+                    Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                }
             }
         }
     }
@@ -5218,8 +5374,9 @@ private struct MemoryChatView: View {
             HStack {
                 NoteSourceLabel(
                     title: "Burrito answer",
-                    detail: "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
-                    systemImage: "sparkles"
+                    detail: msg.scopeTitle.map { "Scoped to \($0)" }
+                        ?? "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
+                    systemImage: "text.bubble"
                 )
                 Spacer()
                 Button {
@@ -5301,6 +5458,30 @@ private struct MemoryChatView: View {
         }
     }
 
+    private func submitComposer() {
+        if mentionQuery != nil {
+            if let highlightedMentionDocument {
+                selectMention(highlightedMentionDocument)
+            }
+            return
+        }
+        ask()
+    }
+
+    private func moveMentionSelection(by offset: Int) {
+        guard !matchingMentionDocuments.isEmpty else { return }
+        let count = matchingMentionDocuments.count
+        mentionSelectionIndex = (mentionSelectionIndex + offset + count) % count
+    }
+
+    private func selectMention(_ document: MemoryDocument) {
+        scopedDocument = document
+        question = MemoryMention.questionWithoutQuery(in: question)
+        mentionSelectionIndex = 0
+        questionFocused = true
+        BurritoHaptics.trigger(.alignment)
+    }
+
     private func submitPrompt(_ prompt: String) {
         question = prompt
         ask()
@@ -5309,18 +5490,23 @@ private struct MemoryChatView: View {
     private func ask() {
         guard canAsk else { return }
         let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedScope = scopedDocument
         question = ""
+        scopedDocument = nil
         BurritoHaptics.trigger(.alignment)
 
-        let userMsg = MemoryChatMessage(isUser: true, text: submittedQuestion)
+        let userMsg = MemoryChatMessage(
+            isUser: true,
+            text: submittedQuestion,
+            scopeTitle: submittedScope?.title
+        )
         withAnimation(.burritoSpring) {
             messages.append(userMsg)
         }
 
-        let evidence = LocalMemory.retrieve(
-            question: submittedQuestion,
-            from: documents
-        )
+        let evidence = submittedScope.map {
+            LocalMemory.retrieve(question: submittedQuestion, scopedTo: $0)
+        } ?? LocalMemory.retrieve(question: submittedQuestion, from: documents)
         isAnswering = true
 
         answerTask = Task {
@@ -5335,13 +5521,18 @@ private struct MemoryChatView: View {
             withAnimation(.burritoSpring) {
                 switch result {
                 case .success(let value):
-                    let botMsg = MemoryChatMessage(isUser: false, text: value)
+                    let botMsg = MemoryChatMessage(
+                        isUser: false,
+                        text: value,
+                        scopeTitle: submittedScope?.title
+                    )
                     messages.append(botMsg)
                 case .failure(let error):
                     let botMsg = MemoryChatMessage(
                         isUser: false,
                         text: "Could not retrieve answer.",
-                        errorMessage: error.recoveryMessage
+                        errorMessage: error.recoveryMessage,
+                        scopeTitle: submittedScope?.title
                     )
                     messages.append(botMsg)
                 }

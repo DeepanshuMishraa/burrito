@@ -86,6 +86,31 @@ struct MemoryDocument: Equatable, Sendable {
     let segments: [TranscriptSegment]
 }
 
+enum MemoryMention {
+    static func query(in text: String) -> String? {
+        guard let start = queryStart(in: text) else { return nil }
+        let valueStart = text.index(after: start)
+        return String(text[valueStart...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func questionWithoutQuery(in text: String) -> String {
+        guard let start = queryStart(in: text) else { return text }
+        return String(text[..<start])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func queryStart(in text: String) -> String.Index? {
+        guard let start = text.lastIndex(of: "@") else { return nil }
+        guard start == text.startIndex
+                || text[text.index(before: start)].isWhitespace
+        else {
+            return nil
+        }
+        return start
+    }
+}
+
 struct MemoryEvidence: Equatable, Identifiable, Sendable {
     let noteID: UUID
     let noteTitle: String
@@ -159,6 +184,27 @@ enum LocalMemory {
             }
             .prefix(limit)
             .map(\.evidence)
+    }
+
+    static func retrieve(
+        question: String,
+        scopedTo document: MemoryDocument,
+        limit: Int = 18
+    ) -> [MemoryEvidence] {
+        guard limit > 0 else { return [] }
+        let ranked = retrieve(question: question, from: [document], limit: limit)
+        guard ranked.isEmpty else { return ranked }
+        return document.segments
+            .sorted { $0.startTime < $1.startTime }
+            .prefix(limit)
+            .map { segment in
+                MemoryEvidence(
+                    noteID: document.noteID,
+                    noteTitle: document.title,
+                    noteUpdatedAt: document.updatedAt,
+                    segment: segment
+                )
+            }
     }
 
     private static func terms(in text: String) -> Set<String> {
