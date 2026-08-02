@@ -4988,7 +4988,7 @@ private struct MemoryChatView: View {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !documents.isEmpty
             && !isAnswering
-            && mentionQuery == nil
+            && highlightedMentionDocument == nil
     }
 
     private var mentionQuery: String? {
@@ -5459,10 +5459,8 @@ private struct MemoryChatView: View {
     }
 
     private func submitComposer() {
-        if mentionQuery != nil {
-            if let highlightedMentionDocument {
-                selectMention(highlightedMentionDocument)
-            }
+        if let highlightedMentionDocument {
+            selectMention(highlightedMentionDocument)
             return
         }
         ask()

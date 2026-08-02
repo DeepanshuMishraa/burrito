@@ -407,6 +407,7 @@ struct LocalMemoryTests {
     func parsesMeetingMentionQuery() {
         #expect(MemoryMention.query(in: "What changed in @weekly pro") == "weekly pro")
         #expect(MemoryMention.questionWithoutQuery(in: "What changed in @weekly pro") == "What changed in")
+        #expect(MemoryMention.query(in: "What does @State do?") == "State do?")
         #expect(MemoryMention.query(in: "email@example.com") == nil)
         #expect(MemoryMention.query(in: "No mention here") == nil)
     }
