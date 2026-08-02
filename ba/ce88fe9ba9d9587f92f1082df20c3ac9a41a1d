@@ -1,0 +1,24 @@
+Sources/ContentView.swift
+  s_f73b7a729f907a::t_bb40f024f7cf6b 2313-2315,2341-2343,2359-2362,2378-2380,2382-2397,2402-2415,4978,5018-5020,5170,5185-5187,5189,5326,5333-5334,5349
+  s_f73b7a729f907a::t_4577463d271fdb 5188
+Sources/BurritoTheme.swift
+  s_f73b7a729f907a::t_e4795852f02c7a 5,9-11
+Sources/Settings.swift
+  s_f73b7a729f907a::t_178cc9bca27aaa 244,276,284,310,341,497,531
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "bace88fe9ba9d9587f92f1082df20c3ac9a41a1d",
+  "prompts": {},
+  "sessions": {
+    "s_f73b7a729f907a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc184-1be9-7580-b9bb-bd75008d6294",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
