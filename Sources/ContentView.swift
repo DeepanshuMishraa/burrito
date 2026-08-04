@@ -4405,57 +4405,79 @@ private struct TemplatesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 44)
 
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Templates")
-                        .font(.spline(size: 34, weight: .regular))
-                        .tracking(-0.5)
-                    Text("Shape how Burrito turns a transcript into a finished note.")
-                        .font(.spline(size: 14, weight: .regular))
+            // Sleek Apple-Grade Header
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
+                        Text("Templates")
+                            .font(.spline(size: 26, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("\(templates.count) available")
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
+                            }
+                    }
+
+                    Text("Shape how Burrito turns meeting transcripts into structured notes.")
+                        .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
                         .foregroundStyle(.secondary)
                 }
+
                 Spacer()
-                Button("New template", systemImage: "plus") {
+
+                Button {
                     editingTemplateID = nil
                     showingEditor = true
+                } label: {
+                    Label("New Template", systemImage: "plus")
                 }
                 .buttonStyle(HomeToolbarButtonStyle())
             }
-            .padding(.horizontal, 38)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 36)
+            .padding(.bottom, 20)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
-
-            HStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(spacing: 3) {
-                        BurritoSectionLabel(title: "Library")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-
-                    ForEach(templates) { template in
-                            TemplateListRow(
-                            template: template,
-                            isSelected: selectedTemplateID == template.id,
-                                select: { selectedTemplateID = template.id }
-                        )
+            // Main Split Studio Container
+            HStack(spacing: 24) {
+                // Left Master List
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("TEMPLATES")
+                            .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                            .tracking(0.9)
+                            .foregroundStyle(.tertiary)
+                        Spacer()
                     }
-                }
-                    .padding(8)
-                }
-                .scrollIndicators(.hidden)
-                .frame(width: 230)
-                .background(BurritoTheme.sidebar.opacity(0.45))
+                    .padding(.horizontal, 10)
 
-                Rectangle()
-                    .fill(BurritoTheme.softBorder)
-                    .frame(width: 1)
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(templates) { template in
+                                TemplateListRow(
+                                    template: template,
+                                    isSelected: selectedTemplateID == template.id,
+                                    select: {
+                                        BurritoHaptics.trigger(.alignment)
+                                        withAnimation(.burritoSpring) {
+                                            selectedTemplateID = template.id
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .frame(width: 240)
 
+                // Right Detail Studio Card
                 if let template = selectedTemplate {
                     TemplatePromptDetail(
                         template: template,
@@ -4471,10 +4493,13 @@ private struct TemplatesView: View {
                     ContentUnavailableView(
                         "No templates",
                         systemImage: "doc.text",
-                        description: Text("Create a template to define a note format.")
+                        description: Text("Create a template to define a custom note format.")
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 32)
         }
         .background(BurritoTheme.canvas)
         .onAppear {
@@ -4533,35 +4558,56 @@ private struct TemplateListRow: View {
     let template: NoteTemplate
     let isSelected: Bool
     let select: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: select) {
-            HStack(spacing: 11) {
-                Image(systemName: template.symbol)
-                    .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
-                    .frame(width: 30, height: 30)
-                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
+                        .frame(width: 32, height: 32)
+                    Image(systemName: template.symbol)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(isSelected ? .white : BurritoTheme.accent)
+                }
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(.spline(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                     Text(template.isBuiltIn ? "Built in" : "Custom")
-                        .font(.spline(size: 10, weight: .regular))
+                        .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
                         .foregroundStyle(.tertiary)
                 }
+
                 Spacer()
+
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(BurritoTheme.accent)
-                        .frame(width: 3, height: 18)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(BurritoTheme.accent)
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 48)
+            .frame(height: 52)
+            .background(
+                isSelected
+                    ? BurritoTheme.raised
+                    : (isHovered ? BurritoTheme.controlFill.opacity(0.6) : Color.clear),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(isSelected ? BurritoTheme.accentSoft.opacity(0.62) : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .onHover { isHovered = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -4571,30 +4617,47 @@ private struct TemplatePromptDetail: View {
     let edit: () -> Void
     let delete: (() -> Void)?
 
+    @State private var activeTab = 0
+    @State private var copiedText = false
+
     private var systemPrompt: String {
         GenerationPrompt.finalInstructions(template: template.snapshot)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .center, spacing: 14) {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(BurritoTheme.accentSoft)
+                        .frame(width: 44, height: 44)
                     Image(systemName: template.symbol)
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(BurritoTheme.accent)
-                        .frame(width: 44, height: 44)
-                        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
 
-                    VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
                         Text(template.name)
-                            .font(.spline(size: 25, weight: .medium))
-                        Text(template.isBuiltIn ? "Built-in template" : "Custom template")
-                            .font(.spline(size: 11, weight: .regular))
-                            .foregroundStyle(.tertiary)
+                            .font(.spline(size: 20, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text(template.isBuiltIn ? "Built-in" : "Custom")
+                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
 
-                    Spacer()
+                    Text("Used by Burrito AI model during note synthesis")
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.tertiary)
+                }
 
+                Spacer()
+
+                HStack(spacing: 8) {
                     if let delete {
                         Button("Delete", systemImage: "trash", action: delete)
                             .buttonStyle(HomeToolbarButtonStyle(destructive: true))
@@ -4602,48 +4665,96 @@ private struct TemplatePromptDetail: View {
                     Button("Edit", systemImage: "pencil", action: edit)
                         .buttonStyle(HomeToolbarButtonStyle())
                 }
-
-                VStack(alignment: .leading, spacing: 9) {
-                    BurritoSectionLabel(title: "Template instructions")
-                    Text(template.instructions)
-                        .font(.spline(size: 13, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
-                        }
-                }
-
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack {
-                        BurritoSectionLabel(title: "Complete system prompt")
-                        Spacer()
-                        Text("Read only")
-                            .font(.spline(size: 11, weight: .regular))
-                            .foregroundStyle(.tertiary)
-                    }
-                    Text(systemPrompt)
-                        .font(.spline(size: 11.5, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
-                        }
-                }
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .padding(30)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            HStack {
+                HStack(spacing: 2) {
+                    Button {
+                        withAnimation(.burritoSpring) { activeTab = 0 }
+                    } label: {
+                        Label("Instructions", systemImage: "doc.text")
+                            .font(.spline(size: 12, weight: activeTab == 0 ? .semibold : .regular))
+                            .foregroundStyle(activeTab == 0 ? .primary : .secondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(activeTab == 0 ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        withAnimation(.burritoSpring) { activeTab = 1 }
+                    } label: {
+                        Label("Full System Prompt", systemImage: "terminal")
+                            .font(.spline(size: 12, weight: activeTab == 1 ? .semibold : .regular))
+                            .foregroundStyle(activeTab == 1 ? .primary : .secondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(activeTab == 1 ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(3)
+                .background(BurritoTheme.controlFill.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                }
+
+                Spacer()
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(activeTab == 0 ? template.instructions : systemPrompt, forType: .string)
+                    copiedText = true
+                    BurritoHaptics.trigger(.alignment)
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        copiedText = false
+                    }
+                } label: {
+                    Label(copiedText ? "Copied" : "Copy", systemImage: copiedText ? "checkmark" : "doc.on.doc")
+                        .font(.spline(size: 11, weight: .medium))
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if activeTab == 0 {
+                        Text(template.instructions)
+                            .font(.spline(size: 13, weight: .regular))
+                            .foregroundStyle(.primary.opacity(0.9))
+                            .lineSpacing(6)
+                            .textSelection(.enabled)
+                    } else {
+                        Text(systemPrompt)
+                            .font(.spline(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(5)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(BurritoTheme.softBorder)
+        }
     }
 }
 
@@ -5867,7 +5978,7 @@ private struct NoteDetailView: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 48)
-                .background(BurritoTheme.paper)
+                .background(BurritoTheme.canvas)
             }
 
             // Sub-Header Metadata Strip (Apple-Grade Clean Inline Typography)
