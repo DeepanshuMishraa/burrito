@@ -1,0 +1,41 @@
+burrito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  s_ed66233db092f9::t_2ed9bf6caddaf8 2,4-12,31-48,65-172
+Sources/FoundationNoteGenerator.swift
+  s_ed66233db092f9::t_98a44768fcb231 365-370
+  s_ed66233db092f9::t_ffce599e30185b 624
+  s_ed66233db092f9::t_638282b4d8228e 362-364,490,499,502-505,511,514-519,522,606-611,613,615,619-622,634-650,705-719
+Sources/ContentView.swift
+  s_ed66233db092f9::t_927809c02f1374 71,373-376,1737,1758,1763-1819,1897-1979
+Sources/LocalLanguageModels.swift
+  s_ed66233db092f9::t_9726ba07ba72e0 1-2,4-6,8-57,61-181,187-220,223-364,366-374,376-393,395-435,442,444-474
+  s_ed66233db092f9::t_ebbc69c057644c 7,365,375,394
+  s_ed66233db092f9::t_86ec9d0211e273 58-60,182-186,221-222
+  s_ed66233db092f9::t_426ebfd2583b79 436-441,443
+  s_ed66233db092f9::t_8ac76b87498367 3
+project.yml
+  s_ed66233db092f9::t_c1bdfab17bf743 24-26,42-45
+Sources/Domain.swift
+  s_ed66233db092f9::t_10a3be2eb1ada8 693-803
+burrito.xcodeproj/project.pbxproj
+  s_ed66233db092f9::t_273dadd6e04e23 19,31,105-106,221-222,279,625-632,652-656,677-681
+  s_ed66233db092f9::t_7e8c59b6f42a77 35,74,166,322
+Tests/DomainTests.swift
+  s_ed66233db092f9::t_8e24064342bc57 696-729,784-786
+  s_ed66233db092f9::t_750063fec98935 2,730-783
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "0aa1d2e9fe7118f235205cd3aa5487e9ea020f4c",
+  "prompts": {},
+  "sessions": {
+    "s_ed66233db092f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fcdea-3a9f-7ad3-9cc2-e90fbf0209b0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
