@@ -173,7 +173,7 @@ struct BurritoPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -222,7 +222,7 @@ struct BurritoLanguagePicker: View {
             .frame(height: 44)
             .background(
                 embedded ? Color.clear : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .contentShape(Rectangle())
         }
@@ -242,7 +242,7 @@ struct BurritoLanguagePicker: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -288,7 +288,7 @@ struct BurritoLanguagePicker: View {
                 selection == language.identifier
                     ? BurritoTheme.controlFill
                     : Color.clear,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .contentShape(Rectangle())
         }

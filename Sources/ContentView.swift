@@ -431,9 +431,9 @@ struct ContentView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .padding(.horizontal, 12)
@@ -2327,10 +2327,10 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                 configuration.isPressed
                     ? BurritoTheme.controlFill.opacity(1.35)
                     : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
@@ -2350,7 +2350,7 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .frame(height: 38)
-            .background(Color.red.opacity(0.78), in: Rectangle())
+            .background(Color.red.opacity(0.78), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
             .burritoPressFeedback(
                 isPressed: configuration.isPressed,
@@ -2368,8 +2368,8 @@ private struct BurritoIconButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.secondary)
             .frame(width: 34, height: 34)
-            .background(BurritoTheme.controlFill, in: Rectangle())
-            .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
             .burritoPressFeedback(
                 isPressed: configuration.isPressed,
@@ -2627,7 +2627,7 @@ private struct BurritoPopoverRowLabel: View {
         .contentShape(Rectangle())
         .background(
             isHovered ? BurritoTheme.controlFill : Color.clear,
-            in: Rectangle()
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
     }
 }
@@ -2874,14 +2874,14 @@ private struct SidebarNavigationButton: View {
         } label: {
             HStack(spacing: 8) {
                 if isSelected {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 3, height: 16)
                         .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
                 }
                 Group {
                     if let markerColor {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(markerColor)
                             .frame(width: 8, height: 8)
                     } else {
@@ -2905,7 +2905,7 @@ private struct SidebarNavigationButton: View {
                         .padding(.vertical, 1)
                         .background(
                             isSelected ? BurritoTheme.accentSoft : (isHovered ? BurritoTheme.controlFill : Color.clear),
-                            in: Rectangle()
+                            in: RoundedRectangle(cornerRadius: 4, style: .continuous)
                         )
                 }
             }
@@ -2919,7 +2919,7 @@ private struct SidebarNavigationButton: View {
         .onHover { isHovered = $0 }
         .background(
             isSelected ? BurritoTheme.controlFill : (isHovered ? BurritoTheme.controlFill.opacity(0.45) : Color.clear),
-            in: Rectangle()
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
         .animation(
@@ -3032,9 +3032,9 @@ private struct CalendarCard: View {
                 }
             }
         }
-        .background(BurritoTheme.paper.opacity(0.6), in: Rectangle())
+        .background(BurritoTheme.paper.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
         }
     }
 }
@@ -3205,7 +3205,7 @@ private struct FolderTag: View {
         HStack(spacing: 4) {
             Rectangle()
                 .fill(color)
-                .frame(width: 5, height: 5)
+                .frame(width: 4, height: 4)
             Text(folder.name)
                 .lineLimit(1)
         }
@@ -3213,7 +3213,7 @@ private struct FolderTag: View {
         .foregroundStyle(color)
         .padding(.horizontal, 6)
         .frame(height: 18)
-        .background(color.opacity(0.13), in: Rectangle())
+        .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .accessibilityLabel("Folder: \(folder.name)")
     }
 }
@@ -3249,7 +3249,7 @@ private struct TimelineNoteItem: View {
                     .frame(width: 30, height: 30)
                     .background(
                         showingActions ? BurritoTheme.controlFill : Color.clear,
-                        in: Rectangle()
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                     )
             }
             .buttonStyle(.plain)
@@ -3267,7 +3267,7 @@ private struct TimelineNoteItem: View {
         .padding(.trailing, 4)
         .background(
             isHovered || showingActions ? BurritoTheme.paper.opacity(0.5) : Color.clear,
-            in: Rectangle()
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .contentShape(Rectangle())
         .onHover { hover in
@@ -5632,7 +5632,7 @@ private struct HeaderSegmentTabButton: View {
                 .frame(width: 34, height: 28)
                 .background(
                     isSelected ? BurritoTheme.accentSoft : Color.clear,
-                    in: Rectangle()
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                 )
         }
         .buttonStyle(.plain)
@@ -5668,9 +5668,9 @@ private struct MeetingContextPanel: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
-        .background(BurritoTheme.controlFill, in: Rectangle())
+        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 }
@@ -5742,9 +5742,9 @@ private struct NoteDetailView: View {
                         }
                     }
                     .padding(3)
-                    .background(BurritoTheme.raised, in: Rectangle())
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {
-                        Rectangle().stroke(BurritoTheme.softBorder)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                     }
 
                     // Meeting Title aligned directly on the left after tabs
@@ -5934,9 +5934,9 @@ private struct NoteDetailView: View {
                                 .foregroundStyle(BurritoTheme.accent)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
-                                .background(BurritoTheme.accentSoft, in: Rectangle())
+                                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                                 .overlay {
-                                    Rectangle().stroke(BurritoTheme.accent.opacity(0.3))
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(BurritoTheme.accent.opacity(0.3))
                                 }
                             }
                             .buttonStyle(.plain)
