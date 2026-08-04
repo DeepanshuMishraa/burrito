@@ -1185,7 +1185,7 @@ private struct CommandPaletteView: View {
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 7)
                         .frame(height: 22)
-                        .background(BurritoTheme.controlFill, in: Rectangle())
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 58)
@@ -1248,9 +1248,9 @@ private struct CommandPaletteView: View {
                 .frame(maxHeight: 390)
             }
             .frame(width: 560)
-            .background(BurritoTheme.paper, in: Rectangle())
+            .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
             .shadow(color: .black.opacity(0.28), radius: 28, y: 16)
@@ -1286,7 +1286,7 @@ private struct CommandPaletteView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 Text(command == .toggleSidebar
                     ? (isSidebarVisible ? "Hide sidebar" : "Show sidebar")
@@ -1326,7 +1326,7 @@ private struct CommandPaletteView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(note.title)
@@ -1359,7 +1359,7 @@ private struct CommandPaletteView: View {
     }
 
     private var selectionHighlight: some View {
-        Rectangle()
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(BurritoTheme.accentSoft)
             .matchedGeometryEffect(id: "command-palette-selection", in: selectionAnimation)
     }
@@ -1453,7 +1453,7 @@ private struct SidebarAccountCard: View {
                                     appearance == option
                                         ? BurritoTheme.accentSoft
                                         : BurritoTheme.controlFill,
-                                    in: Rectangle()
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                                 .contentShape(Rectangle())
                         }
@@ -1477,9 +1477,9 @@ private struct SidebarAccountCard: View {
                     Image(nsImage: profile.image ?? NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 32, height: 32)
-                        .clipShape(Rectangle())
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .overlay {
-                            Rectangle()
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .stroke(BurritoTheme.softBorder)
                         }
 
@@ -1512,9 +1512,9 @@ private struct SidebarAccountCard: View {
                 AccountPopover(profile: profile, updater: updater)
             }
         }
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1530,7 +1530,7 @@ private struct AccountPopover: View {
                 Image(nsImage: profile.image ?? NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 34, height: 34)
-                    .clipShape(Rectangle())
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
@@ -1633,9 +1633,9 @@ private struct UpdateAvailableCard: View {
             .buttonStyle(UpdateActionButtonStyle())
         }
         .padding(11)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1656,10 +1656,10 @@ private struct UpdateActionButtonStyle: ButtonStyle {
                 configuration.isPressed
                     ? BurritoTheme.accentSoft
                     : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
             .contentShape(Rectangle())
@@ -1697,9 +1697,9 @@ private struct NotificationPermissionCard: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
                     .foregroundStyle(.primary)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .overlay {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .stroke(BurritoTheme.softBorder)
                     }
                     .contentShape(Rectangle())
@@ -1707,9 +1707,9 @@ private struct NotificationPermissionCard: View {
             .buttonStyle(.plain)
         }
         .padding(11)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1776,9 +1776,9 @@ private struct ModelsView: View {
                         }
                         .padding(.horizontal, 14)
                         .frame(height: 54)
-                        .background(BurritoTheme.raised, in: Rectangle())
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay {
-                            Rectangle()
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(BurritoTheme.softBorder.opacity(0.7))
                         }
                     }
@@ -1809,9 +1809,9 @@ private struct ModelsView: View {
                                 }
                             }
                         }
-                        .background(BurritoTheme.raised, in: Rectangle())
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay {
-                            Rectangle()
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .stroke(BurritoTheme.softBorder.opacity(0.7))
                         }
                     }
@@ -1907,8 +1907,8 @@ private struct ModelCatalogRow: View {
                     .foregroundStyle(.secondary)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
-                        Rectangle().fill(BurritoTheme.controlFill)
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous).fill(BurritoTheme.controlFill)
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(BurritoTheme.accent)
                             .frame(width: proxy.size.width * progress)
                     }
@@ -2030,7 +2030,7 @@ private struct ScooterGenerationLoader: View {
                             id: \.element
                         ) { index, item in
                             HStack(spacing: 6) {
-                                Rectangle()
+                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                                     .fill(stageColor(at: index))
                                     .frame(width: 5, height: 5)
                                 Text(shortLabel(for: item))
@@ -2127,9 +2127,9 @@ private struct PermissionGateView: View {
                     Divider().opacity(0.45)
                     CalendarPermissionRow(calendarAccess: calendarAccess)
                 }
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
 
@@ -2149,9 +2149,9 @@ private struct PermissionGateView: View {
             }
             .padding(50)
             .frame(width: 820)
-            .background(BurritoTheme.paper, in: Rectangle())
+            .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         }
@@ -2169,7 +2169,7 @@ private struct CalendarPermissionRow: View {
                     calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
                 )
                 .frame(width: 36, height: 36)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Show upcoming meetings")
@@ -2194,7 +2194,7 @@ private struct CalendarPermissionRow: View {
         case .authorized:
             HStack(spacing: 7) {
                 ZStack {
-                    Rectangle().fill(BurritoTheme.accent)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
@@ -2251,7 +2251,7 @@ private struct PermissionRow: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(state == .granted ? BurritoTheme.accent : .secondary)
                 .frame(width: 36, height: 36)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
@@ -2263,7 +2263,7 @@ private struct PermissionRow: View {
             if state == .granted {
                 HStack(spacing: 7) {
                     ZStack {
-                        Rectangle().fill(BurritoTheme.accent)
+                        RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
@@ -2298,11 +2298,11 @@ private struct BurritoActionButtonStyle: ButtonStyle {
             .frame(height: 38)
             .background(
                 prominent ? Color.primary : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
                 if !prominent {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
@@ -2448,7 +2448,7 @@ private struct SidebarHeaderAddButton: View {
                 .frame(width: 22, height: 22)
                 .background(
                     isHovered ? BurritoTheme.controlFill : Color.clear,
-                    in: Rectangle()
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                 )
         }
         .buttonStyle(.plain)
@@ -2471,9 +2471,9 @@ private struct BurritoInlineButton: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -2524,7 +2524,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 34, height: 34)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(note.title)
@@ -2547,7 +2547,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
 
-            Rectangle()
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(BurritoTheme.softBorder)
                 .frame(height: 1)
 
@@ -2568,7 +2568,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
         .frame(width: 244)
         .background(BurritoTheme.raised)
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.5)
         }
         .presentationBackground(BurritoTheme.raised)
@@ -2634,7 +2634,7 @@ private struct BurritoPopoverRowLabel: View {
 
 private struct BurritoPopoverDivider: View {
     var body: some View {
-        Rectangle()
+        RoundedRectangle(cornerRadius: 0, style: .continuous)
             .fill(BurritoTheme.softBorder)
             .frame(height: 1)
             .padding(.horizontal, 8)
@@ -2739,9 +2739,9 @@ private struct BurritoModalBackdrop<Content: View>: View {
             Color.black.opacity(0.36)
                 .ignoresSafeArea()
             content()
-                .background(BurritoTheme.paper, in: Rectangle())
+                .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -2765,9 +2765,9 @@ private struct NewFolderDialog: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 13)
                 .frame(height: 42)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(create)
@@ -3004,7 +3004,7 @@ private struct CalendarCard: View {
                             index, event in
                             UpcomingEventRow(event: event, startRecording: startRecording)
                             if index < calendarAccess.upcomingEvents.count - 1 {
-                                Rectangle()
+                                RoundedRectangle(cornerRadius: 0, style: .continuous)
                                     .fill(BurritoTheme.softBorder.opacity(0.5))
                                     .frame(height: 1)
                             }
@@ -3087,7 +3087,7 @@ private struct UpcomingEventRow: View {
             }
             .frame(width: 76, alignment: .leading)
 
-            Rectangle()
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(BurritoTheme.accent)
                 .frame(width: 3, height: 26)
 
@@ -3203,7 +3203,7 @@ private struct FolderTag: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(color)
                 .frame(width: 4, height: 4)
             Text(folder.name)
@@ -3388,7 +3388,7 @@ private struct CaptureCapsule: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 ZStack {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 30, height: 30)
                     Image(systemName: "waveform")
@@ -3411,9 +3411,9 @@ private struct CaptureCapsule: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
         .accessibilityHint("Opens recording options")
@@ -3448,7 +3448,7 @@ private struct WelcomeWorkspaceView: View {
             BurritoTheme.paper.ignoresSafeArea()
             VStack(spacing: 22) {
                 ZStack {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(BurritoTheme.accentSoft)
                         .frame(width: 86, height: 86)
                     Image(systemName: "waveform.and.mic")
@@ -3573,7 +3573,7 @@ private struct LiveAudioWaveform: View {
             let phase = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: 4) {
                 ForEach(0..<barCount, id: \.self) { index in
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.25, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 2.5, height: 62)
                         .scaleEffect(
@@ -3633,17 +3633,17 @@ private struct RecordingControlButton: View {
             HStack(spacing: 8) {
                 ZStack {
                     if isRecording {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(BurritoTheme.accent.opacity(0.16))
                             .scaleEffect(1 + (audioEnergy * 0.1))
                             .opacity(0.6 + (audioEnergy * 0.4))
                     }
 
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(isRecording ? BurritoTheme.accent : BurritoTheme.accentSoft)
 
                     if isRecording {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(.white)
                             .frame(width: 8, height: 8)
                     } else {
@@ -3670,14 +3670,14 @@ private struct RecordingControlButton: View {
             }
             .padding(.horizontal, 6)
             .frame(width: 132, height: 34)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(BurritoTheme.accentSoft)
                     .opacity(isHovered ? 0.34 : 0)
             }
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.85), lineWidth: 0.75)
             }
             .contentShape(Rectangle())
@@ -3718,20 +3718,18 @@ private struct ProcessingRail: View {
                 .tint(BurritoTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
                 Text(detail)
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("Private on this Mac")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 20)
-        .frame(height: 62)
-        .background(BurritoTheme.raised, in: Rectangle())
-        .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
+        .padding(.horizontal, 16)
+        .frame(height: 48)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder) }
         .accessibilityElement(children: .combine)
     }
 
@@ -3856,9 +3854,9 @@ private struct RecordingSetupView: View {
                     }
                 }
                 .padding(12)
-                .background(BurritoTheme.controlFill.opacity(0.6), in: Rectangle())
+                .background(BurritoTheme.controlFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder.opacity(0.7))
                 }
             }
 
@@ -3886,9 +3884,9 @@ private struct RecordingSetupView: View {
                 )
             }
             .zIndex(2)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
 
@@ -5047,9 +5045,9 @@ private struct MemoryChatView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
                                 .frame(height: 28)
-                                .background(BurritoTheme.controlFill, in: Rectangle())
+                                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 .overlay {
-                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
                                 }
                         }
                         .buttonStyle(.plain)
@@ -5058,6 +5056,9 @@ private struct MemoryChatView: View {
                     Label("On device", systemImage: "lock.fill")
                         .font(.spline(size: 11, weight: .semibold))
                         .foregroundStyle(BurritoTheme.sage)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(BurritoTheme.sage.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
             }
             .padding(.horizontal, 38)
@@ -5118,9 +5119,9 @@ private struct MemoryChatView: View {
                                                 }
                                                 .padding(12)
                                                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                                                .background(BurritoTheme.raised, in: Rectangle())
+                                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                                 .overlay {
-                                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                                                 }
                                             }
                                             .buttonStyle(.plain)
@@ -5187,9 +5188,9 @@ private struct MemoryChatView: View {
                             .foregroundStyle(BurritoTheme.accent)
                             .padding(.horizontal, 8)
                             .frame(height: 28)
-                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             .overlay {
-                                Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.28))
                             }
                         }
                         .buttonStyle(.plain)
@@ -5232,7 +5233,7 @@ private struct MemoryChatView: View {
                                 .frame(width: 28, height: 28)
                                 .background(
                                     canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
-                                    in: Rectangle()
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -5243,9 +5244,9 @@ private struct MemoryChatView: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(minHeight: 48)
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
             }
             .frame(maxWidth: 760)
@@ -5314,16 +5315,16 @@ private struct MemoryChatView: View {
                             index == mentionSelectionIndex
                                 ? BurritoTheme.accentSoft
                                 : Color.clear,
-                            in: Rectangle()
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 
@@ -5350,9 +5351,9 @@ private struct MemoryChatView: View {
                         .foregroundStyle(.primary)
                 }
                 .padding(14)
-                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.accent.opacity(0.35))
                 }
             }
         }
@@ -5391,7 +5392,7 @@ private struct MemoryChatView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -5408,9 +5409,9 @@ private struct MemoryChatView: View {
             }
         }
         .padding(18)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 
@@ -5429,9 +5430,9 @@ private struct MemoryChatView: View {
             Spacer()
         }
         .padding(14)
-        .background(BurritoTheme.raised.opacity(0.7), in: Rectangle())
+        .background(BurritoTheme.raised.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 

@@ -100,10 +100,10 @@ struct BurritoSettingsView: View {
                                 .frame(height: 36)
                                 .background(
                                     selected == tab ? BurritoTheme.controlFill : Color.clear,
-                                    in: Rectangle()
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                                 .overlay {
-                                    Rectangle().stroke(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(
                                         selected == tab
                                             ? BurritoTheme.softBorder
                                             : Color.clear
@@ -235,7 +235,7 @@ private struct OwnershipSettingsCard: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 36, height: 36)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
@@ -285,9 +285,9 @@ private struct OwnershipSettingsCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.top, 18)
     }
@@ -302,7 +302,7 @@ private struct LanguageCoverageCard: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
                 .frame(width: 34, height: 34)
-                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
                     .font(.spline(size: 13, weight: .semibold))
@@ -313,9 +313,9 @@ private struct LanguageCoverageCard: View {
             Spacer()
         }
         .padding(14)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.bottom, 14)
     }
@@ -332,7 +332,7 @@ private struct CalendarConnectionSettingsRow: View {
                     calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
                 )
                 .frame(width: 38, height: 38)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
@@ -346,9 +346,9 @@ private struct CalendarConnectionSettingsRow: View {
             action
         }
         .padding(16)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.bottom, 16)
         .onAppear {
@@ -404,9 +404,9 @@ private struct SettingsActionButtonStyle: ButtonStyle {
             .font(.spline(size: 12, weight: .semibold))
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
-                Rectangle().stroke(BurritoTheme.softBorder)
+                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed ? 0.965 : 1)
@@ -451,7 +451,7 @@ private struct SettingsChoice: View {
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                 Text(title)
                 Spacer()
-                Rectangle()
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 20, height: 20)
                     .overlay {
@@ -464,9 +464,9 @@ private struct SettingsChoice: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 48)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
             }
         }
@@ -497,11 +497,11 @@ private struct SettingsToggleRow: View {
                     Text(detail).font(.spline(size: 11, weight: .regular, relativeTo: .caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Rectangle()
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 42, height: 24)
                     .overlay(alignment: isOn ? .trailing : .leading) {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(.white)
                             .frame(width: 18, height: 18)
                             .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
@@ -509,9 +509,9 @@ private struct SettingsToggleRow: View {
                     }
             }
             .padding(16)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                Rectangle().stroke(BurritoTheme.softBorder)
+                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
             }
         }
         .buttonStyle(.plain)
