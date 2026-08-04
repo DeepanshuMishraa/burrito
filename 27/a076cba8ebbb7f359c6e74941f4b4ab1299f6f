@@ -1,0 +1,21 @@
+docs/research/local-language-models.md
+  s_ed66233db092f9::t_efcfc9f3602b69 11-13,97
+  s_ed66233db092f9::t_49568865f26b7b 7,15,35,86
+  s_ed66233db092f9::t_52cfc4a0a98e87 1-6,8-10,14,16-34,36-85,87-96,98-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "27a076cba8ebbb7f359c6e74941f4b4ab1299f6f",
+  "prompts": {},
+  "sessions": {
+    "s_ed66233db092f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fcdea-3a9f-7ad3-9cc2-e90fbf0209b0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
