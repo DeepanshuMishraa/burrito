@@ -4410,10 +4410,10 @@ private struct TemplatesView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Templates")
-                        .font(.burritoDisplay(size: 34, weight: .regular))
+                        .font(.spline(size: 34, weight: .regular))
                         .tracking(-0.5)
                     Text("Shape how Burrito turns a transcript into a finished note.")
-                        .font(.system(size: 14))
+                        .font(.spline(size: 14, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -4540,18 +4540,18 @@ private struct TemplateListRow: View {
                 Image(systemName: template.symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                     .frame(width: 30, height: 30)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: .medium))
                         .lineLimit(1)
                     Text(template.isBuiltIn ? "Built in" : "Custom")
-                        .font(.caption)
+                        .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
                 if isSelected {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 3, height: 18)
                 }
@@ -4561,7 +4561,7 @@ private struct TemplateListRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(isSelected ? BurritoTheme.accentSoft.opacity(0.62) : Color.clear)
+        .background(isSelected ? BurritoTheme.accentSoft.opacity(0.62) : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -4583,13 +4583,13 @@ private struct TemplatePromptDetail: View {
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(BurritoTheme.accent)
                         .frame(width: 44, height: 44)
-                        .background(BurritoTheme.accentSoft, in: Rectangle())
+                        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(template.name)
-                            .font(.burritoDisplay(size: 25, weight: .medium))
+                            .font(.spline(size: 25, weight: .medium))
                         Text(template.isBuiltIn ? "Built-in template" : "Custom template")
-                            .font(.caption)
+                            .font(.spline(size: 11, weight: .regular))
                             .foregroundStyle(.tertiary)
                     }
 
@@ -4606,15 +4606,15 @@ private struct TemplatePromptDetail: View {
                 VStack(alignment: .leading, spacing: 9) {
                     BurritoSectionLabel(title: "Template instructions")
                     Text(template.instructions)
-                        .font(.system(size: 13))
+                        .font(.spline(size: 13, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
                         .textSelection(.enabled)
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: Rectangle())
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay {
-                            Rectangle().stroke(BurritoTheme.softBorder)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                         }
                 }
 
@@ -4623,19 +4623,19 @@ private struct TemplatePromptDetail: View {
                         BurritoSectionLabel(title: "Complete system prompt")
                         Spacer()
                         Text("Read only")
-                            .font(.caption)
+                            .font(.spline(size: 11, weight: .regular))
                             .foregroundStyle(.tertiary)
                     }
                     Text(systemPrompt)
-                        .font(.system(size: 11.5, design: .monospaced))
+                        .font(.spline(size: 11.5, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
                         .textSelection(.enabled)
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: Rectangle())
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay {
-                            Rectangle().stroke(BurritoTheme.softBorder)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                         }
                 }
             }
@@ -4688,18 +4688,18 @@ private struct MarkdownNoteContent: View {
                 .padding(.top, level == 1 ? 6 : 10)
         case .paragraph(let text):
             inlineText(text)
-                .font(.system(size: 15))
+                .font(.spline(size: 14, weight: .regular))
                 .foregroundStyle(.primary.opacity(0.88))
                 .lineSpacing(5)
         case .unorderedList(let items):
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 11) {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(BurritoTheme.accent)
                             .frame(width: 5, height: 5)
                         inlineText(item)
-                            .font(.system(size: 15))
+                            .font(.spline(size: 14, weight: .regular))
                             .lineSpacing(4)
                     }
                 }
@@ -4710,41 +4710,41 @@ private struct MarkdownNoteContent: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 11) {
                         Text("\(index + 1)")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.spline(size: 11, weight: .bold))
                             .foregroundStyle(BurritoTheme.accent)
                             .frame(width: 21, height: 21)
-                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                         inlineText(item)
-                            .font(.system(size: 15))
+                            .font(.spline(size: 14, weight: .regular))
                             .lineSpacing(4)
                     }
                 }
             }
         case .quote(let text):
             HStack(spacing: 14) {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(BurritoTheme.accent)
                     .frame(width: 3)
                 inlineText(text)
-                    .font(.burritoDisplay(size: 15).italic())
+                    .font(.spline(size: 14, weight: .regular).italic())
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)
                     .padding(.vertical, 8)
             }
             .padding(.horizontal, 14)
-            .background(BurritoTheme.accentSoft.opacity(0.55), in: Rectangle())
+            .background(BurritoTheme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         case .code(let text):
             ScrollView(.horizontal) {
                 Text(text)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.spline(size: 12.5, weight: .regular))
                     .foregroundStyle(.primary.opacity(0.82))
                     .textSelection(.enabled)
                     .padding(16)
             }
             .scrollIndicators(.hidden)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         case .divider:
@@ -5586,14 +5586,14 @@ private struct NoteEditingView: View {
                 isHuman: true
             )
             TextEditor(text: $userNotes)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 110, maxHeight: 190)
                 .padding(12)
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.accent.opacity(0.28))
                 }
 
             NoteSourceLabel(
@@ -5602,14 +5602,14 @@ private struct NoteEditingView: View {
                 systemImage: "sparkles"
             )
             TextEditor(text: $generatedNotes)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: .infinity)
                 .padding(12)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
         }
         .frame(maxWidth: 820, maxHeight: .infinity)
