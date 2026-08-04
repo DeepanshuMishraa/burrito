@@ -21,6 +21,9 @@ packages:
     url: https://github.com/zaidmukaddam/swift-ai-sdk.git
     # 0.2.0 plus the Xcode 26 compatibility fix from upstream PR #1.
     revision: 9a8ea7e5f718af957f222c12ba09caff79caf3d0
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm.git
+    exactVersion: 2.31.3
 targets:
   burrito:
     type: application
@@ -36,6 +39,10 @@ targets:
       - package: Lottie
       - package: SwiftAISDK
         product: AI
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: MLXSwiftLM
+        product: MLXLMCommon
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

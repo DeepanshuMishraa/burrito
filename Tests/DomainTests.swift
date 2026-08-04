@@ -1,4 +1,5 @@
 import AITesting
+import AI
 import AVFoundation
 import EventKit
 import Foundation
@@ -689,6 +690,97 @@ struct FoundationModelAdapterTests {
             "Use only supplied facts.",
             "Summarize this transcript.",
         ])
+    }
+}
+
+@Suite("Local language models")
+struct LocalLanguageModelTests {
+    @Test("Catalog exposes the three pinned Qwen tiers")
+    func catalogMetadata() {
+        #expect(LocalLanguageModelVariant.allCases == [.small, .medium, .large])
+        #expect(LocalLanguageModelVariant.small.parameterCount == "2B parameters")
+        #expect(LocalLanguageModelVariant.medium.downloadSize == "≈ 3.1 GB")
+        #expect(LocalLanguageModelVariant.large.downloadSizeBytes == 5_980_000_000)
+        #expect(
+            LocalLanguageModelVariant.small.revision
+                == "674aaa7240b91e8012fcad5d791b7dfe5ba90207"
+        )
+    }
+
+    @Test("Apple remains the safe default until a downloaded model is selected")
+    func resolvesPersistedSelection() {
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: nil,
+                isInstalled: { _ in false }
+            ) == .apple
+        )
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: GenerationModelSelection.local(.medium).rawValue,
+                isInstalled: { $0 == .medium }
+            ) == .local(.medium)
+        )
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: GenerationModelSelection.local(.large).rawValue,
+                isInstalled: { _ in false }
+            ) == .apple
+        )
+    }
+
+    @Test("Swift AI SDK tools map into Qwen chat history")
+    func mapsToolCalling() throws {
+        let weather = AI.Tool(
+            name: "get_weather",
+            description: "Get weather for a city.",
+            parameters: [
+                "type": "object",
+                "properties": ["city": ["type": "string"]],
+                "required": ["city"],
+            ]
+        )
+        let request = LanguageModelRequest(
+            messages: [
+                .user("What is the weather in Delhi?"),
+                AI.Message(
+                    role: .assistant,
+                    content: [
+                        .toolCall(
+                            AI.ToolCall(
+                                id: "call-1",
+                                name: "get_weather",
+                                arguments: ["city": "Delhi"]
+                            )
+                        )
+                    ]
+                ),
+                AI.Message(
+                    role: .tool,
+                    content: [
+                        .toolResult(
+                            AI.ToolResult(
+                                toolCallID: "call-1",
+                                name: "get_weather",
+                                output: ["temperature": 31]
+                            )
+                        )
+                    ]
+                ),
+            ],
+            tools: [weather]
+        )
+
+        let input = try MLXRequestMapper.input(from: request)
+        #expect(input.tools?.count == 1)
+        guard case .messages(let messages) = input.prompt else {
+            Issue.record("Expected Qwen model-specific messages")
+            return
+        }
+        #expect(messages.count == 3)
+        #expect(messages[1]["role"] as? String == "assistant")
+        #expect(messages[1]["tool_calls"] != nil)
+        #expect(messages[2]["role"] as? String == "tool")
     }
 }
 

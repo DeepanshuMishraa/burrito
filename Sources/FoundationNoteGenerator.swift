@@ -351,9 +351,6 @@ enum MemoryAnswer {
 actor FoundationMemoryAnswerer {
     static let shared = FoundationMemoryAnswerer()
 
-    private let model = SystemLanguageModel.default
-    private let adapter = FoundationModelAdapter()
-
     func answer(
         question: String,
         evidence: [MemoryEvidence],
@@ -362,17 +359,15 @@ actor FoundationMemoryAnswerer {
         guard !evidence.isEmpty else {
             return .success("I couldn’t find transcript evidence for that question.")
         }
-        switch model.availability {
-        case .available:
-            guard model.supportsLocale(Locale(identifier: languageIdentifier)) else {
-                return .failure(
-                    .appleIntelligenceUnavailable(
-                        reason: "The selected language is not supported by the on-device model."
-                    )
-                )
-            }
-        case .unavailable(let reason):
-            return .failure(.appleIntelligenceUnavailable(reason: String(describing: reason)))
+        let resolved = await SelectedLanguageModelAdapter.shared.resolve(
+            languageIdentifier: languageIdentifier
+        )
+        let adapter: FoundationModelAdapter
+        switch resolved {
+        case .success(let resolvedAdapter):
+            adapter = resolvedAdapter
+        case .failure(let error):
+            return .failure(error)
         }
 
         do {
@@ -492,6 +487,7 @@ enum FoundationModelFailure {
 actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
     private let systemModel: SystemLanguageModel
     private let model: any AI.LanguageModel
+    private let tokenMeasurer: (any PromptTokenMeasuring)?
 
     init() {
         let systemModel = SystemLanguageModel(
@@ -500,19 +496,30 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         )
         self.systemModel = systemModel
         model = FoundationModelsModel(systemModel: systemModel)
+        tokenMeasurer = nil
     }
 
-    init(model: any AI.LanguageModel) {
+    init(
+        model: any AI.LanguageModel,
+        tokenMeasurer: (any PromptTokenMeasuring)? = nil
+    ) {
         systemModel = SystemLanguageModel(
             useCase: .general,
             guardrails: .permissiveContentTransformations
         )
         self.model = model
+        self.tokenMeasurer = tokenMeasurer
     }
 
-    var contextSize: Int { systemModel.contextSize }
+    var contextSize: Int {
+        get async {
+            if let tokenMeasurer { return await tokenMeasurer.contextSize }
+            return systemModel.contextSize
+        }
+    }
 
     func tokenCount(_ text: String) async throws -> Int {
+        if let tokenMeasurer { return try await tokenMeasurer.tokenCount(text) }
         if #available(macOS 26.4, *) {
             return try await systemModel.tokenCount(for: text)
         }
@@ -595,33 +602,26 @@ struct FoundationNoteGenerator: NoteGenerating {
         static let generatedNoteSchema = 256
     }
 
-    private let model = SystemLanguageModel.default
     private let adapter: FoundationModelAdapter
+    private let usesAutomaticSelection: Bool
 
-    init(adapter: FoundationModelAdapter = FoundationModelAdapter()) {
+    init() {
+        adapter = FoundationModelAdapter()
+        usesAutomaticSelection = true
+    }
+
+    init(adapter: FoundationModelAdapter) {
         self.adapter = adapter
+        usesAutomaticSelection = false
     }
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
-        switch model.availability {
-        case .available:
-            guard model.supportsLocale(Locale(identifier: languageIdentifier)) else {
-                return .failure(
-                    .appleIntelligenceUnavailable(
-                        reason: "The selected language is not supported by the on-device model."
-                    )
-                )
-            }
-            return .success(())
-        case .unavailable(let reason):
-            let message = switch reason {
-            case .deviceNotEligible: "this Mac is not eligible"
-            case .appleIntelligenceNotEnabled: "Apple Intelligence is disabled"
-            case .modelNotReady: "the on-device model is not ready"
-            @unknown default: "the on-device model reported an unknown availability state"
-            }
-            return .failure(.appleIntelligenceUnavailable(reason: message))
+        if usesAutomaticSelection {
+            return await SelectedLanguageModelAdapter.shared.resolve(
+                languageIdentifier: languageIdentifier
+            ).map { _ in () }
         }
+        return .success(())
     }
 
     func generate(
@@ -631,6 +631,23 @@ struct FoundationNoteGenerator: NoteGenerating {
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
+        if usesAutomaticSelection {
+            let resolved = await SelectedLanguageModelAdapter.shared.resolve(
+                languageIdentifier: languageIdentifier
+            )
+            switch resolved {
+            case .success(let adapter):
+                return await FoundationNoteGenerator(adapter: adapter).generate(
+                    segments: segments,
+                    userNotes: userNotes,
+                    meetingContext: meetingContext,
+                    template: template,
+                    languageIdentifier: languageIdentifier
+                )
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
         let available = await availability(languageIdentifier: languageIdentifier)
         if case .failure(let error) = available { return .failure(error) }
 
@@ -685,6 +702,21 @@ struct FoundationNoteGenerator: NoteGenerating {
         currentTitle: String,
         languageIdentifier: String
     ) async -> Result<String, BurritoError> {
+        if usesAutomaticSelection {
+            let resolved = await SelectedLanguageModelAdapter.shared.resolve(
+                languageIdentifier: languageIdentifier
+            )
+            switch resolved {
+            case .success(let adapter):
+                return await FoundationNoteGenerator(adapter: adapter).suggestTitle(
+                    segments: segments,
+                    currentTitle: currentTitle,
+                    languageIdentifier: languageIdentifier
+                )
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
         let available = await availability(languageIdentifier: languageIdentifier)
         if case .failure(let error) = available { return .failure(error) }
 

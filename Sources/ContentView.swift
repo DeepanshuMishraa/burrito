@@ -68,6 +68,7 @@ struct ContentView: View {
     @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
+    @State private var languageModelStore = LocalLanguageModelStore.shared
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
@@ -369,7 +370,10 @@ struct ContentView: View {
             }
 
             if sidebarSelection == .models {
-                ModelsView(modelStore: modelStore)
+                ModelsView(
+                    modelStore: modelStore,
+                    languageModelStore: languageModelStore
+                )
             } else if sidebarSelection == .templates {
                 TemplatesView(templates: templates)
             } else if sidebarSelection == .memory {
@@ -1730,6 +1734,7 @@ private struct NotificationPermissionCard: View {
 
 private struct ModelsView: View {
     @Bindable var modelStore: ParakeetModelStore
+    @Bindable var languageModelStore: LocalLanguageModelStore
 
     private var hasInstalledModels: Bool {
         ParakeetModelVariant.allCases.contains {
@@ -1750,9 +1755,66 @@ private struct ModelsView: View {
                         Text("Models")
                             .font(.burritoDisplay(size: 34, weight: .regular))
                             .tracking(-0.5)
-                        Text("Burrito automatically uses the best installed model after a recording.")
+                        Text("Download private transcription and note-generation models for this Mac.")
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            BurritoSectionLabel(title: "Note generation")
+                            Spacer()
+                            Text("Apple Intelligence is the default")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        }
+
+                        VStack(spacing: 0) {
+                            GenerationModelCatalogRow(
+                                title: "Apple Intelligence",
+                                summary: "Built into macOS. Lightweight, private, and always the safe fallback.",
+                                parameterCount: "System model",
+                                downloadSize: "No download",
+                                isSelected: languageModelStore.selection == .apple,
+                                state: nil
+                            ) {
+                                languageModelStore.select(.apple)
+                            }
+
+                            Divider().padding(.leading, 20)
+
+                            ForEach(
+                                Array(LocalLanguageModelVariant.allCases.enumerated()),
+                                id: \.element
+                            ) { index, variant in
+                                GenerationModelCatalogRow(
+                                    title: variant.displayName,
+                                    summary: variant.summary,
+                                    parameterCount: variant.parameterCount,
+                                    downloadSize: variant.downloadSize,
+                                    isSelected: languageModelStore.selection == .local(variant),
+                                    state: languageModelStore.state(for: variant)
+                                ) {
+                                    switch languageModelStore.state(for: variant) {
+                                    case .installed:
+                                        languageModelStore.select(.local(variant))
+                                    case .notInstalled, .paused, .failed:
+                                        Task { await languageModelStore.install(variant) }
+                                    case .downloading:
+                                        break
+                                    }
+                                }
+
+                                if index < LocalLanguageModelVariant.allCases.count - 1 {
+                                    Divider().padding(.leading, 20)
+                                }
+                            }
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(BurritoTheme.softBorder.opacity(0.7))
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -1832,7 +1894,89 @@ private struct ModelsView: View {
             .scrollIndicators(.hidden)
         }
         .background(BurritoTheme.canvas)
-        .onAppear { modelStore.refresh() }
+        .onAppear {
+            modelStore.refresh()
+            languageModelStore.refresh()
+        }
+    }
+}
+
+private struct GenerationModelCatalogRow: View {
+    let title: String
+    let summary: String
+    let parameterCount: String
+    let downloadSize: String
+    let isSelected: Bool
+    let state: LocalLanguageModelState?
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 14) {
+                    ModelProperty(systemImage: "cpu", value: parameterCount)
+                    ModelProperty(systemImage: "arrow.down.circle", value: downloadSize)
+                    ModelProperty(systemImage: "lock", value: "On-device")
+                    if state != nil {
+                        ModelProperty(systemImage: "wrench.and.screwdriver", value: "Tool calling")
+                    }
+                }
+            }
+
+            Spacer(minLength: 18)
+            modelAction.frame(minWidth: 88, alignment: .trailing)
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var modelAction: some View {
+        if isSelected {
+            Label("In use", systemImage: "checkmark")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(BurritoTheme.sage)
+        } else if let state {
+            switch state {
+            case .notInstalled:
+                BurritoInlineButton(title: "Install", systemImage: "arrow.down", action: action)
+            case .paused(let progress):
+                VStack(alignment: .trailing, spacing: 6) {
+                    BurritoInlineButton(title: "Resume", systemImage: "arrow.clockwise", action: action)
+                    Text("\(max(1, Int(progress * 100)))% saved")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            case .downloading(let progress):
+                VStack(alignment: .trailing, spacing: 7) {
+                    Text("\(Int(progress * 100))%")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    ProgressView(value: progress).frame(width: 82)
+                }
+                .accessibilityLabel("Installing \(title)")
+            case .installed:
+                BurritoInlineButton(title: "Use", systemImage: "checkmark", action: action)
+            case .failed(let message):
+                VStack(alignment: .trailing, spacing: 5) {
+                    BurritoInlineButton(title: "Retry", systemImage: "arrow.clockwise", action: action)
+                    Text(message)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                        .frame(maxWidth: 130, alignment: .trailing)
+                }
+            }
+        } else {
+            BurritoInlineButton(title: "Use", systemImage: "apple.logo", action: action)
+        }
     }
 }
 
