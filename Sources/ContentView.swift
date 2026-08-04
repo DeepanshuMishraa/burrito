@@ -1736,6 +1736,8 @@ private struct ModelsView: View {
     @Bindable var modelStore: ParakeetModelStore
     @Bindable var languageModelStore: LocalLanguageModelStore
 
+    @State private var selectedTab = 0 // 0: Speech to Text, 1: Text Models
+
     private var hasInstalledModels: Bool {
         ParakeetModelVariant.allCases.contains {
             if case .installed = modelStore.state(for: $0) {
@@ -1745,150 +1747,250 @@ private struct ModelsView: View {
         }
     }
 
+    private var activeEngineTitle: String {
+        switch languageModelStore.selection {
+        case .apple: "Apple Intelligence"
+        case .local(let variant): variant.displayName
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 44)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
-                    VStack(alignment: .leading, spacing: 8) {
+            // Header Section
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
                         Text("Models")
-                            .font(.burritoDisplay(size: 34, weight: .regular))
-                            .tracking(-0.5)
-                        Text("Download private transcription and note-generation models for this Mac.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
+                            .font(.spline(size: 26, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("On-device AI")
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
+                            }
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .firstTextBaseline) {
-                            BurritoSectionLabel(title: "Note generation")
-                            Spacer()
-                            Text("Apple Intelligence is the default")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                    Text("Download private models for transcription and note synthesis.")
+                        .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Segmented Tab Switcher (Speech to Text vs Text Models)
+                HStack(spacing: 2) {
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(.burritoSpring) { selectedTab = 0 }
+                    } label: {
+                        Label("Speech to Text", systemImage: "waveform")
+                            .font(.spline(size: 12, weight: selectedTab == 0 ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == 0 ? .primary : .secondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(
+                                selectedTab == 0 ? BurritoTheme.controlFill : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(.burritoSpring) { selectedTab = 1 }
+                    } label: {
+                        Label("Text Models", systemImage: "sparkles")
+                            .font(.spline(size: 12, weight: selectedTab == 1 ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == 1 ? .primary : .secondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(
+                                selectedTab == 1 ? BurritoTheme.controlFill : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(3)
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                }
+            }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 22)
+
+            // Content Body for Selected Tab
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if selectedTab == 0 {
+                        // SPEECH TO TEXT TAB
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(BurritoTheme.accentSoft)
+                                        .frame(width: 38, height: 38)
+                                    Image(systemName: hasInstalledModels ? "waveform" : "apple.logo")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(BurritoTheme.accent)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(hasInstalledModels ? "Downloaded models active" : "Apple Speech active")
+                                        .font(.spline(size: 13, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(
+                                        hasInstalledModels
+                                            ? "Parakeet handles supported languages; Apple Speech acts as fallback."
+                                            : "Install a model below to process recordings automatically on-device."
+                                    )
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(16)
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
                         }
 
-                        VStack(spacing: 0) {
-                            GenerationModelCatalogRow(
-                                title: "Apple Intelligence",
-                                summary: "Built into macOS. Lightweight, private, and always the safe fallback.",
-                                parameterCount: "System model",
-                                downloadSize: "No download",
-                                isSelected: languageModelStore.selection == .apple,
-                                state: nil
-                            ) {
-                                languageModelStore.select(.apple)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline) {
+                                BurritoSectionLabel(title: "PARAKEET SPEECH MODELS")
+                                Spacer()
+                                Text("Models stay on this Mac")
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.tertiary)
                             }
 
-                            Divider().padding(.leading, 20)
+                            VStack(spacing: 0) {
+                                ForEach(
+                                    Array(ParakeetModelVariant.allCases.enumerated()),
+                                    id: \.element
+                                ) { index, variant in
+                                    ModelCatalogRow(
+                                        variant: variant,
+                                        state: modelStore.state(for: variant)
+                                    ) {
+                                        Task { await modelStore.install(variant) }
+                                    }
 
-                            ForEach(
-                                Array(LocalLanguageModelVariant.allCases.enumerated()),
-                                id: \.element
-                            ) { index, variant in
-                                GenerationModelCatalogRow(
-                                    title: variant.displayName,
-                                    summary: variant.summary,
-                                    parameterCount: variant.parameterCount,
-                                    downloadSize: variant.downloadSize,
-                                    isSelected: languageModelStore.selection == .local(variant),
-                                    state: languageModelStore.state(for: variant)
-                                ) {
-                                    switch languageModelStore.state(for: variant) {
-                                    case .installed:
-                                        languageModelStore.select(.local(variant))
-                                    case .notInstalled, .paused, .failed:
-                                        Task { await languageModelStore.install(variant) }
-                                    case .downloading:
-                                        break
+                                    if index < ParakeetModelVariant.allCases.count - 1 {
+                                        Divider().padding(.leading, 20)
                                     }
                                 }
+                            }
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
+                        }
 
-                                if index < LocalLanguageModelVariant.allCases.count - 1 {
-                                    Divider().padding(.leading, 20)
+                        Text("Burrito automatically picks the optimal installed speech model for the recording language.")
+                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.tertiary)
+
+                    } else {
+                        // TEXT MODELS TAB
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(BurritoTheme.accentSoft)
+                                        .frame(width: 38, height: 38)
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(BurritoTheme.accent)
                                 }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Active Engine: \(activeEngineTitle)")
+                                        .font(.spline(size: 13, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                    Text("Used for prompt synthesis, structure parsing, and note generation.")
+                                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(16)
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
                             }
                         }
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(BurritoTheme.softBorder.opacity(0.7))
-                        }
-                    }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "Transcription engine")
-                        HStack(spacing: 12) {
-                            Image(systemName: hasInstalledModels ? "waveform" : "apple.logo")
-                                .foregroundStyle(BurritoTheme.accent)
-                                .frame(width: 20)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(hasInstalledModels ? "Downloaded models first" : "Apple Speech")
-                                    .font(.system(size: 12, weight: .medium))
-                                Text(
-                                    hasInstalledModels
-                                        ? "Apple Speech handles languages without a matching model"
-                                        : "Install a model below to use it automatically"
-                                )
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline) {
+                                BurritoSectionLabel(title: "NOTE GENERATION MODELS")
+                                Spacer()
+                                Text("Apple Intelligence is the default")
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.tertiary)
                             }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(height: 54)
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(BurritoTheme.softBorder.opacity(0.7))
-                        }
-                    }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .firstTextBaseline) {
-                            BurritoSectionLabel(title: "Parakeet")
-                            Spacer()
-                            Text("Models stay on this Mac")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                        }
-
-                        VStack(spacing: 0) {
-                            ForEach(
-                                Array(ParakeetModelVariant.allCases.enumerated()),
-                                id: \.element
-                            ) { index, variant in
-                                ModelCatalogRow(
-                                    variant: variant,
-                                    state: modelStore.state(for: variant)
+                            VStack(spacing: 0) {
+                                GenerationModelCatalogRow(
+                                    title: "Apple Intelligence",
+                                    summary: "Built into macOS. Lightweight, private, and always available.",
+                                    parameterCount: "System model",
+                                    downloadSize: "No download",
+                                    isSelected: languageModelStore.selection == .apple,
+                                    state: nil
                                 ) {
-                                    Task { await modelStore.install(variant) }
+                                    languageModelStore.select(.apple)
                                 }
 
-                                if index < ParakeetModelVariant.allCases.count - 1 {
-                                    Divider().padding(.leading, 20)
+                                Divider().padding(.leading, 20)
+
+                                ForEach(
+                                    Array(LocalLanguageModelVariant.allCases.enumerated()),
+                                    id: \.element
+                                ) { index, variant in
+                                    GenerationModelCatalogRow(
+                                        title: variant.displayName,
+                                        summary: variant.summary,
+                                        parameterCount: variant.parameterCount,
+                                        downloadSize: variant.downloadSize,
+                                        isSelected: languageModelStore.selection == .local(variant),
+                                        state: languageModelStore.state(for: variant)
+                                    ) {
+                                        switch languageModelStore.state(for: variant) {
+                                        case .installed:
+                                            languageModelStore.select(.local(variant))
+                                        case .notInstalled, .paused, .failed:
+                                            Task { await languageModelStore.install(variant) }
+                                        case .downloading:
+                                            break
+                                        }
+                                    }
+
+                                    if index < LocalLanguageModelVariant.allCases.count - 1 {
+                                        Divider().padding(.leading, 20)
+                                    }
                                 }
                             }
-                        }
-                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(BurritoTheme.softBorder.opacity(0.7))
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
                         }
                     }
-
-                    Text(
-                        "Burrito chooses the best installed model for the recording language. "
-                            + "Unsupported languages continue through Apple Speech."
-                    )
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
                 }
-                .frame(maxWidth: 800, alignment: .leading)
-                .padding(.horizontal, 38)
-                .padding(.top, 22)
-                .padding(.bottom, 80)
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(.horizontal, 36)
+                .padding(.top, 12)
+                .padding(.bottom, 60)
                 .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
@@ -1915,9 +2017,10 @@ private struct GenerationModelCatalogRow: View {
             VStack(alignment: .leading, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
                     Text(summary)
-                        .font(.system(size: 12))
+                        .font(.spline(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
 
@@ -1941,8 +2044,8 @@ private struct GenerationModelCatalogRow: View {
     private var modelAction: some View {
         if isSelected {
             Label("In use", systemImage: "checkmark")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(BurritoTheme.sage)
+                .font(.spline(size: 11, weight: .semibold))
+                .foregroundStyle(BurritoTheme.accent)
         } else if let state {
             switch state {
             case .notInstalled:
@@ -1951,13 +2054,13 @@ private struct GenerationModelCatalogRow: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     BurritoInlineButton(title: "Resume", systemImage: "arrow.clockwise", action: action)
                     Text("\(max(1, Int(progress * 100)))% saved")
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(.spline(size: 9, weight: .regular, relativeTo: .caption2))
                         .foregroundStyle(.tertiary)
                 }
             case .downloading(let progress):
                 VStack(alignment: .trailing, spacing: 7) {
                     Text("\(Int(progress * 100))%")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
                         .foregroundStyle(.secondary)
                     ProgressView(value: progress).frame(width: 82)
                 }
@@ -1968,7 +2071,7 @@ private struct GenerationModelCatalogRow: View {
                 VStack(alignment: .trailing, spacing: 5) {
                     BurritoInlineButton(title: "Retry", systemImage: "arrow.clockwise", action: action)
                     Text(message)
-                        .font(.system(size: 9))
+                        .font(.spline(size: 9, weight: .regular))
                         .foregroundStyle(.red)
                         .lineLimit(2)
                         .frame(maxWidth: 130, alignment: .trailing)
@@ -1990,9 +2093,10 @@ private struct ModelCatalogRow: View {
             VStack(alignment: .leading, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(variant.displayName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
                     Text(variant.summary)
-                        .font(.system(size: 12))
+                        .font(.spline(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
 
@@ -2041,13 +2145,13 @@ private struct ModelCatalogRow: View {
                     action: install
                 )
                 Text("\(max(1, Int(progress * 100)))% saved")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.spline(size: 9, weight: .regular, relativeTo: .caption2))
                     .foregroundStyle(.tertiary)
             }
         case .downloading(let progress):
             VStack(alignment: .trailing, spacing: 7) {
                 Text("\(Int(progress * 100))%")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
                     .foregroundStyle(.secondary)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
@@ -2063,8 +2167,8 @@ private struct ModelCatalogRow: View {
             .accessibilityValue("\(Int(progress * 100)) percent")
         case .installed:
             Label("Installed", systemImage: "checkmark")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(BurritoTheme.sage)
+                .font(.spline(size: 11, weight: .semibold))
+                .foregroundStyle(BurritoTheme.accent)
         case .failed(let message):
             VStack(alignment: .trailing, spacing: 5) {
                 BurritoInlineButton(
@@ -2073,7 +2177,7 @@ private struct ModelCatalogRow: View {
                     action: install
                 )
                 Text(message)
-                    .font(.system(size: 9))
+                    .font(.spline(size: 9, weight: .regular))
                     .foregroundStyle(.red)
                     .lineLimit(2)
                     .frame(maxWidth: 130, alignment: .trailing)
@@ -2088,7 +2192,7 @@ private struct ModelProperty: View {
 
     var body: some View {
         Label(value, systemImage: systemImage)
-            .font(.system(size: 10))
+            .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
             .foregroundStyle(.secondary)
     }
 }
