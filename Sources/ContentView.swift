@@ -5629,78 +5629,59 @@ private struct NoteEditingView: View {
     }
 }
 
+private struct HeaderSegmentTabButton: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? BurritoTheme.accent : Color.secondary)
+                .frame(width: 34, height: 28)
+                .background(
+                    isSelected ? BurritoTheme.accentSoft : Color.clear,
+                    in: Rectangle()
+                )
+        }
+        .buttonStyle(.plain)
+        .help(title)
+    }
+}
+
 private struct MeetingContextPanel: View {
     let event: CalendarEventSnapshot
     let relatedNotes: [Note]
     let selectNote: (UUID) -> Void
 
-    private var peopleSummary: String? {
-        if !event.attendeeNames.isEmpty {
-            return event.attendeeNames.joined(separator: ", ")
-        }
-        return event.organizerName.map { "Organized by \($0)" }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 16))
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 24, height: 24)
+        HStack(spacing: 8) {
+            Image(systemName: "calendar.badge.checkmark")
+                .font(.system(size: 11))
+                .foregroundStyle(BurritoTheme.accent)
+            Text(event.startDate, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
+                .foregroundStyle(.primary)
+            Text("· \(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)")
+                .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(event.startDate, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                        .font(.spline(size: 12, weight: .semibold))
-                    Text(
-                        "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
-                    )
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                    .foregroundStyle(.secondary)
-                    if let peopleSummary {
-                        Text(peopleSummary)
-                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+            if let meetingURL = event.meetingURL {
+                Spacer(minLength: 4)
+                Button("Join", systemImage: "video") {
+                    NSWorkspace.shared.open(meetingURL)
                 }
-
-                Spacer()
-
-                if let meetingURL = event.meetingURL {
-                    Button("Join meeting", systemImage: "video") {
-                        NSWorkspace.shared.open(meetingURL)
-                    }
-                    .buttonStyle(HomeToolbarButtonStyle())
-                }
-            }
-
-            if !relatedNotes.isEmpty {
-                Divider()
-                HStack(spacing: 8) {
-                    Text("Related")
-                        .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
-                        .foregroundStyle(.secondary)
-                    ForEach(relatedNotes.prefix(3)) { relatedNote in
-                        Button {
-                            selectNote(relatedNote.id)
-                        } label: {
-                            Text(relatedNote.title)
-                                .lineLimit(1)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(BurritoTheme.controlFill, in: Rectangle())
-                    }
-                }
+                .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
+                .buttonStyle(HomeToolbarButtonStyle())
             }
         }
-        .padding(12)
-        .background(BurritoTheme.raised.opacity(0.6), in: Rectangle())
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(BurritoTheme.controlFill, in: Rectangle())
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+            Rectangle().stroke(BurritoTheme.softBorder)
         }
     }
 }
@@ -5731,66 +5712,195 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Unified Top Header Bar (Back button, Editable Title, Floating Center Tabs, Top Right Actions)
             if !isRecordingThisNote {
-                VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    // Back Button
+                    Button("Back to notes", systemImage: "chevron.left") {
+                        backAction()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityHint("Returns to the notes library")
+
+                    // Meeting Title aligned directly with Top Controllers
                     TextField("Untitled note", text: titleBinding)
                         .textFieldStyle(.plain)
-                        .font(.burritoDisplay(size: 34, weight: .regular))
-                        .foregroundStyle(.secondary)
+                        .font(.spline(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: 280)
 
-                    HStack(spacing: 8) {
-                        BurritoPill(
-                            title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
-                            systemImage: "calendar"
-                        )
-                        BurritoPill(
-                            title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
-                            systemImage: "clock"
-                        )
-                        BurritoPill(
-                            title: note.templateSnapshot.name,
-                            systemImage: note.templateSnapshot.symbol
-                        )
-                        BurritoInlineButton(
-                            title: note.folder?.name ?? "Add to folder",
-                            systemImage: "folder"
+                    Spacer()
+
+                    // Center Floating Icon-Only Segmented Tab Bar (Notes, Transcript, Ask AI)
+                    HStack(spacing: 2) {
+                        HeaderSegmentTabButton(
+                            title: "Notes",
+                            systemImage: "doc.text",
+                            isSelected: selectedTab == 0
                         ) {
-                            showingFolderPopover.toggle()
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) { selectedTab = 0 }
                         }
+
+                        HeaderSegmentTabButton(
+                            title: "Transcript",
+                            systemImage: "waveform",
+                            isSelected: selectedTab == 1
+                        ) {
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) { selectedTab = 1 }
+                        }
+
+                        HeaderSegmentTabButton(
+                            title: "Ask AI",
+                            systemImage: "sparkles",
+                            isSelected: selectedTab == 2
+                        ) {
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(.burritoSpring) { selectedTab = 2 }
+                        }
+                    }
+                    .padding(3)
+                    .background(BurritoTheme.raised, in: Rectangle())
+                    .overlay {
+                        Rectangle().stroke(BurritoTheme.softBorder)
+                    }
+
+                    Spacer()
+
+                    // Right Controller Group
+                    HStack(spacing: 8) {
+                        if selectedTab == 0 {
+                            Button {
+                                BurritoHaptics.trigger(.alignment)
+                                withAnimation(.burritoSpring) {
+                                    isEditingMarkdown.toggle()
+                                }
+                            } label: {
+                                Label(
+                                    isEditingMarkdown ? "Done" : "Edit",
+                                    systemImage: isEditingMarkdown ? "checkmark" : "pencil"
+                                )
+                                .font(.spline(size: 12, weight: .medium))
+                            }
+                            .buttonStyle(HomeToolbarButtonStyle())
+                            .help(isEditingMarkdown ? "Finish editing" : "Edit note")
+                        }
+
+                        Button {
+                            copyMarkdown()
+                        } label: {
+                            Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
+                                .contentTransition(.symbolEffect(.replace))
+                                .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
+                        }
+                        .buttonStyle(BurritoIconButtonStyle())
+                        .help(didCopyNotes ? "Copied" : "Copy notes")
+
+                        Button {
+                            exportAction()
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .buttonStyle(BurritoIconButtonStyle())
+                        .help("Export Markdown")
+
+                        // 3-Dot Options Button
+                        Button {
+                            showingMorePopover.toggle()
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .rotationEffect(.degrees(90))
+                        }
+                        .buttonStyle(BurritoIconButtonStyle())
+                        .accessibilityLabel("More options")
                         .popover(
-                            isPresented: $showingFolderPopover,
+                            isPresented: $showingMorePopover,
                             attachmentAnchor: .rect(.bounds),
                             arrowEdge: .top
                         ) {
-                            BurritoPopoverPanel(title: "Move to folder") {
+                            BurritoPopoverPanel {
                                 BurritoPopoverRow(
-                                    title: "No folder",
-                                    systemImage: "tray",
-                                    isSelected: note.folder == nil
+                                    title: note.folder.map { "Folder: \($0.name)" } ?? "Add to folder…",
+                                    systemImage: "folder"
                                 ) {
-                                    note.folder = nil
-                                    showingFolderPopover = false
+                                    showingMorePopover = false
+                                    showingFolderPopover = true
                                 }
-                                ForEach(folders) { folder in
+
+                                BurritoPopoverRow(
+                                    title: "Generate again",
+                                    systemImage: "arrow.clockwise"
+                                ) {
+                                    showingMorePopover = false
+                                    requestRegeneration()
+                                }
+
+                                BurritoPopoverDivider()
+
+                                ShareLink(item: note.exportedMarkdown) {
+                                    BurritoPopoverRowLabel(
+                                        title: "Share",
+                                        systemImage: "paperplane"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                if let path = note.systemAudioRelativePath {
                                     BurritoPopoverRow(
-                                        title: folder.name,
-                                        systemImage: "folder",
-                                        isSelected: note.folder?.id == folder.id
+                                        title: "Play system audio",
+                                        systemImage: "play.fill"
                                     ) {
-                                        note.folder = folder
-                                        showingFolderPopover = false
+                                        play(fileStore.url(forRelativePath: path))
+                                        showingMorePopover = false
+                                    }
+                                }
+                                if let path = note.microphoneAudioRelativePath {
+                                    BurritoPopoverRow(
+                                        title: "Play microphone",
+                                        systemImage: "mic.fill"
+                                    ) {
+                                        play(fileStore.url(forRelativePath: path))
+                                        showingMorePopover = false
+                                    }
+                                }
+                                if player?.isPlaying == true {
+                                    BurritoPopoverRow(
+                                        title: "Stop audio",
+                                        systemImage: "stop.fill"
+                                    ) {
+                                        player?.stop()
+                                        showingMorePopover = false
                                     }
                                 }
                             }
                         }
-                        BurritoInlineButton(
-                            title: "Generate again",
-                            systemImage: "arrow.clockwise"
-                        ) {
-                            requestRegeneration()
-                        }
-                        .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
                     }
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 50)
+                .background(BurritoTheme.paper)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(BurritoTheme.softBorder).frame(height: 1)
+                }
+            }
+
+            // Sub-Header Metadata Strip (Date, Duration, Category, Compact Calendar Event)
+            if !isRecordingThisNote {
+                HStack(spacing: 8) {
+                    BurritoPill(
+                        title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
+                        systemImage: "calendar"
+                    )
+                    BurritoPill(
+                        title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
+                        systemImage: "clock"
+                    )
+                    BurritoPill(
+                        title: note.templateSnapshot.name,
+                        systemImage: note.templateSnapshot.symbol
+                    )
 
                     if let calendarEvent = note.calendarEvent {
                         MeetingContextPanel(
@@ -5800,36 +5910,14 @@ private struct NoteDetailView: View {
                         )
                     }
 
-                    HStack(spacing: 20) {
-                        EditorTabButton(title: "Notes", isSelected: selectedTab == 0) {
-                            selectedTab = 0
-                        }
-                        EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
-                            selectedTab = 1
-                        }
-                        EditorTabButton(title: "Ask", isSelected: selectedTab == 2) {
-                            selectedTab = 2
-                        }
-                        Spacer()
-                        if selectedTab == 0 {
-                            BurritoInlineButton(
-                                title: isEditingMarkdown ? "Done" : "Edit",
-                                systemImage: isEditingMarkdown ? "checkmark" : "pencil"
-                            ) {
-                                withAnimation(.smooth(duration: 0.2)) {
-                                    isEditingMarkdown.toggle()
-                                }
-                            }
-                        }
-                    }
+                    Spacer()
                 }
-                .frame(maxWidth: 820, alignment: .leading)
                 .padding(.horizontal, 44)
-                .padding(.top, 72)
-                .frame(maxWidth: .infinity)
-                .transition(.opacity)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
             }
 
+            // Full Height Content Body
             if isRecordingThisNote {
                 RecordingNotepadView(
                     title: titleBinding,
@@ -5846,7 +5934,7 @@ private struct NoteDetailView: View {
                         userNotes: userNotesBinding,
                         generatedNotes: notesBinding
                     )
-                        .transition(.opacity)
+                    .transition(.opacity)
                 } else {
                     ScrollView {
                         NoteProvenanceView(
@@ -5857,10 +5945,10 @@ private struct NoteDetailView: View {
                                 selectedTab = 1
                             }
                         )
-                            .frame(maxWidth: 820, alignment: .leading)
-                            .padding(.horizontal, 44)
-                            .padding(.vertical, 30)
-                            .hidesEnclosingScrollIndicators()
+                        .frame(maxWidth: 820, alignment: .leading)
+                        .padding(.horizontal, 44)
+                        .padding(.vertical, 24)
+                        .hidesEnclosingScrollIndicators()
                     }
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
@@ -5889,96 +5977,37 @@ private struct NoteDetailView: View {
         }
         .background(BurritoTheme.canvas)
         .navigationTitle("")
+        .popover(
+            isPresented: $showingFolderPopover,
+            attachmentAnchor: .rect(.bounds),
+            arrowEdge: .top
+        ) {
+            BurritoPopoverPanel(title: "Move to folder") {
+                BurritoPopoverRow(
+                    title: "No folder",
+                    systemImage: "tray",
+                    isSelected: note.folder == nil
+                ) {
+                    note.folder = nil
+                    showingFolderPopover = false
+                }
+                ForEach(folders) { folder in
+                    BurritoPopoverRow(
+                        title: folder.name,
+                        systemImage: "folder",
+                        isSelected: note.folder?.id == folder.id
+                    ) {
+                        note.folder = folder
+                        showingFolderPopover = false
+                    }
+                }
+            }
+        }
         .onAppear {
             openExternalCitation()
         }
         .onChange(of: externalCitedSegmentID) {
             openExternalCitation()
-        }
-        .overlay(alignment: .top) {
-            HStack {
-                if !isRecordingThisNote {
-                    Button("Back to notes", systemImage: "chevron.left") {
-                        backAction()
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityHint("Returns to the notes library")
-                }
-                Spacer()
-                if !isRecordingThisNote {
-                    Button {
-                        copyMarkdown()
-                    } label: {
-                        Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
-                            .contentTransition(.symbolEffect(.replace))
-                            .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel(didCopyNotes ? "Notes copied" : "Copy notes")
-                    .help(didCopyNotes ? "Copied" : "Copy notes")
-                    Button {
-                        exportAction()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel("Export Markdown")
-                    .help("Export Markdown")
-                    Button {
-                        showingMorePopover.toggle()
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .rotationEffect(.degrees(90))
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel("More actions")
-                    .popover(
-                        isPresented: $showingMorePopover,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        BurritoPopoverPanel {
-                            ShareLink(item: note.exportedMarkdown) {
-                                BurritoPopoverRowLabel(
-                                    title: "Share",
-                                    systemImage: "paperplane"
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            if let path = note.systemAudioRelativePath {
-                                BurritoPopoverDivider()
-                                BurritoPopoverRow(
-                                    title: "Play system audio",
-                                    systemImage: "play.fill"
-                                ) {
-                                    play(fileStore.url(forRelativePath: path))
-                                    showingMorePopover = false
-                                }
-                            }
-                            if let path = note.microphoneAudioRelativePath {
-                                BurritoPopoverRow(
-                                    title: "Play microphone",
-                                    systemImage: "mic.fill"
-                                ) {
-                                    play(fileStore.url(forRelativePath: path))
-                                    showingMorePopover = false
-                                }
-                            }
-                            if player?.isPlaying == true {
-                                BurritoPopoverRow(
-                                    title: "Stop audio",
-                                    systemImage: "stop.fill"
-                                ) {
-                                    player?.stop()
-                                    showingMorePopover = false
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(14)
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
@@ -6026,7 +6055,7 @@ private struct NoteDetailView: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
         }
-        .overlay {
+        .overlay(alignment: .center) {
             if confirmingRegeneration {
                 BurritoModalBackdrop {
                     BurritoMessageDialog(
