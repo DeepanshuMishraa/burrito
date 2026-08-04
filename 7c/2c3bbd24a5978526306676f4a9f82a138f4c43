@@ -1,0 +1,14 @@
+Sources/ContentView.swift
+  h_b26cb4eddfa21f 4413,4416,4543,4546,4549,4554,4564,4586,4590,4592,4609,4615,4617,4626,4630,4636,4638,4691,4698,4702,4713,4716,4718,4725,4729,4735,4739,4745,4747,5589,5594,5596,5605,5610,5612
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "7c2c3bbd24a5978526306676f4a9f82a138f4c43",
+  "prompts": {},
+  "humans": {
+    "h_b26cb4eddfa21f": {
+      "author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
