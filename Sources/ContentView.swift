@@ -570,8 +570,7 @@ struct ContentView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if sidebarSelection == .all {
                             Text("Coming up")
-                                .font(.burritoDisplay(size: 34, weight: .regular))
-                                .tracking(-0.5)
+                                .font(.spline(size: 28, weight: .bold))
                                 .padding(.bottom, 16)
 
                             CalendarCard(
@@ -579,12 +578,11 @@ struct ContentView: View {
                                 startRecording: startCalendarRecording,
                                 openSettings: openCalendarSettings
                             )
-                            .padding(.bottom, 26)
+                            .padding(.bottom, 24)
                         } else {
                             Text(sectionTitle)
-                                .font(.burritoDisplay(size: 32, weight: .regular))
-                                .tracking(-0.4)
-                                .padding(.bottom, 24)
+                                .font(.spline(size: 26, weight: .bold))
+                                .padding(.bottom, 20)
                         }
                     }
                     .frame(maxWidth: 780, alignment: .leading)
@@ -656,11 +654,9 @@ struct ContentView: View {
         } else {
             ForEach(noteDays, id: \.date) { group in
                 Text(noteGroupTitle(for: group.date))
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(0.7)
-                    .textCase(.uppercase)
+                    .font(.spline(size: 11, weight: .semibold))
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 18)
+                    .padding(.top, 20)
                     .padding(.leading, 8)
                     .padding(.bottom, 6)
                 ForEach(group.notes) { note in
@@ -2949,9 +2945,10 @@ private struct CalendarCard: View {
                     .foregroundStyle(BurritoTheme.accent)
                 Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
                     .font(.spline(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
                 Text("Recent & upcoming meetings")
                     .font(.spline(size: 12, weight: .regular))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 if calendarAccess.state == .authorized {
                     Button {
@@ -2961,87 +2958,84 @@ private struct CalendarCard: View {
                     }
                     .buttonStyle(.plain)
                     .font(.spline(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                     .help("Refresh upcoming Calendar events")
                 }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 46)
+            .padding(.horizontal, 16)
+            .frame(height: 42)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder.opacity(0.75))
-                .frame(height: 1)
-
-            Group {
-                switch calendarAccess.state {
-                case .notDetermined:
-                    CalendarConnectionState(
-                        symbol: "calendar.badge.plus",
-                        title: "Bring your day into focus",
-                        detail: "Connect Calendar to see what’s coming up.",
-                        buttonTitle: "Connect Calendar"
-                    ) {
-                        Task { await calendarAccess.requestAccess() }
+            switch calendarAccess.state {
+            case .notDetermined:
+                CalendarConnectionState(
+                    symbol: "calendar.badge.plus",
+                    title: "Bring your day into focus",
+                    detail: "Connect Calendar to see what’s coming up.",
+                    buttonTitle: "Connect Calendar"
+                ) {
+                    Task { await calendarAccess.requestAccess() }
+                }
+            case .requesting:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Connecting Calendar…")
+                        .font(.spline(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+            case .authorized:
+                if calendarAccess.upcomingEvents.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                        Text("No timed events found from the last 24 hours onward.")
+                            .font(.spline(size: 11, weight: .regular))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
                     }
-                case .requesting:
-                    VStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Connecting Calendar…")
-                            .font(.spline(size: 13, weight: .regular, relativeTo: .callout))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .authorized:
-                    if calendarAccess.upcomingEvents.isEmpty {
-                        CalendarConnectionState(
-                            symbol: "calendar.badge.clock",
-                            title: "No recent or upcoming meetings",
-                            detail: "No timed events were found from the last 24 hours onward.",
-                            buttonTitle: nil,
-                            action: {}
-                        )
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
-                                index, event in
-                                UpcomingEventRow(event: event, startRecording: startRecording)
-                                if index < calendarAccess.upcomingEvents.count - 1 {
-                                    Rectangle()
-                                        .fill(BurritoTheme.softBorder)
-                                        .frame(height: 1)
-                                }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
+                            index, event in
+                            UpcomingEventRow(event: event, startRecording: startRecording)
+                            if index < calendarAccess.upcomingEvents.count - 1 {
+                                Rectangle()
+                                    .fill(BurritoTheme.softBorder.opacity(0.5))
+                                    .frame(height: 1)
                             }
                         }
-                        .padding(.horizontal, 18)
                     }
-                case .denied:
-                    CalendarConnectionState(
-                        symbol: "calendar.badge.exclamationmark",
-                        title: "Calendar access is off",
-                        detail: "Allow Burrito in Privacy & Security → Calendars.",
-                        buttonTitle: "Open System Settings",
-                        action: openSettings
-                    )
-                case .failed(let message):
-                    CalendarConnectionState(
-                        symbol: "exclamationmark.triangle",
-                        title: "Calendar couldn’t load",
-                        detail: message,
-                        buttonTitle: "Try Again"
-                    ) {
-                        Task { await calendarAccess.requestAccess() }
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+            case .denied:
+                CalendarConnectionState(
+                    symbol: "calendar.badge.exclamationmark",
+                    title: "Calendar access is off",
+                    detail: "Allow Burrito in Privacy & Security → Calendars.",
+                    buttonTitle: "Open System Settings",
+                    action: openSettings
+                )
+            case .failed(let message):
+                CalendarConnectionState(
+                    symbol: "exclamationmark.triangle",
+                    title: "Calendar couldn’t load",
+                    detail: message,
+                    buttonTitle: "Try Again"
+                ) {
+                    Task { await calendarAccess.requestAccess() }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 110)
         }
-        .background(BurritoTheme.raised.opacity(0.58))
+        .background(BurritoTheme.paper.opacity(0.6), in: Rectangle())
         .overlay {
-            Rectangle()
-                .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
+            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
         }
-        .clipShape(Rectangle())
     }
 }
 
@@ -3053,34 +3047,25 @@ private struct CalendarConnectionState: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title)
-                .font(.spline(size: 13, weight: .semibold))
-            Text(detail)
-                .font(.spline(size: 11, weight: .regular))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(BurritoTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.spline(size: 12, weight: .semibold))
+                Text(detail)
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
             if let buttonTitle {
                 Button(buttonTitle, action: action)
                     .buttonStyle(HomeToolbarButtonStyle())
-                    .padding(.top, 3)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BurritoTheme.controlFill.opacity(0.3), in: Rectangle())
-        .overlay {
-            Rectangle()
-                .stroke(
-                    BurritoTheme.softBorder.opacity(0.7),
-                    style: StrokeStyle(lineWidth: 0.75, dash: [5, 5])
-                )
-        }
-        .padding(10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -3104,7 +3089,7 @@ private struct UpcomingEventRow: View {
 
             Rectangle()
                 .fill(BurritoTheme.accent)
-                .frame(width: 3, height: 30)
+                .frame(width: 3, height: 26)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
@@ -3126,38 +3111,38 @@ private struct UpcomingEventRow: View {
             ) {
                 startRecording(event)
             }
-                .buttonStyle(HomeToolbarButtonStyle())
+            .buttonStyle(HomeToolbarButtonStyle())
         }
-        .frame(minHeight: 58)
+        .frame(minHeight: 52)
     }
 }
 
 private struct TimelineNoteRow: View {
     let note: Note
+    var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: note.processingStage == nil ? "doc.text" : "ellipsis")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-                .frame(width: 32, height: 32)
-                .background(BurritoTheme.controlFill.opacity(0.8), in: Rectangle())
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(isHovered ? BurritoTheme.accent : Color.secondary)
+                .frame(width: 24, height: 24)
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
-                        .font(.burritoDisplay(size: 15, weight: .medium))
-                        .tracking(-0.1)
+                        .font(.spline(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if note.isFavorite {
                         Image(systemName: "star.fill")
-                            .font(.caption2)
+                            .font(.system(size: 10))
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
                 Text(note.processingStage?.rawValue ?? NoteExcerpt.text(for: note))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .tracking(0.25)
-                    .foregroundStyle(.tertiary)
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
@@ -3165,13 +3150,13 @@ private struct TimelineNoteRow: View {
                 FolderTag(folder: folder)
             }
             Text(note.updatedAt, style: .time)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.spline(size: 11, weight: .regular))
                 .monospacedDigit()
                 .foregroundStyle(.tertiary)
                 .frame(minWidth: 54, alignment: .trailing)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 52)
+        .padding(.horizontal, 10)
+        .frame(height: 48)
         .contentShape(Rectangle())
     }
 }
@@ -3224,10 +3209,10 @@ private struct FolderTag: View {
             Text(folder.name)
                 .lineLimit(1)
         }
-        .font(.system(size: 9, weight: .medium))
+        .font(.spline(size: 10, weight: .medium))
         .foregroundStyle(color)
         .padding(.horizontal, 6)
-        .frame(height: 17)
+        .frame(height: 18)
         .background(color.opacity(0.13), in: Rectangle())
         .accessibilityLabel("Folder: \(folder.name)")
     }
@@ -3250,7 +3235,7 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.alignment)
                 open()
             } label: {
-                TimelineNoteRow(note: note)
+                TimelineNoteRow(note: note, isHovered: isHovered)
             }
             .buttonStyle(.plain)
 
@@ -3268,6 +3253,7 @@ private struct TimelineNoteItem: View {
                     )
             }
             .buttonStyle(.plain)
+            .opacity(isHovered || showingActions ? 1 : 0.3)
             .help("Note actions")
             .accessibilityLabel("Actions for \(note.title)")
             .popover(
@@ -3280,12 +3266,15 @@ private struct TimelineNoteItem: View {
         }
         .padding(.trailing, 4)
         .background(
-            isHovered ? BurritoTheme.controlFill.opacity(0.34) : Color.clear,
+            isHovered || showingActions ? BurritoTheme.paper.opacity(0.5) : Color.clear,
             in: Rectangle()
         )
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .onHover { hover in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hover
+            }
+        }
         .onChange(of: showingActions) { _, isPresented in
             if !isPresented {
                 showingFolders = false
