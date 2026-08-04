@@ -5712,7 +5712,7 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Unified Top Header Bar (Back button, Editable Title, Floating Center Tabs, Top Right Actions)
+            // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
             if !isRecordingThisNote {
                 HStack(spacing: 12) {
                     // Back Button
@@ -5723,16 +5723,7 @@ private struct NoteDetailView: View {
                     .buttonStyle(BurritoIconButtonStyle())
                     .accessibilityHint("Returns to the notes library")
 
-                    // Meeting Title aligned directly with Top Controllers
-                    TextField("Untitled note", text: titleBinding)
-                        .textFieldStyle(.plain)
-                        .font(.spline(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: 280)
-
-                    Spacer()
-
-                    // Center Floating Icon-Only Segmented Tab Bar (Notes, Transcript, Ask AI)
+                    // Left-aligned Segmented Tab Bar (Notes, Transcript, Ask AI)
                     HStack(spacing: 2) {
                         HeaderSegmentTabButton(
                             title: "Notes",
@@ -5766,6 +5757,12 @@ private struct NoteDetailView: View {
                     .overlay {
                         Rectangle().stroke(BurritoTheme.softBorder)
                     }
+
+                    // Meeting Title aligned directly on the left after tabs
+                    TextField("Untitled note", text: titleBinding)
+                        .textFieldStyle(.plain)
+                        .font(.spline(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
 
                     Spacer()
 
@@ -5879,42 +5876,90 @@ private struct NoteDetailView: View {
                     }
                 }
                 .padding(.horizontal, 18)
-                .frame(height: 50)
+                .frame(height: 48)
                 .background(BurritoTheme.paper)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(BurritoTheme.softBorder).frame(height: 1)
-                }
             }
 
-            // Sub-Header Metadata Strip (Date, Duration, Category, Compact Calendar Event)
+            // Sub-Header Metadata Strip (Apple-Grade Clean Inline Typography)
             if !isRecordingThisNote {
                 HStack(spacing: 8) {
-                    BurritoPill(
-                        title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
-                        systemImage: "calendar"
-                    )
-                    BurritoPill(
-                        title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
-                        systemImage: "clock"
-                    )
-                    BurritoPill(
-                        title: note.templateSnapshot.name,
-                        systemImage: note.templateSnapshot.symbol
-                    )
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("·")
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)))
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("·")
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: note.templateSnapshot.symbol)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(note.templateSnapshot.name)
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let calendarEvent = note.calendarEvent {
-                        MeetingContextPanel(
-                            event: calendarEvent,
-                            relatedNotes: relatedNotes,
-                            selectNote: selectRelatedNote
-                        )
+                        Text("·")
+                            .font(.spline(size: 11, weight: .regular))
+                            .foregroundStyle(.tertiary)
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar.badge.checkmark")
+                                .font(.system(size: 11))
+                                .foregroundStyle(BurritoTheme.accent)
+                            Text("\(calendarEvent.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) \(calendarEvent.startDate.formatted(.dateTime.hour().minute()))–\(calendarEvent.endDate.formatted(.dateTime.hour().minute()))")
+                                .font(.spline(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let meetingURL = calendarEvent.meetingURL {
+                            Button {
+                                NSWorkspace.shared.open(meetingURL)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "video.fill")
+                                        .font(.system(size: 9))
+                                    Text("Join")
+                                        .font(.spline(size: 10, weight: .semibold))
+                                }
+                                .foregroundStyle(BurritoTheme.accent)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(BurritoTheme.accentSoft, in: Rectangle())
+                                .overlay {
+                                    Rectangle().stroke(BurritoTheme.accent.opacity(0.3))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .help("Join meeting video call")
+                        }
                     }
 
                     Spacer()
                 }
                 .padding(.horizontal, 44)
                 .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.bottom, 12)
             }
 
             // Full Height Content Body
