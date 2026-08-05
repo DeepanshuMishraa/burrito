@@ -642,14 +642,13 @@ actor BurritoChatAnswerer {
             } else {
                 initialTextUpdate = onTextUpdate
             }
-            let tools: [any AIToolProtocol] = meetingSearchRequired ? [tool] : []
             let answer = try await adapter.completeChatStreaming(
                 instructions: BurritoChatPrompt.instructions(
                     scopedToMeeting: scopedDocument != nil
                 ),
                 conversation: conversation,
                 question: question,
-                tools: tools,
+                tools: [tool],
                 meetingEvidence: prefetchedEvidence.isEmpty
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
@@ -665,18 +664,6 @@ actor BurritoChatAnswerer {
             let evidence = await collector.snapshot()
             let searchedMeetings = await collector.searchWasPerformed()
             guard !evidence.isEmpty else {
-                if validatesMeetingAnswer {
-                    let fallback = "I couldn’t find relevant transcript evidence for that "
-                        + "meeting question."
-                    await onTextUpdate(fallback)
-                    return .success(
-                        BurritoChatResponse(
-                            text: fallback,
-                            usedMeetingEvidence: false,
-                            searchedMeetings: true
-                        )
-                    )
-                }
                 return .success(
                     BurritoChatResponse(
                         text: trimmed,

@@ -85,6 +85,7 @@ final class LocalLanguageModelStore {
     }
 
     private init() {
+        Self.migrateLegacyInstallations()
         selection = GenerationModelSelection.resolve(
             persistedValue: UserDefaults.standard.string(
                 forKey: GenerationModelSelection.storageKey
@@ -202,27 +203,15 @@ final class LocalLanguageModelStore {
         at directory: URL,
         expectedRevision: String
     ) -> Bool {
-        let markerURL = directory.appending(path: installationMarkerName)
-        if FileManager.default.fileExists(atPath: markerURL.path) {
-            guard let markerData = try? Data(contentsOf: markerURL),
-                  let marker = try? JSONDecoder().decode(
-                      InstallationMarker.self,
-                      from: markerData
-                  ),
-                  marker.revision == expectedRevision
-            else {
-                return false
-            }
-            return containsRuntimeFiles(at: directory)
-        }
-
-        guard containsRuntimeFiles(at: directory) else { return false }
-        do {
-            try markInstallationComplete(at: directory, revision: expectedRevision)
-            return true
-        } catch {
+        guard let markerData = try? Data(
+            contentsOf: directory.appending(path: installationMarkerName)
+        ),
+        let marker = try? JSONDecoder().decode(InstallationMarker.self, from: markerData),
+        marker.revision == expectedRevision
+        else {
             return false
         }
+        return containsRuntimeFiles(at: directory)
     }
 
     nonisolated static func markInstallationComplete(
@@ -234,6 +223,29 @@ final class LocalLanguageModelStore {
             to: directory.appending(path: installationMarkerName),
             options: .atomic
         )
+    }
+
+    nonisolated static func migrateLegacyInstallation(
+        at directory: URL,
+        revision: String
+    ) throws {
+        guard !FileManager.default.fileExists(
+            atPath: directory.appending(path: installationMarkerName).path
+        ),
+        containsRuntimeFiles(at: directory)
+        else {
+            return
+        }
+        try markInstallationComplete(at: directory, revision: revision)
+    }
+
+    nonisolated private static func migrateLegacyInstallations() {
+        for variant in LocalLanguageModelVariant.allCases {
+            try? migrateLegacyInstallation(
+                at: variant.modelDirectory,
+                revision: variant.markerlessBundleRevision
+            )
+        }
     }
 
     nonisolated private static func containsRuntimeFiles(at directory: URL) -> Bool {
@@ -338,6 +350,16 @@ extension LocalLanguageModelVariant {
 
     fileprivate var modelDirectory: URL {
         remoteConfiguration.modelDirectory(hub: defaultHubApi)
+    }
+
+    // Markerless bundles predate revision tracking. Keep these pins separate so a
+    // future model update cannot certify old files as the new revision.
+    fileprivate var markerlessBundleRevision: String {
+        switch self {
+        case .small: "674aaa7240b91e8012fcad5d791b7dfe5ba90207"
+        case .medium: "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c"
+        case .large: "8b2b98c00a6b4d291155e4890773ca8f769aee53"
+        }
     }
 }
 

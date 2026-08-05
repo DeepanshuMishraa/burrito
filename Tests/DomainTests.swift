@@ -466,15 +466,21 @@ struct LocalMemoryTests {
         #expect(updates == [response.text])
     }
 
-    @Test("General chat streams without exposing the meeting tool")
-    func preservesGeneralChatStreaming() async throws {
-        let model = MockLanguageModel(text: "Here is a concise email draft.")
+    @Test("Classifier misses objections but chat keeps meeting search available")
+    func keepsMeetingSearchAvailableForMissedIntent() async throws {
+        let question = "What were the main objections or concerns?"
+        #expect(!MeetingQueryIntent.requiresSearch(
+            question,
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
+        let model = MockLanguageModel(text: "I found the main objections.")
         let adapter = FoundationModelAdapter(model: model)
         let answerer = BurritoChatAnswerer { _ in .success(adapter) }
         let recorder = StreamedTextRecorder()
 
         let result = await answerer.answer(
-            question: "Help me write an email",
+            question: question,
             conversation: [],
             documents: [],
             scopedDocument: nil,
@@ -486,7 +492,7 @@ struct LocalMemoryTests {
         let request = try #require(model.requests.first)
         let updates = await recorder.updates
 
-        #expect(request.tools.isEmpty)
+        #expect(request.tools.map(\.name) == [MeetingSearchTool.name])
         #expect(updates.last == response.text)
     }
 
@@ -1113,7 +1119,7 @@ struct LocalLanguageModelTests {
         ))
     }
 
-    @Test("Complete legacy model bundles receive an installation marker")
+    @Test("Legacy migration records the original revision")
     func migratesLegacyModelBundle() throws {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -1131,16 +1137,25 @@ struct LocalLanguageModelTests {
         )
 
         let revision = "legacy-revision"
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        try LocalLanguageModelStore.migrateLegacyInstallation(
+            at: directory,
+            revision: revision
+        )
         #expect(LocalLanguageModelStore.containsCompleteModel(
             at: directory,
             expectedRevision: revision
         ))
-        #expect(FileManager.default.fileExists(
-            atPath: directory.appending(path: ".burrito-installation.json").path
-        ))
         #expect(!LocalLanguageModelStore.containsCompleteModel(
             at: directory,
-            expectedRevision: "different-revision"
+            expectedRevision: "new-revision"
         ))
     }
 
