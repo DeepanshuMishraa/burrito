@@ -82,9 +82,9 @@ enum BurritoAppearance: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .system: "circle.lefthalf.filled"
-        case .light: "sun.max"
-        case .dark: "moon"
+        case .system: "computer"
+        case .light: "sun02"
+        case .dark: "moon02"
         }
     }
 
@@ -157,7 +157,7 @@ struct BurritoSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.spline(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .medium))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }
@@ -168,12 +168,104 @@ struct BurritoPill: View {
     let systemImage: String
 
     var body: some View {
-        Label(title, systemImage: systemImage)
+        BurritoLabel(title, systemImage: systemImage)
             .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+struct BurritoToggleRow: View {
+    enum Style {
+        case standard
+        case settingsForm
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+    let style: Style
+
+    init(
+        title: String,
+        subtitle: String,
+        isOn: Binding<Bool>,
+        style: Style = .standard
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        _isOn = isOn
+        self.style = style
+    }
+
+    var body: some View {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                isOn.toggle()
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(titleFont)
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(subtitleFont)
+                        .foregroundStyle(style == .settingsForm ? .secondary : .tertiary)
+                }
+                Spacer()
+                switchControl
+            }
+            .padding(.horizontal, style == .settingsForm ? 18 : 14)
+            .padding(.vertical, style == .settingsForm ? 14 : 0)
+            .frame(height: style == .standard ? 58 : nil)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(isOn ? "On" : "Off")
+    }
+
+    private var titleFont: Font {
+        style == .settingsForm
+            ? .spline(size: 13, weight: .medium)
+            : .system(size: 13, weight: .medium)
+    }
+
+    private var subtitleFont: Font {
+        style == .settingsForm
+            ? .spline(size: 11, weight: .regular, relativeTo: .caption)
+            : .caption
+    }
+
+    @ViewBuilder
+    private var switchControl: some View {
+        if style == .settingsForm {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
+                .frame(width: 40, height: 22)
+                .overlay(alignment: isOn ? .trailing : .leading) {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(.white)
+                        .frame(width: 16, height: 16)
+                        .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
+                        .padding(3)
+                }
+        } else {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Rectangle()
+                    .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
+                    .frame(width: 38, height: 22)
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: 16, height: 16)
+                    .padding(3)
+            }
+        }
     }
 }
 
@@ -214,15 +306,14 @@ struct BurritoLanguagePicker: View {
                     .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                BurritoIcon(name: "chevron.down", size: 8)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
             .frame(height: 44)
             .background(
                 embedded ? Color.clear : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .contentShape(Rectangle())
         }
@@ -234,15 +325,14 @@ struct BurritoLanguagePicker: View {
         ) {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                    BurritoIcon(name: "magnifyingglass", size: 11)
                         .foregroundStyle(.tertiary)
                     TextField("Find a language", text: $query)
                         .textFieldStyle(.plain)
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 32)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -277,8 +367,7 @@ struct BurritoLanguagePicker: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 if selection == language.identifier {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                    BurritoIcon(name: "checkmark", size: 10)
                         .foregroundStyle(BurritoTheme.accent)
                 }
             }
@@ -288,7 +377,7 @@ struct BurritoLanguagePicker: View {
                 selection == language.identifier
                     ? BurritoTheme.controlFill
                     : Color.clear,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .contentShape(Rectangle())
         }

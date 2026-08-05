@@ -16,6 +16,7 @@
 		2C7993E84252BAF80DD73906 /* AITesting in Frameworks */ = {isa = PBXBuildFile; productRef = 95676C287AC51B2EA5887B1D /* AITesting */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
+		423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
 		5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */; };
 		5EE81FD4567D9697A350137B /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = ECFA337F1032D11A4CC3842E /* Lottie */; };
@@ -24,12 +25,15 @@
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
+		7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */ = {isa = PBXBuildFile; productRef = 1CB1791C5FB74ED703EE3E71 /* Hugeicons */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
+		A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 1ADC8A04BD0CC461DBBB407C /* MLXLLM */; };
 		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
+		C6EDDEC5266C8138C5F53C4C /* LocalLanguageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
@@ -42,6 +46,7 @@
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
 		FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80312D2153FF4924DF498F98 /* CoordinatorTests.swift */; };
 		FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A639102CCFABB8A22A07D3 /* AppCommands.swift */; };
+		FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +73,7 @@
 		3A7EDE94375DECAC98C16A4F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		3B76BDAAD1105FDBF200FA0E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
+		45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLanguageModels.swift; sourceTree = "<group>"; };
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
@@ -84,6 +90,7 @@
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
+		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
@@ -98,6 +105,9 @@
 				7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */,
 				5EE81FD4567D9697A350137B /* Lottie in Frameworks */,
 				BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */,
+				A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */,
+				423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */,
+				7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,12 +161,14 @@
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
 				9F27CD15A054415C3F40F273 /* AppFeedback.swift */,
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
+				C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
 				0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */,
 				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
 				3B76BDAAD1105FDBF200FA0E /* ContentView.swift */,
 				8932061A0CA5A58DCC622228 /* Domain.swift */,
 				4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */,
+				45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */,
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
@@ -211,6 +223,9 @@
 				64DA2926F2A0EF333C410B58 /* FluidAudio */,
 				ECFA337F1032D11A4CC3842E /* Lottie */,
 				BF1585C55A8225C58A754212 /* AI */,
+				1ADC8A04BD0CC461DBBB407C /* MLXLLM */,
+				D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */,
+				1CB1791C5FB74ED703EE3E71 /* Hugeicons */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -267,6 +282,8 @@
 			packageReferences = (
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
+				65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
 				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
@@ -303,12 +320,14 @@
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
+				FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
 				63D6B5E998CF954795A8BBB2 /* BurritoUpdateManager.swift in Sources */,
 				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
 				F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */,
 				2D70894A600592B1DAF71C5C /* Domain.swift in Sources */,
 				41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */,
+				C6EDDEC5266C8138C5F53C4C /* LocalLanguageModels.swift in Sources */,
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
@@ -611,6 +630,14 @@
 				revision = 9a8ea7e5f718af957f222c12ba09caff79caf3d0;
 			};
 		};
+		65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.31.3;
+			};
+		};
 		7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -627,9 +654,27 @@
 				minimumVersion = 2.9.0;
 			};
 		};
+		EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/iSapozhnik/hugeicons-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 4.1.7;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1ADC8A04BD0CC461DBBB407C /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		1CB1791C5FB74ED703EE3E71 /* Hugeicons */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */;
+			productName = Hugeicons;
+		};
 		299A838A7B8892CA4C7945E3 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */;
@@ -649,6 +694,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */;
 			productName = AI;
+		};
+		D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
 		};
 		ECFA337F1032D11A4CC3842E /* Lottie */ = {
 			isa = XCSwiftPackageProductDependency;

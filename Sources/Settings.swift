@@ -36,31 +36,25 @@ enum OwnershipOperationStatus: Equatable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case capture
-    case connections
+    case general
     case transcription
-    case generation
-    case storage
+    case library
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .capture: "Capture"
-        case .connections: "Connections"
+        case .general: "General"
         case .transcription: "Transcription"
-        case .generation: "Generation"
-        case .storage: "Storage"
+        case .library: "Library & Calendar"
         }
     }
 
     var symbol: String {
         switch self {
-        case .capture: "waveform"
-        case .connections: "link"
+        case .general: "gearshape"
         case .transcription: "captions.bubble"
-        case .generation: "apple.intelligence"
-        case .storage: "internaldrive"
+        case .library: "shippingbox"
         }
     }
 }
@@ -71,47 +65,67 @@ struct BurritoSettingsView: View {
     let exportLibrary: () -> Void
     let importLibrary: () -> Void
     let ownershipStatus: OwnershipOperationStatus?
-    @State private var selected = SettingsTab.capture
+    @State private var selected = SettingsTab.general
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Settings")
-                    .font(.burritoDisplay(size: 34, weight: .regular))
-                    .tracking(-0.5)
-                    .padding(.bottom, 22)
+                Color.clear.frame(height: 12)
 
-                HStack(spacing: 8) {
-                    ForEach(SettingsTab.allCases) { tab in
-                        Button {
-                            BurritoHaptics.trigger(.alignment)
-                            if reduceMotion {
-                                selected = tab
-                            } else {
-                                withAnimation(.burritoSpring) {
-                                    selected = tab
-                                }
-                            }
-                        } label: {
-                            Label(tab.title, systemImage: tab.symbol)
-                                .font(.spline(size: 13, weight: selected == tab ? .semibold : .regular))
-                                .foregroundStyle(selected == tab ? .primary : .secondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 36)
-                                .background(
-                                    selected == tab ? BurritoTheme.controlFill : Color.clear,
-                                    in: Rectangle()
-                                )
-                                .overlay {
-                                    Rectangle().stroke(
-                                        selected == tab
-                                            ? BurritoTheme.softBorder
-                                            : Color.clear
-                                    )
-                                }
-                        }
-                        .buttonStyle(.plain)
+                HStack(alignment: .center, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Settings")
+                            .font(.spline(size: 26, weight: .medium))
+                            .foregroundStyle(.primary)
+
+                        Text("Preferences and data ownership on this Mac")
+                            .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
+                            .foregroundStyle(.secondary)
                     }
+
+                    Spacer(minLength: 20)
+
+                    // Apple-Grade Segmented Control (Fixed single-line width)
+                    HStack(spacing: 2) {
+                        ForEach(SettingsTab.allCases) { tab in
+                            Button {
+                                BurritoHaptics.trigger(.alignment)
+                                if reduceMotion {
+                                    selected = tab
+                                } else {
+                                    withAnimation(.burritoSpring) {
+                                        selected = tab
+                                    }
+                                }
+                            } label: {
+                                BurritoLabel(tab.title, systemImage: tab.symbol)
+                                    .font(.spline(size: 12, weight: selected == tab ? .medium : .regular))
+                                    .foregroundStyle(selected == tab ? .primary : .secondary)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 32)
+                                    .background(
+                                        selected == tab ? BurritoTheme.controlFill : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    )
+                                    .overlay {
+                                        if selected == tab {
+                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                .stroke(BurritoTheme.softBorder)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(selected == tab ? .isSelected : [])
+                        }
+                    }
+                    .padding(3)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+                    .layoutPriority(1)
                 }
                 .padding(.bottom, 28)
 
@@ -123,8 +137,8 @@ struct BurritoSettingsView: View {
                     ownershipStatus: ownershipStatus
                 )
             }
-            .frame(maxWidth: 780, alignment: .leading)
-            .padding(.horizontal, 38)
+            .frame(maxWidth: 820, alignment: .leading)
+            .padding(.horizontal, 36)
             .padding(.top, 16)
             .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
@@ -147,80 +161,105 @@ private struct SettingsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(tab.title)
-                .font(.burritoDisplay(size: 30, weight: .medium))
-                .padding(.bottom, 8)
-
-            Text(subtitle)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 28)
-
             switch tab {
-            case .capture:
-                SettingsToggleRow(
-                    title: "Include microphone",
-                    detail: "Use your microphone for every new recording.",
-                    isOn: $microphoneDefault
-                )
-                SettingsFootnote("System audio is always captured. Burrito never records screen frames.")
-            case .connections:
-                CalendarConnectionSettingsRow(calendarAccess: calendarAccess)
-                SettingsFootnote(
-                    "Calendar access is optional and only reads upcoming event details on this Mac."
-                )
-            case .transcription:
-                BurritoLanguagePicker(selection: $transcriptionLanguage)
-                    .frame(maxWidth: 330)
-                    .padding(.bottom, 14)
-                LanguageCoverageCard(
-                    language: TranscriptionLanguage.resolve(transcriptionLanguage)
-                )
-                SettingsFootnote(
-                    "\(TranscriptionLanguage.supported.count) selectable languages. "
-                        + "Burrito verifies the chosen engine before capture and never silently "
-                        + "switches the recording language."
-                )
-            case .generation:
-                SettingsChoiceGrid {
-                    ForEach(BuiltInTemplate.allCases) { template in
-                        SettingsChoice(
-                            title: template.name,
-                            symbol: template.symbol,
-                            isSelected: defaultTemplateID == template.rawValue
-                        ) {
-                            defaultTemplateID = template.rawValue
+            case .general:
+                VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "RECORDING & AUDIO")
+
+                        // Apple-Style Grouped Form Card
+                        VStack(spacing: 0) {
+                            BurritoToggleRow(
+                                title: "Include microphone by default",
+                                subtitle: "Capture your microphone alongside system audio for every new recording.",
+                                isOn: $microphoneDefault,
+                                style: .settingsForm
+                            )
+
+                            Divider().padding(.leading, 16)
+
+                            BurritoToggleRow(
+                                title: "Keep audio backups",
+                                subtitle: "Retain audio after successful transcription to allow regenerating notes later.",
+                                isOn: $retainAudioDefault,
+                                style: .settingsForm
+                            )
                         }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                        }
+
+                        SettingsFootnote("System audio is always captured privately. Burrito never records screen frames.")
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "DEFAULT NOTE TEMPLATE")
+
+                        SettingsChoiceGrid {
+                            ForEach(BuiltInTemplate.allCases) { template in
+                                SettingsChoice(
+                                    title: template.name,
+                                    symbol: template.symbol,
+                                    isSelected: defaultTemplateID == template.rawValue
+                                ) {
+                                    defaultTemplateID = template.rawValue
+                                }
+                            }
+                        }
+
+                        SettingsFootnote("New recordings automatically generate notes using your default template.")
                     }
                 }
-                SettingsFootnote("Generation stays private and runs through Apple Intelligence on this Mac.")
-            case .storage:
-                SettingsToggleRow(
-                    title: "Keep recordings",
-                    detail: "Retain audio after a successful transcription.",
-                    isOn: $retainAudioDefault
-                )
-                SettingsFootnote("Audio is always preserved if capture or transcription fails.")
-                OwnershipSettingsCard(
-                    exportLibrary: exportLibrary,
-                    importLibrary: importLibrary,
-                    status: ownershipStatus
-                )
+
+            case .transcription:
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "RECORDING LANGUAGE")
+
+                        BurritoLanguagePicker(selection: $transcriptionLanguage)
+                            .frame(maxWidth: 340)
+                            .padding(.bottom, 6)
+
+                        LanguageCoverageCard(
+                            language: TranscriptionLanguage.resolve(transcriptionLanguage)
+                        )
+
+                        SettingsFootnote(
+                            "\(TranscriptionLanguage.supported.count) selectable languages. "
+                                + "Burrito verifies the chosen engine before capture and never silently "
+                                + "switches the recording language."
+                        )
+                    }
+                }
+
+            case .library:
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "CALENDAR INTEGRATION")
+
+                        CalendarConnectionSettingsRow(calendarAccess: calendarAccess)
+
+                        SettingsFootnote(
+                            "Calendar access is optional and only reads upcoming event details on this Mac."
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "DATA OWNERSHIP & BACKUPS")
+
+                        OwnershipSettingsCard(
+                            exportLibrary: exportLibrary,
+                            importLibrary: importLibrary,
+                            status: ownershipStatus
+                        )
+                    }
+                }
             }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-
-    private var subtitle: String {
-        switch tab {
-        case .capture: "Choose what Burrito listens to."
-        case .connections: "Connect Burrito to your calendar."
-        case .transcription: "Set the language used for local transcription."
-        case .generation: "Choose how new recordings become useful notes."
-        case .storage: "Control what remains on your Mac."
-        }
-    }
-
 }
 
 private struct OwnershipSettingsCard: View {
@@ -231,15 +270,14 @@ private struct OwnershipSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: 15, weight: .medium))
+                BurritoIcon(name: "shippingbox", size: 15)
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 36, height: 36)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
-                        .font(.spline(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .medium))
                     Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
                         .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.secondary)
@@ -249,13 +287,13 @@ private struct OwnershipSettingsCard: View {
             }
 
             HStack(spacing: 10) {
-                Button("Export Library", systemImage: "square.and.arrow.up") {
+                BurritoButton("Export Library", systemImage: "square.and.arrow.up") {
                     exportLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
                 .disabled(status?.isRunning == true)
 
-                Button("Import Backup", systemImage: "square.and.arrow.down") {
+                BurritoButton("Import Backup", systemImage: "square.and.arrow.down") {
                     importLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
@@ -269,7 +307,7 @@ private struct OwnershipSettingsCard: View {
                             .controlSize(.small)
                             .tint(.secondary)
                     } else {
-                        Image(systemName: status.symbol)
+                        BurritoIcon(name: status.symbol)
                     }
                     Text(status.message)
                 }
@@ -285,9 +323,9 @@ private struct OwnershipSettingsCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.top, 18)
     }
@@ -298,14 +336,13 @@ private struct LanguageCoverageCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark.shield")
-                .font(.system(size: 15, weight: .medium))
+            BurritoIcon(name: "checkmark.shield", size: 15)
                 .foregroundStyle(BurritoTheme.accent)
                 .frame(width: 34, height: 34)
-                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
-                    .font(.spline(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .medium))
                 Text(language.engineCoverage.detail)
                     .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
@@ -313,9 +350,9 @@ private struct LanguageCoverageCard: View {
             Spacer()
         }
         .padding(14)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.bottom, 14)
     }
@@ -326,17 +363,16 @@ private struct CalendarConnectionSettingsRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "calendar")
-                .font(.system(size: 16, weight: .medium))
+            BurritoIcon(name: "calendar", size: 16)
                 .foregroundStyle(
                     calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
                 )
                 .frame(width: 38, height: 38)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
-                    .font(.spline(size: 14, weight: .semibold))
+                    .font(.spline(size: 14, weight: .medium))
                 Text(detail)
                     .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
@@ -346,9 +382,9 @@ private struct CalendarConnectionSettingsRow: View {
             action
         }
         .padding(16)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
         .padding(.bottom, 16)
         .onAppear {
@@ -369,7 +405,7 @@ private struct CalendarConnectionSettingsRow: View {
                 .controlSize(.small)
                 .frame(width: 120)
         case .authorized:
-            Label("Connected", systemImage: "checkmark")
+            BurritoLabel("Connected", systemImage: "checkmark")
                 .font(.spline(size: 13, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
         case .denied:
@@ -401,12 +437,12 @@ private struct SettingsActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.spline(size: 12, weight: .semibold))
+            .font(.spline(size: 12, weight: .medium))
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
-                Rectangle().stroke(BurritoTheme.softBorder)
+                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
             }
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed ? 0.965 : 1)
@@ -447,75 +483,30 @@ private struct SettingsChoice: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: symbol)
+                BurritoIcon(name: symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                 Text(title)
                 Spacer()
-                Rectangle()
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 20, height: 20)
                     .overlay {
                         if isSelected {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
+                            BurritoIcon(name: "checkmark", size: 9)
                                 .foregroundStyle(.white)
                         }
                     }
             }
             .padding(.horizontal, 14)
             .frame(height: 48)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(isSelected ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
             }
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct SettingsToggleRow: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let title: String
-    let detail: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button {
-            BurritoHaptics.trigger(.alignment)
-            if reduceMotion {
-                isOn.toggle()
-            } else {
-                withAnimation(.burritoSpring) {
-                    isOn.toggle()
-                }
-            }
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).foregroundStyle(.primary)
-                    Text(detail).font(.spline(size: 11, weight: .regular, relativeTo: .caption)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Rectangle()
-                    .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
-                    .frame(width: 42, height: 24)
-                    .overlay(alignment: isOn ? .trailing : .leading) {
-                        Rectangle()
-                            .fill(.white)
-                            .frame(width: 18, height: 18)
-                            .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
-                            .padding(3)
-                    }
-            }
-            .padding(16)
-            .background(BurritoTheme.raised, in: Rectangle())
-            .overlay {
-                Rectangle().stroke(BurritoTheme.softBorder)
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, 16)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -527,7 +518,7 @@ private struct SettingsFootnote: View {
     }
 
     var body: some View {
-        Label(text, systemImage: "lock.shield")
+        BurritoLabel(text, systemImage: "lock.shield")
             .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
     }

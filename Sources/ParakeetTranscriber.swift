@@ -117,26 +117,41 @@ actor ParakeetTranscriber {
     private var manager: AsrManager?
     private var loadedVariant: ParakeetModelVariant?
 
+    func release() {
+        manager = nil
+        loadedVariant = nil
+    }
+
     func transcribe(
         fileURL: URL,
         source: AudioSource,
         variant: ParakeetModelVariant,
         languageIdentifier: String
     ) async throws -> [TranscriptSegment] {
-        let manager = try await manager(for: variant)
-        let decoderLayerCount = await manager.decoderLayerCount
-        var decoderState = try TdtDecoderState(decoderLayers: decoderLayerCount)
-        let languageCode = Locale(identifier: languageIdentifier)
-            .language
-            .languageCode?
-            .identifier
-        let language = languageCode.flatMap(Language.init(rawValue:))
-        let result = try await manager.transcribe(
-            fileURL,
-            decoderState: &decoderState,
-            language: language
-        )
-        return Self.segments(from: result, source: source)
+        let lease = try await LocalModelInferenceGate.shared.acquire()
+        do {
+            try Task.checkCancellation()
+            await LocalLanguageModelRuntime.shared.release()
+            let manager = try await manager(for: variant)
+            let decoderLayerCount = await manager.decoderLayerCount
+            var decoderState = try TdtDecoderState(decoderLayers: decoderLayerCount)
+            let languageCode = Locale(identifier: languageIdentifier)
+                .language
+                .languageCode?
+                .identifier
+            let language = languageCode.flatMap(Language.init(rawValue:))
+            let result = try await manager.transcribe(
+                fileURL,
+                decoderState: &decoderState,
+                language: language
+            )
+            let segments = Self.segments(from: result, source: source)
+            await LocalModelInferenceGate.shared.release(lease)
+            return segments
+        } catch {
+            await LocalModelInferenceGate.shared.release(lease)
+            throw error
+        }
     }
 
     private func manager(for variant: ParakeetModelVariant) async throws -> AsrManager {

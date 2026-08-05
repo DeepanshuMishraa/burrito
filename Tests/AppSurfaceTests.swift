@@ -66,4 +66,38 @@ struct AppSurfaceTests {
 
         #expect(NoteExcerpt.text(for: note) == "Remember\nCall Priya tomorrow.")
     }
+
+    @MainActor
+    @Test("Ask Burrito keeps its chat session across navigation")
+    func askBurritoKeepsChatSession() {
+        let sessions = MemoryChatSessionStore()
+        sessions.askBurrito.draft = "Continue this thought"
+        sessions.askBurrito.messages.append(
+            MemoryChatMessage(isUser: true, text: "Earlier context")
+        )
+        sessions.askBurrito.isAnswering = true
+
+        let restored = sessions.askBurrito
+
+        #expect(restored.draft == "Continue this thought")
+        #expect(restored.messages.map(\.text) == ["Earlier context"])
+        #expect(restored.isAnswering)
+    }
+
+    @MainActor
+    @Test("Each note restores its own chat session")
+    func notesRestoreIndependentChatSessions() {
+        let sessions = MemoryChatSessionStore()
+        let firstNoteID = UUID()
+        let secondNoteID = UUID()
+        let firstSession = sessions.session(for: firstNoteID)
+        firstSession.messages.append(
+            MemoryChatMessage(isUser: false, text: "Still streaming")
+        )
+
+        #expect(sessions.session(for: firstNoteID) === firstSession)
+        #expect(sessions.session(for: firstNoteID).messages.map(\.text) == ["Still streaming"])
+        #expect(sessions.session(for: secondNoteID) !== firstSession)
+        #expect(sessions.askBurrito !== firstSession)
+    }
 }

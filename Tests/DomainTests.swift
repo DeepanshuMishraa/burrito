@@ -1,4 +1,5 @@
 import AITesting
+import AI
 import AVFoundation
 import EventKit
 import Foundation
@@ -169,6 +170,15 @@ struct AppearanceTests {
         #expect(BurritoAppearance.light.colorScheme == .light)
         #expect(BurritoAppearance.dark.colorScheme == .dark)
     }
+
+    @Test("Appearance choices use distinct Hugeicons glyphs")
+    func appearanceIconsAreDistinctAndSupported() {
+        let icons = BurritoAppearance.allCases.map(\.systemImage)
+
+        #expect(icons == ["computer", "sun02", "moon02"])
+        #expect(Set(icons).count == BurritoAppearance.allCases.count)
+        #expect(icons.allSatisfy(BurritoIconCatalog.supports))
+    }
 }
 
 @Suite("Notification access")
@@ -315,6 +325,328 @@ struct TranscriptTests {
 
 @Suite("Local memory")
 struct LocalMemoryTests {
+    @Test("Chat prompt separates general knowledge from meeting retrieval")
+    func generalChatPrompt() {
+        #expect(BurritoChatPrompt.instructions(scopedToMeeting: false).contains(
+            "Do not assume every question is about meetings"
+        ))
+        #expect(BurritoChatPrompt.instructions(scopedToMeeting: false).contains(
+            MeetingSearchTool.name
+        ))
+    }
+
+    @Test("Meeting intent deterministically routes explicit and contextual questions")
+    func meetingIntentRouting() {
+        #expect(MeetingQueryIntent.requiresSearch(
+            "Tell me about this",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: true
+        ))
+        #expect(MeetingQueryIntent.requiresSearch(
+            "What decisions were made in the meeting?",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
+        #expect(MeetingQueryIntent.requiresSearch(
+            "Summarize this",
+            hasDefaultMeetingScope: true,
+            hasExplicitMeetingScope: false
+        ))
+        #expect(!MeetingQueryIntent.requiresSearch(
+            "Help me write an email",
+            hasDefaultMeetingScope: true,
+            hasExplicitMeetingScope: false
+        ))
+        #expect(MeetingQueryIntent.isClearlyGeneral("Help me write an email"))
+        #expect(!MeetingQueryIntent.isClearlyGeneral(
+            "What were the main objections or concerns?"
+        ))
+        #expect(!MeetingQueryIntent.isClearlyGeneral(
+            "Explain the main objections or concerns."
+        ))
+        #expect(!MeetingQueryIntent.requiresSearch(
+            "Help me write a transcriptome research summary",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
+    }
+
+    @Test("General chat streams while tool-capable answers remain buffered")
+    func streamsClearlyGeneralChat() async throws {
+        let model = MockLanguageModel(responses: [[
+            .textDelta("Here is "),
+            .textDelta("a draft."),
+            .finish(reason: .stop, usage: Usage()),
+        ]])
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: "Help me write an email",
+            conversation: [],
+            documents: [],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let request = try #require(model.requests.first)
+        let updates = await recorder.updates
+
+        #expect(request.tools.isEmpty)
+        #expect(updates.first == "Here is ")
+        #expect(updates.last == response.text)
+        #expect(updates.count >= 2)
+    }
+
+    @Test("False transcript-access refusals are detected for grounded retry")
+    func detectsFalseTranscriptRefusal() {
+        #expect(MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I don't have access to your meeting transcripts. Please select a meeting."
+        ))
+        #expect(MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I don’t have access to your meeting transcripts."
+        ))
+        #expect(!MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I couldn't find a deadline in the retrieved transcript passages."
+        ))
+    }
+
+    @Test("Grounded retry never streams the false refusal")
+    func suppressesFalseRefusalBeforeRetry() async throws {
+        let noteID = UUID()
+        let segmentID = UUID()
+        let citation = "burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"
+        let refusal = "I don't have access to your meeting transcripts."
+        let corrected = "The launch is October 12. [source](\(citation))"
+        let model = MockLanguageModel(responses: [
+            [.textDelta(refusal), .finish(reason: .stop, usage: Usage())],
+            [.textDelta(corrected), .finish(reason: .stop, usage: Usage())],
+        ])
+        let adapter = FoundationModelAdapter(
+            model: model,
+            tokenMeasurer: CharacterTokenMeasurer(size: 32_768)
+        )
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+
+        let result = await answerer.answer(
+            question: "When is the launch?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: document,
+            meetingSearchRequired: true,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(updates == [response.text])
+        #expect(response.text.contains(corrected))
+    }
+
+    @Test("Meeting validation emits only the safe fallback")
+    func suppressesUnsupportedMeetingAnswer() async throws {
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let model = MockLanguageModel(
+            text: "The launch is tomorrow. [source](https://example.com)"
+        )
+        let adapter = FoundationModelAdapter(
+            model: model,
+            tokenMeasurer: CharacterTokenMeasurer(size: 32_768)
+        )
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: "When is the launch?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: document,
+            meetingSearchRequired: true,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(response.text.contains("couldn’t safely connect"))
+        #expect(updates == [response.text])
+    }
+
+    @Test(
+        "Classifier misses objections but chat keeps meeting search available",
+        arguments: [
+            "What were the main objections or concerns?",
+            "Explain the main objections or concerns.",
+        ]
+    )
+    func keepsMeetingSearchAvailableForMissedIntent(_ question: String) async throws {
+        #expect(!MeetingQueryIntent.requiresSearch(
+            question,
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
+        let model = MockLanguageModel(text: "I found the main objections.")
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: question,
+            conversation: [],
+            documents: [],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let request = try #require(model.requests.first)
+        let updates = await recorder.updates
+
+        #expect(request.tools.map(\.name) == [MeetingSearchTool.name])
+        #expect(updates.last == response.text)
+    }
+
+    @Test("Classifier-missed meeting search emits only its validated answer")
+    func buffersMissedIntentMeetingAnswerUntilValidated() async throws {
+        let noteID = UUID()
+        let segmentID = UUID()
+        let citation = "burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"
+        let toolCall = AI.ToolCall(
+            id: "call-1",
+            name: MeetingSearchTool.name,
+            arguments: ["query": "main objections concerns"]
+        )
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("An unsupported draft."),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("The main concern was pricing. [source](\(citation))"),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Customer feedback",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 8,
+                    duration: 4,
+                    text: "The main objection was concern about pricing."
+                ),
+            ]
+        )
+
+        let result = await answerer.answer(
+            question: "What were the main objections or concerns?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(response.usedMeetingEvidence)
+        #expect(response.searchedMeetings)
+        #expect(response.text.contains(citation))
+        #expect(updates == [response.text])
+    }
+
+    @Test("Meeting search tool returns citable transcript passages")
+    func meetingSearchTool() async throws {
+        let noteID = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+        let segmentID = try #require(UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let unrelated = MemoryDocument(
+            noteID: UUID(),
+            title: "Hiring review",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 4,
+                    duration: 2,
+                    text: "We should interview two design candidates."
+                ),
+            ]
+        )
+        let collector = MeetingEvidenceCollector()
+        let tool = MeetingSearchTool.make(
+            documents: [unrelated, document],
+            scopedDocument: nil,
+            collector: collector
+        )
+
+        let output = try await tool.execute(["query": "When is the launch date?"])
+        let evidenceText = try #require(output["evidence"]?.stringValue)
+        let collected = await collector.snapshot()
+
+        #expect(evidenceText.contains("October 12"))
+        #expect(!evidenceText.contains("design candidates"))
+        #expect(evidenceText.contains(
+            "[source](burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString))"
+        ))
+        #expect(collected.count == 1)
+        #expect(collected.first?.noteID == noteID)
+        #expect(collected.first?.segment.id == segmentID)
+    }
+
     @Test("Library questions retrieve the most relevant transcript passage")
     func retrievesRelevantEvidence() {
         let launch = MemoryDocument(
@@ -668,6 +1000,23 @@ private struct CharacterTokenMeasurer: PromptTokenMeasuring {
     func tokenCount(_ text: String) async throws -> Int { text.count }
 }
 
+@MainActor
+private final class StreamedTextRecorder {
+    private(set) var updates: [String] = []
+
+    func record(_ text: String) {
+        updates.append(text)
+    }
+}
+
+private actor InferenceLeaseProbe {
+    private(set) var wasAcquired = false
+
+    func markAcquired() {
+        wasAcquired = true
+    }
+}
+
 @Suite("Foundation model adapter")
 struct FoundationModelAdapterTests {
     @Test("Routes prompts through the Swift AI SDK")
@@ -689,6 +1038,406 @@ struct FoundationModelAdapterTests {
             "Use only supplied facts.",
             "Summarize this transcript.",
         ])
+    }
+
+    @Test("Streams n-1 chat history and meeting tools through the Swift AI SDK")
+    func routesChatToolsThroughSDK() async throws {
+        let model = MockLanguageModel(text: "Hello! How can I help?")
+        let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
+        let tool = AI.Tool(
+            name: MeetingSearchTool.name,
+            description: "Search meetings",
+            parameters: ["type": "object", "properties": [:]]
+        )
+
+        let response = try await adapter.completeChatStreaming(
+            instructions: "Be helpful.",
+            conversation: [
+                BurritoChatTurn(role: .user, text: "Hello"),
+                BurritoChatTurn(role: .assistant, text: "Hi!"),
+            ],
+            question: "How are you?",
+            tools: [tool],
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
+        )
+
+        #expect(response == "Hello! How can I help?")
+        let request = try #require(model.requests.first)
+        #expect(request.messages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(request.messages.map(\.text) == [
+            "Be helpful.", "Hello", "Hi!", "How are you?",
+        ])
+        #expect(request.tools.map(\.name) == [MeetingSearchTool.name])
+        let lastUpdate = await recorder.updates.last
+        #expect(lastUpdate == response)
+    }
+
+    @Test("Streaming preserves text across tool-call steps")
+    func preservesTextAcrossToolSteps() async throws {
+        let toolCall = AI.ToolCall(
+            id: "call-1",
+            name: "lookup",
+            arguments: [:]
+        )
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("Step one. "),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("Final step."),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
+        let tool = AI.Tool(
+            name: "lookup",
+            description: "Look up context",
+            parameters: ["type": "object", "properties": [:]],
+            execute: { _ in ["result": "done"] }
+        )
+
+        let response = try await adapter.completeChatStreaming(
+            instructions: "Use the tool.",
+            conversation: [],
+            question: "Continue across steps.",
+            tools: [tool],
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
+        )
+
+        #expect(response == "Step one. Final step.")
+        let lastUpdate = await recorder.updates.last
+        #expect(lastUpdate == response)
+    }
+
+    @Test("Injects prefetched meeting evidence before the question")
+    func injectsMeetingEvidence() async throws {
+        let model = MockLanguageModel(text: "The launch is October 12.")
+        let adapter = FoundationModelAdapter(model: model)
+
+        _ = try await adapter.completeChatStreaming(
+            instructions: "Use meeting evidence.",
+            conversation: [],
+            question: "When is the launch?",
+            tools: [],
+            meetingEvidence: "Passage: The launch is October 12.",
+            maximumResponseTokens: 512,
+            onTextUpdate: { _ in }
+        )
+
+        let request = try #require(model.requests.first)
+        #expect(request.messages.map(\.role) == [.system, .user, .user])
+        #expect(request.messages[1].text.contains("The launch is October 12"))
+        #expect(request.messages[2].text == "When is the launch?")
+    }
+}
+
+@Suite("Local language models")
+struct LocalLanguageModelTests {
+    @Test("Catalog exposes the three pinned Qwen tiers")
+    func catalogMetadata() {
+        #expect(LocalLanguageModelVariant.allCases == [.small, .medium, .large])
+        #expect(LocalLanguageModelVariant.small.parameterCount == "2B parameters")
+        #expect(LocalLanguageModelVariant.medium.downloadSize == "≈ 3.06 GB")
+        #expect(LocalLanguageModelVariant.large.downloadSizeBytes == 5_980_000_000)
+        #expect(
+            LocalLanguageModelVariant.small.revision
+                == "674aaa7240b91e8012fcad5d791b7dfe5ba90207"
+        )
+    }
+
+    @Test("Apple remains the safe default until a downloaded model is selected")
+    func resolvesPersistedSelection() {
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: nil,
+                isInstalled: { _ in false }
+            ) == .apple
+        )
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: GenerationModelSelection.local(.medium).rawValue,
+                isInstalled: { $0 == .medium }
+            ) == .local(.medium)
+        )
+        #expect(
+            GenerationModelSelection.resolve(
+                persistedValue: GenerationModelSelection.local(.large).rawValue,
+                isInstalled: { _ in false }
+            ) == .apple
+        )
+    }
+
+    @Test("Interrupted sharded model bundles are not installed")
+    func rejectsIncompleteShardedBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try Data("{}".utf8).write(to: directory.appending(path: "config.json"))
+        try Data("{}".utf8).write(to: directory.appending(path: "tokenizer.json"))
+        try Data("{}".utf8).write(to: directory.appending(path: "tokenizer_config.json"))
+        try Data("first".utf8).write(
+            to: directory.appending(path: "model-00001-of-00002.safetensors")
+        )
+        try Data(
+            """
+            {"weight_map":{"layer.0":"model-00001-of-00002.safetensors","layer.1":"model-00002-of-00002.safetensors"}}
+            """.utf8
+        ).write(to: directory.appending(path: "model.safetensors.index.json"))
+
+        let revision = "test-revision"
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: revision
+        )
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+
+        try Data("second".utf8).write(
+            to: directory.appending(path: "model-00002-of-00002.safetensors")
+        )
+        #expect(LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "stale-revision"
+        ))
+    }
+
+    @Test("Legacy migration records the original revision")
+    func migratesLegacyModelBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "legacy-revision"
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        try LocalLanguageModelStore.migrateLegacyInstallation(
+            at: directory,
+            revision: revision
+        )
+        #expect(LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "new-revision"
+        ))
+    }
+
+    @Test("Installation checks migrate complete legacy bundles safely")
+    func installationCheckMigratesLegacyModelBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "legacy-revision"
+        #expect(!LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: true
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        #expect(LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
+        ))
+    }
+
+    @Test("Failed downloads are not migrated after active tracking ends")
+    func rejectsMarkerlessFailedDownload() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try LocalLanguageModelStore.markInstallationStarted(at: directory)
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "test-revision"
+        #expect(!LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: revision
+        )
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(
+                path: ".burrito-installation-incomplete"
+            ).path
+        ))
+        #expect(LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
+        ))
+    }
+
+    @Test(
+        "Empty required model files are rejected",
+        arguments: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    )
+    func rejectsEmptyRequiredModelFile(_ emptyFilename: String) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            let data = filename == emptyFilename ? Data() : Data("{}".utf8)
+            try data.write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: "test-revision"
+        )
+
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "test-revision"
+        ))
+    }
+
+    @Test("Local inference leases serialize model runtimes")
+    func serializesLocalInference() async throws {
+        let gate = LocalModelInferenceGate()
+        let firstLease = try await gate.acquire()
+        let probe = InferenceLeaseProbe()
+        let waiter = Task {
+            let secondLease = try await gate.acquire()
+            await probe.markAcquired()
+            await gate.release(secondLease)
+        }
+
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(!(await probe.wasAcquired))
+
+        await gate.release(firstLease)
+        try await waiter.value
+        #expect(await probe.wasAcquired)
+    }
+
+    @Test("Swift AI SDK tools map into Qwen chat history")
+    func mapsToolCalling() throws {
+        let weather = AI.Tool(
+            name: "get_weather",
+            description: "Get weather for a city.",
+            parameters: [
+                "type": "object",
+                "properties": ["city": ["type": "string"]],
+                "required": ["city"],
+            ]
+        )
+        let request = LanguageModelRequest(
+            messages: [
+                .user("What is the weather in Delhi?"),
+                AI.Message(
+                    role: .assistant,
+                    content: [
+                        .toolCall(
+                            AI.ToolCall(
+                                id: "call-1",
+                                name: "get_weather",
+                                arguments: ["city": "Delhi"]
+                            )
+                        )
+                    ]
+                ),
+                AI.Message(
+                    role: .tool,
+                    content: [
+                        .toolResult(
+                            AI.ToolResult(
+                                toolCallID: "call-1",
+                                name: "get_weather",
+                                output: ["temperature": 31]
+                            )
+                        )
+                    ]
+                ),
+            ],
+            tools: [weather]
+        )
+
+        let input = try MLXRequestMapper.input(from: request)
+        #expect(input.tools?.count == 1)
+        guard case .messages(let messages) = input.prompt else {
+            Issue.record("Expected Qwen model-specific messages")
+            return
+        }
+        #expect(messages.count == 3)
+        #expect(messages[1]["role"] as? String == "assistant")
+        #expect(messages[1]["tool_calls"] != nil)
+        #expect(messages[2]["role"] as? String == "tool")
     }
 }
 
@@ -793,6 +1542,14 @@ struct TemplateTests {
             $0.systemName == "cylinder"
         })
         #expect(TemplateSymbolOption.matching("  ").count == TemplateSymbolOption.all.count)
+    }
+
+    @Test("Every app icon resolves to a Hugeicons asset")
+    func resolvesEveryAppIcon() {
+        #expect(BurritoIconCatalog.allAliasesAreValid)
+        #expect(TemplateSymbolOption.all.allSatisfy {
+            BurritoIconCatalog.supports($0.systemName)
+        })
     }
 
     @Test(

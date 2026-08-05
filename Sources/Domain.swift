@@ -690,6 +690,116 @@ enum ParakeetModelVariant: String, CaseIterable, Identifiable, Equatable, Sendab
     }
 }
 
+enum LocalLanguageModelVariant: String, CaseIterable, Identifiable, Equatable, Sendable {
+    case small
+    case medium
+    case large
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .small: "Qwen 3.5 Small"
+        case .medium: "Qwen 3.5 Medium"
+        case .large: "Qwen 3.5 Large"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .small: "Fast, capable generation for Macs with less unified memory."
+        case .medium: "The best balance of intelligence, speed, and memory use."
+        case .large: "The strongest local generation option for higher-memory Macs."
+        }
+    }
+
+    var parameterCount: String {
+        switch self {
+        case .small: "2B parameters"
+        case .medium: "4B parameters"
+        case .large: "9B parameters"
+        }
+    }
+
+    var downloadSize: String {
+        "≈ " + ByteCountFormatter.string(
+            fromByteCount: downloadSizeBytes,
+            countStyle: .decimal
+        )
+    }
+
+    var downloadSizeBytes: Int64 {
+        switch self {
+        case .small: 1_750_000_000
+        case .medium: 3_060_000_000
+        case .large: 5_980_000_000
+        }
+    }
+
+    var repositoryID: String {
+        switch self {
+        case .small: "mlx-community/Qwen3.5-2B-4bit"
+        case .medium: "mlx-community/Qwen3.5-4B-4bit"
+        case .large: "mlx-community/Qwen3.5-9B-4bit"
+        }
+    }
+
+    var revision: String {
+        switch self {
+        case .small: "674aaa7240b91e8012fcad5d791b7dfe5ba90207"
+        case .medium: "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c"
+        case .large: "8b2b98c00a6b4d291155e4890773ca8f769aee53"
+        }
+    }
+}
+
+enum GenerationModelSelection: Equatable, Sendable {
+    static let storageKey = "generationModel"
+
+    case apple
+    case local(LocalLanguageModelVariant)
+
+    var rawValue: String {
+        switch self {
+        case .apple: "apple"
+        case .local(let variant): "qwen3.5-\(variant.rawValue)"
+        }
+    }
+
+    init?(rawValue: String) {
+        if rawValue == "apple" {
+            self = .apple
+            return
+        }
+        let prefix = "qwen3.5-"
+        guard rawValue.hasPrefix(prefix),
+              let variant = LocalLanguageModelVariant(
+                rawValue: String(rawValue.dropFirst(prefix.count))
+              )
+        else {
+            return nil
+        }
+        self = .local(variant)
+    }
+
+    static func resolve(
+        persistedValue: String?,
+        isInstalled: (LocalLanguageModelVariant) -> Bool
+    ) -> GenerationModelSelection {
+        guard let persistedValue,
+              let selection = GenerationModelSelection(rawValue: persistedValue)
+        else {
+            return .apple
+        }
+        switch selection {
+        case .apple:
+            return .apple
+        case .local(let variant):
+            return isInstalled(variant) ? selection : .apple
+        }
+    }
+}
+
 enum TranscriptionEngineCoverage: Equatable, Sendable {
     case downloadableLocalModel
     case appleSpeech

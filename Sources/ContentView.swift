@@ -68,6 +68,8 @@ struct ContentView: View {
     @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
+    @State private var languageModelStore = LocalLanguageModelStore.shared
+    @State private var chatSessions = MemoryChatSessionStore()
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
@@ -156,6 +158,7 @@ struct ContentView: View {
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
+                    chatSession: chatSessions.session(for: selectedNote.id),
                     externalCitedSegmentID: selectedMemoryCitation?.noteID == selectedNote.id
                         ? selectedMemoryCitation?.segmentID
                         : nil,
@@ -369,15 +372,19 @@ struct ContentView: View {
             }
 
             if sidebarSelection == .models {
-                ModelsView(modelStore: modelStore)
+                ModelsView(
+                    modelStore: modelStore,
+                    languageModelStore: languageModelStore
+                )
             } else if sidebarSelection == .templates {
                 TemplatesView(templates: templates)
             } else if sidebarSelection == .memory {
                 MemoryChatView(
-                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask your meetings",
+                    session: chatSessions.askBurrito,
+                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask Burrito",
                     subtitle: memoryFolder == nil
-                        ? "Search every local transcript with cited answers."
-                        : "Search this folder's local transcripts with cited answers.",
+                        ? "Chat generally or search local transcripts with cited answers."
+                        : "Chat generally or search this folder's transcripts.",
                     documents: memoryNotes.map(memoryDocument),
                     languageIdentifier: defaultLanguage
                 ) { citation in
@@ -417,7 +424,7 @@ struct ContentView: View {
 
             Button(action: presentCommandPalette) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
+                    BurritoIcon(name: "magnifyingglass")
                         .foregroundStyle(.tertiary)
                     Text("Search")
                         .foregroundStyle(.secondary)
@@ -431,9 +438,9 @@ struct ContentView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .padding(.horizontal, 12)
@@ -570,8 +577,7 @@ struct ContentView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if sidebarSelection == .all {
                             Text("Coming up")
-                                .font(.burritoDisplay(size: 34, weight: .regular))
-                                .tracking(-0.5)
+                                .font(.spline(size: 28, weight: .bold))
                                 .padding(.bottom, 16)
 
                             CalendarCard(
@@ -579,12 +585,11 @@ struct ContentView: View {
                                 startRecording: startCalendarRecording,
                                 openSettings: openCalendarSettings
                             )
-                            .padding(.bottom, 26)
+                            .padding(.bottom, 24)
                         } else {
                             Text(sectionTitle)
-                                .font(.burritoDisplay(size: 32, weight: .regular))
-                                .tracking(-0.4)
-                                .padding(.bottom, 24)
+                                .font(.spline(size: 26, weight: .bold))
+                                .padding(.bottom, 20)
                         }
                     }
                     .frame(maxWidth: 780, alignment: .leading)
@@ -618,7 +623,7 @@ struct ContentView: View {
             Button {
                 confirmingEmptyTrash = true
             } label: {
-                Label("Empty trash", systemImage: "trash")
+                BurritoLabel("Empty trash", systemImage: "trash")
             }
             .buttonStyle(HomeToolbarButtonStyle(destructive: true))
             .disabled(visibleNotes.isEmpty)
@@ -629,7 +634,7 @@ struct ContentView: View {
                         memoryFolderID = folderID
                         sidebarSelection = .memory
                     } label: {
-                        Label("Ask folder", systemImage: "at")
+                        BurritoLabel("Ask folder", systemImage: "at")
                     }
                     .buttonStyle(HomeToolbarButtonStyle())
                 }
@@ -637,7 +642,7 @@ struct ContentView: View {
                 Button {
                     recordingDestination = .newNote
                 } label: {
-                    Label("New recording", systemImage: "plus")
+                    BurritoLabel("New recording", systemImage: "plus")
                 }
                 .buttonStyle(HomeToolbarButtonStyle())
             }
@@ -656,11 +661,9 @@ struct ContentView: View {
         } else {
             ForEach(noteDays, id: \.date) { group in
                 Text(noteGroupTitle(for: group.date))
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(0.7)
-                    .textCase(.uppercase)
+                    .font(.spline(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
-                    .padding(.top, 18)
+                    .padding(.top, 20)
                     .padding(.leading, 8)
                     .padding(.bottom, 6)
                 ForEach(group.notes) { note in
@@ -1166,8 +1169,7 @@ private struct CommandPaletteView: View {
 
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15, weight: .medium))
+                    BurritoIcon(name: "magnifyingglass", size: 15)
                         .foregroundStyle(BurritoTheme.accent)
 
                     TextField("Search notes and commands", text: $query)
@@ -1185,11 +1187,11 @@ private struct CommandPaletteView: View {
                         }
 
                     Text("ESC")
-                        .font(.spline(size: 9, weight: .semibold))
+                        .font(.spline(size: 9, weight: .medium))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 7)
                         .frame(height: 22)
-                        .background(BurritoTheme.controlFill, in: Rectangle())
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 58)
@@ -1221,8 +1223,7 @@ private struct CommandPaletteView: View {
 
                             if !hasResults {
                                 VStack(spacing: 8) {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 20, weight: .light))
+                                    BurritoIcon(name: "magnifyingglass", size: 20)
                                         .foregroundStyle(.tertiary)
                                     Text("Nothing found")
                                         .font(.spline(size: 13, weight: .regular))
@@ -1252,9 +1253,9 @@ private struct CommandPaletteView: View {
                 .frame(maxHeight: 390)
             }
             .frame(width: 560)
-            .background(BurritoTheme.paper, in: Rectangle())
+            .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
             .shadow(color: .black.opacity(0.28), radius: 28, y: 16)
@@ -1273,7 +1274,7 @@ private struct CommandPaletteView: View {
 
     private func paletteSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.spline(size: 9, weight: .semibold))
+            .font(.spline(size: 9, weight: .medium))
             .tracking(0.8)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 18)
@@ -1286,11 +1287,10 @@ private struct CommandPaletteView: View {
             selectCommand(command)
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: command.systemImage)
-                    .font(.system(size: 13, weight: .medium))
+                BurritoIcon(name: command.systemImage, size: 13)
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 Text(command == .toggleSidebar
                     ? (isSidebarVisible ? "Hide sidebar" : "Show sidebar")
@@ -1326,11 +1326,10 @@ private struct CommandPaletteView: View {
             selectNote(note.id)
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: note.templateSymbol)
-                    .font(.system(size: 13, weight: .medium))
+                BurritoIcon(name: note.templateSymbol, size: 13)
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(note.title)
@@ -1363,7 +1362,7 @@ private struct CommandPaletteView: View {
     }
 
     private var selectionHighlight: some View {
-        Rectangle()
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
             .fill(BurritoTheme.accentSoft)
             .matchedGeometryEffect(id: "command-palette-selection", in: selectionAnimation)
     }
@@ -1430,7 +1429,7 @@ private struct SidebarAccountCard: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("APPEARANCE")
-                    .font(.spline(size: 9, weight: .semibold))
+                    .font(.spline(size: 9, weight: .medium))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
 
@@ -1446,8 +1445,7 @@ private struct SidebarAccountCard: View {
                                 }
                             }
                         } label: {
-                            Image(systemName: option.systemImage)
-                                .font(.system(size: 11, weight: .semibold))
+                            BurritoIcon(name: option.systemImage, size: 11)
                                 .foregroundStyle(
                                     appearance == option ? BurritoTheme.accent : .secondary
                                 )
@@ -1457,7 +1455,7 @@ private struct SidebarAccountCard: View {
                                     appearance == option
                                         ? BurritoTheme.accentSoft
                                         : BurritoTheme.controlFill,
-                                    in: Rectangle()
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                                 .contentShape(Rectangle())
                         }
@@ -1481,15 +1479,15 @@ private struct SidebarAccountCard: View {
                     Image(nsImage: profile.image ?? NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 32, height: 32)
-                        .clipShape(Rectangle())
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .overlay {
-                            Rectangle()
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .stroke(BurritoTheme.softBorder)
                         }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
-                            .font(.spline(size: 13, weight: .semibold))
+                            .font(.spline(size: 13, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Text("Local account")
@@ -1499,10 +1497,12 @@ private struct SidebarAccountCard: View {
 
                     Spacer()
 
-                    Image(systemName: "ellipsis")
-                        .font(.spline(size: 10, weight: .semibold))
+                    BurritoIcon(
+                        name: "ellipsis",
+                        size: 10,
+                        accessibilityLabel: "Account and updates"
+                    )
                         .foregroundStyle(.tertiary)
-                        .accessibilityLabel("Account and updates")
                 }
                 .padding(11)
                 .contentShape(Rectangle())
@@ -1516,9 +1516,9 @@ private struct SidebarAccountCard: View {
                 AccountPopover(profile: profile, updater: updater)
             }
         }
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1534,11 +1534,11 @@ private struct AccountPopover: View {
                 Image(nsImage: profile.image ?? NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 34, height: 34)
-                    .clipShape(Rectangle())
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
-                        .font(.spline(size: 13, weight: .semibold))
+                        .font(.spline(size: 13, weight: .medium))
                     Text("Private on this Mac")
                         .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
@@ -1615,11 +1615,10 @@ private struct UpdateAvailableCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 11, weight: .semibold))
+                BurritoIcon(name: "arrow.down.circle", size: 11)
                     .foregroundStyle(BurritoTheme.accent)
                 Text("UPDATE AVAILABLE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
             }
@@ -1637,9 +1636,9 @@ private struct UpdateAvailableCard: View {
             .buttonStyle(UpdateActionButtonStyle())
         }
         .padding(11)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1652,7 +1651,7 @@ private struct UpdateAvailableCard: View {
 private struct UpdateActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.spline(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .medium))
             .frame(maxWidth: .infinity)
             .frame(height: 28)
             .foregroundStyle(.primary)
@@ -1660,10 +1659,10 @@ private struct UpdateActionButtonStyle: ButtonStyle {
                 configuration.isPressed
                     ? BurritoTheme.accentSoft
                     : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
             .contentShape(Rectangle())
@@ -1677,11 +1676,10 @@ private struct NotificationPermissionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
-                Image(systemName: "bell")
-                    .font(.system(size: 11, weight: .semibold))
+                BurritoIcon(name: "bell", size: 11)
                     .foregroundStyle(BurritoTheme.accent)
                 Text("DON'T MISS A NOTE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
             }
@@ -1697,13 +1695,13 @@ private struct NotificationPermissionCard: View {
                 Task { await access.requestAccess() }
             } label: {
                 Text(access.actionTitle)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .medium))
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
                     .foregroundStyle(.primary)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .overlay {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .stroke(BurritoTheme.softBorder)
                     }
                     .contentShape(Rectangle())
@@ -1711,9 +1709,9 @@ private struct NotificationPermissionCard: View {
             .buttonStyle(.plain)
         }
         .padding(11)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
     }
@@ -1733,7 +1731,16 @@ private struct NotificationPermissionCard: View {
 }
 
 private struct ModelsView: View {
+    private enum Tab {
+        case speechToText
+        case textModels
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var modelStore: ParakeetModelStore
+    @Bindable var languageModelStore: LocalLanguageModelStore
+
+    @State private var selectedTab: Tab = .speechToText
 
     private var hasInstalledModels: Bool {
         ParakeetModelVariant.allCases.contains {
@@ -1744,99 +1751,356 @@ private struct ModelsView: View {
         }
     }
 
+    private var activeEngineTitle: String {
+        switch languageModelStore.selection {
+        case .apple: "Apple Intelligence"
+        case .local(let variant): variant.displayName
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 44)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
-                    VStack(alignment: .leading, spacing: 8) {
+            // Header Section
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
                         Text("Models")
-                            .font(.burritoDisplay(size: 34, weight: .regular))
-                            .tracking(-0.5)
-                        Text("Burrito automatically uses the best installed model after a recording.")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                    }
+                            .font(.spline(size: 26, weight: .medium))
+                            .foregroundStyle(.primary)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "Transcription engine")
-                        HStack(spacing: 12) {
-                            Image(systemName: hasInstalledModels ? "waveform" : "apple.logo")
-                                .foregroundStyle(BurritoTheme.accent)
-                                .frame(width: 20)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(hasInstalledModels ? "Downloaded models first" : "Apple Speech")
-                                    .font(.system(size: 12, weight: .medium))
-                                Text(
-                                    hasInstalledModels
-                                        ? "Apple Speech handles languages without a matching model"
-                                        : "Install a model below to use it automatically"
-                                )
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                        Text("On-device AI")
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
                             }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(height: 54)
-                        .background(BurritoTheme.raised, in: Rectangle())
-                        .overlay {
-                            Rectangle()
-                                .stroke(BurritoTheme.softBorder.opacity(0.7))
-                        }
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .firstTextBaseline) {
-                            BurritoSectionLabel(title: "Parakeet")
-                            Spacer()
-                            Text("Models stay on this Mac")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                        }
-
-                        VStack(spacing: 0) {
-                            ForEach(
-                                Array(ParakeetModelVariant.allCases.enumerated()),
-                                id: \.element
-                            ) { index, variant in
-                                ModelCatalogRow(
-                                    variant: variant,
-                                    state: modelStore.state(for: variant)
-                                ) {
-                                    Task { await modelStore.install(variant) }
-                                }
-
-                                if index < ParakeetModelVariant.allCases.count - 1 {
-                                    Divider().padding(.leading, 20)
-                                }
-                            }
-                        }
-                        .background(BurritoTheme.raised, in: Rectangle())
-                        .overlay {
-                            Rectangle()
-                                .stroke(BurritoTheme.softBorder.opacity(0.7))
-                        }
-                    }
-
-                    Text(
-                        "Burrito chooses the best installed model for the recording language. "
-                            + "Unsupported languages continue through Apple Speech."
-                    )
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    Text("Download private models for transcription and note synthesis.")
+                        .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
+                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: 800, alignment: .leading)
-                .padding(.horizontal, 38)
-                .padding(.top, 22)
-                .padding(.bottom, 80)
+
+                Spacer()
+
+                // Segmented Tab Switcher (Speech to Text vs Text Models)
+                HStack(spacing: 2) {
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            selectedTab = .speechToText
+                        }
+                    } label: {
+                        BurritoLabel("Speech to Text", systemImage: "waveform")
+                            .font(.spline(size: 12, weight: selectedTab == .speechToText ? .medium : .regular))
+                            .foregroundStyle(selectedTab == .speechToText ? .primary : .secondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(
+                                selectedTab == .speechToText ? BurritoTheme.controlFill : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            selectedTab = .textModels
+                        }
+                    } label: {
+                        BurritoLabel("Text Models", systemImage: "sparkles")
+                            .font(.spline(size: 12, weight: selectedTab == .textModels ? .medium : .regular))
+                            .foregroundStyle(selectedTab == .textModels ? .primary : .secondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(
+                                selectedTab == .textModels ? BurritoTheme.controlFill : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(3)
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                }
+            }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 22)
+
+            // Content Body for Selected Tab
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if selectedTab == .speechToText {
+                        // SPEECH TO TEXT TAB
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(BurritoTheme.accentSoft)
+                                        .frame(width: 38, height: 38)
+                                    BurritoIcon(name: hasInstalledModels ? "waveform" : "apple.logo", size: 16)
+                                        .foregroundStyle(BurritoTheme.accent)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(hasInstalledModels ? "Downloaded models active" : "Apple Speech active")
+                                        .font(.spline(size: 13, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                    Text(
+                                        hasInstalledModels
+                                            ? "Parakeet handles supported languages; Apple Speech acts as fallback."
+                                            : "Install a model below to process recordings automatically on-device."
+                                    )
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(16)
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline) {
+                                BurritoSectionLabel(title: "PARAKEET SPEECH MODELS")
+                                Spacer()
+                                Text("Models stay on this Mac")
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.tertiary)
+                            }
+
+                            VStack(spacing: 0) {
+                                ForEach(
+                                    Array(ParakeetModelVariant.allCases.enumerated()),
+                                    id: \.element
+                                ) { index, variant in
+                                    ModelCatalogRow(
+                                        variant: variant,
+                                        state: modelStore.state(for: variant)
+                                    ) {
+                                        Task { await modelStore.install(variant) }
+                                    }
+
+                                    if index < ParakeetModelVariant.allCases.count - 1 {
+                                        Divider().padding(.leading, 20)
+                                    }
+                                }
+                            }
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
+                        }
+
+                        Text("Burrito automatically picks the optimal installed speech model for the recording language.")
+                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.tertiary)
+
+                    } else {
+                        // TEXT MODELS TAB
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(BurritoTheme.accentSoft)
+                                        .frame(width: 38, height: 38)
+                                    BurritoIcon(name: "sparkles", size: 16)
+                                        .foregroundStyle(BurritoTheme.accent)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Active Engine: \(activeEngineTitle)")
+                                        .font(.spline(size: 13, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                    Text("Used for prompt synthesis, structure parsing, and note generation.")
+                                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(16)
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline) {
+                                BurritoSectionLabel(title: "NOTE GENERATION MODELS")
+                                Spacer()
+                                Text("Apple Intelligence is the default")
+                                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                                    .foregroundStyle(.tertiary)
+                            }
+
+                            VStack(spacing: 0) {
+                                GenerationModelCatalogRow(
+                                    title: "Apple Intelligence",
+                                    summary: "Built into macOS. Lightweight, private, and always available.",
+                                    parameterCount: "System model",
+                                    downloadSize: "No download",
+                                    isSelected: languageModelStore.selection == .apple,
+                                    state: nil
+                                ) {
+                                    languageModelStore.select(.apple)
+                                }
+
+                                Divider().padding(.leading, 20)
+
+                                ForEach(
+                                    Array(LocalLanguageModelVariant.allCases.enumerated()),
+                                    id: \.element
+                                ) { index, variant in
+                                    GenerationModelCatalogRow(
+                                        title: variant.displayName,
+                                        summary: variant.summary,
+                                        parameterCount: variant.parameterCount,
+                                        downloadSize: variant.downloadSize,
+                                        isSelected: languageModelStore.selection == .local(variant),
+                                        state: languageModelStore.state(for: variant)
+                                    ) {
+                                        switch languageModelStore.state(for: variant) {
+                                        case .installed:
+                                            languageModelStore.select(.local(variant))
+                                        case .notInstalled, .paused, .failed:
+                                            Task { await languageModelStore.install(variant) }
+                                        case .downloading:
+                                            languageModelStore.cancelInstallation(variant)
+                                        }
+                                    }
+
+                                    if index < LocalLanguageModelVariant.allCases.count - 1 {
+                                        Divider().padding(.leading, 20)
+                                    }
+                                }
+                            }
+                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: 820, alignment: .leading)
+                .padding(.horizontal, 36)
+                .padding(.top, 12)
+                .padding(.bottom, 60)
                 .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
         }
         .background(BurritoTheme.canvas)
-        .onAppear { modelStore.refresh() }
+        .onAppear {
+            modelStore.refresh()
+            languageModelStore.refresh()
+        }
+    }
+}
+
+private struct GenerationModelCatalogRow: View {
+    let title: String
+    let summary: String
+    let parameterCount: String
+    let downloadSize: String
+    let isSelected: Bool
+    let state: LocalLanguageModelState?
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.spline(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                    Text(summary)
+                        .font(.spline(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 14) {
+                    ModelProperty(systemImage: "cpu", value: parameterCount)
+                    ModelProperty(systemImage: "arrow.down.circle", value: downloadSize)
+                    ModelProperty(systemImage: "lock", value: "On-device")
+                    if state != nil {
+                        ModelProperty(systemImage: "wrench.and.screwdriver", value: "Tool calling")
+                    }
+                }
+            }
+
+            Spacer(minLength: 18)
+            modelAction.frame(minWidth: 88, alignment: .trailing)
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var modelAction: some View {
+        if isSelected {
+            BurritoLabel("In use", systemImage: "checkmark")
+                .font(.spline(size: 11, weight: .medium))
+                .foregroundStyle(BurritoTheme.accent)
+        } else if let state {
+            switch state {
+            case .notInstalled:
+                BurritoInlineButton(title: "Install", systemImage: "arrow.down", action: action)
+            case .paused(let progress):
+                VStack(alignment: .trailing, spacing: 6) {
+                    BurritoInlineButton(title: "Resume", systemImage: "arrow.clockwise", action: action)
+                    Text("\(max(1, Int(progress * 100)))% saved")
+                        .font(.spline(size: 9, weight: .regular, relativeTo: .caption2))
+                        .foregroundStyle(.tertiary)
+                }
+            case .downloading(let progress):
+                VStack(alignment: .trailing, spacing: 7) {
+                    BurritoInlineButton(
+                        title: "Cancel",
+                        systemImage: "xmark",
+                        action: action
+                    )
+                    Text("\(Int(progress * 100))%")
+                        .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
+                        .foregroundStyle(.secondary)
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                .fill(BurritoTheme.controlFill)
+                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                .fill(BurritoTheme.accent)
+                                .frame(width: proxy.size.width * progress)
+                        }
+                    }
+                    .frame(width: 82, height: 3)
+                }
+                .accessibilityLabel("Installing \(title)")
+                .accessibilityValue("\(Int(progress * 100)) percent")
+            case .installed:
+                BurritoInlineButton(title: "Use", systemImage: "checkmark", action: action)
+            case .failed(let message):
+                VStack(alignment: .trailing, spacing: 5) {
+                    BurritoInlineButton(title: "Retry", systemImage: "arrow.clockwise", action: action)
+                    Text(message)
+                        .font(.spline(size: 9, weight: .regular))
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                        .frame(maxWidth: 130, alignment: .trailing)
+                }
+            }
+        } else {
+            BurritoInlineButton(title: "Use", systemImage: "apple.logo", action: action)
+        }
     }
 }
 
@@ -1850,9 +2114,10 @@ private struct ModelCatalogRow: View {
             VStack(alignment: .leading, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(variant.displayName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
                     Text(variant.summary)
-                        .font(.system(size: 12))
+                        .font(.spline(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
 
@@ -1901,18 +2166,18 @@ private struct ModelCatalogRow: View {
                     action: install
                 )
                 Text("\(max(1, Int(progress * 100)))% saved")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.spline(size: 9, weight: .regular, relativeTo: .caption2))
                     .foregroundStyle(.tertiary)
             }
         case .downloading(let progress):
             VStack(alignment: .trailing, spacing: 7) {
                 Text("\(Int(progress * 100))%")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                     .foregroundStyle(.secondary)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
-                        Rectangle().fill(BurritoTheme.controlFill)
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous).fill(BurritoTheme.controlFill)
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(BurritoTheme.accent)
                             .frame(width: proxy.size.width * progress)
                     }
@@ -1922,9 +2187,9 @@ private struct ModelCatalogRow: View {
             .accessibilityLabel("Installing \(variant.displayName)")
             .accessibilityValue("\(Int(progress * 100)) percent")
         case .installed:
-            Label("Installed", systemImage: "checkmark")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(BurritoTheme.sage)
+            BurritoLabel("Installed", systemImage: "checkmark")
+                .font(.spline(size: 11, weight: .medium))
+                .foregroundStyle(BurritoTheme.accent)
         case .failed(let message):
             VStack(alignment: .trailing, spacing: 5) {
                 BurritoInlineButton(
@@ -1933,7 +2198,7 @@ private struct ModelCatalogRow: View {
                     action: install
                 )
                 Text(message)
-                    .font(.system(size: 9))
+                    .font(.spline(size: 9, weight: .regular))
                     .foregroundStyle(.red)
                     .lineLimit(2)
                     .frame(maxWidth: 130, alignment: .trailing)
@@ -1947,8 +2212,8 @@ private struct ModelProperty: View {
     let value: String
 
     var body: some View {
-        Label(value, systemImage: systemImage)
-            .font(.system(size: 10))
+        BurritoLabel(value, systemImage: systemImage)
+            .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
             .foregroundStyle(.secondary)
     }
 }
@@ -2012,7 +2277,7 @@ private struct ScooterGenerationLoader: View {
 
                 VStack(spacing: 12) {
                     Text(copy.eyebrow)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .tracking(1.35)
                         .foregroundStyle(BurritoTheme.accent.opacity(0.86))
 
@@ -2034,7 +2299,7 @@ private struct ScooterGenerationLoader: View {
                             id: \.element
                         ) { index, item in
                             HStack(spacing: 6) {
-                                Rectangle()
+                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                                     .fill(stageColor(at: index))
                                     .frame(width: 5, height: 5)
                                 Text(shortLabel(for: item))
@@ -2131,9 +2396,9 @@ private struct PermissionGateView: View {
                     Divider().opacity(0.45)
                     CalendarPermissionRow(calendarAccess: calendarAccess)
                 }
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
 
@@ -2146,16 +2411,16 @@ private struct PermissionGateView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()
-                    Button("Continue", systemImage: "arrow.right", action: continueAction)
+                    BurritoButton("Continue", systemImage: "arrow.right", action: continueAction)
                         .buttonStyle(BurritoActionButtonStyle(prominent: true))
                         .disabled(!permissions.allGranted)
                 }
             }
             .padding(50)
             .frame(width: 820)
-            .background(BurritoTheme.paper, in: Rectangle())
+            .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         }
@@ -2167,13 +2432,12 @@ private struct CalendarPermissionRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "calendar")
-                .font(.system(size: 16, weight: .medium))
+            BurritoIcon(name: "calendar", size: 16)
                 .foregroundStyle(
                     calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
                 )
                 .frame(width: 36, height: 36)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Show upcoming meetings")
@@ -2198,9 +2462,8 @@ private struct CalendarPermissionRow: View {
         case .authorized:
             HStack(spacing: 7) {
                 ZStack {
-                    Rectangle().fill(BurritoTheme.accent)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                    RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
+                    BurritoIcon(name: "checkmark", size: 9)
                         .foregroundStyle(.white)
                 }
                 .frame(width: 18, height: 18)
@@ -2251,11 +2514,10 @@ private struct PermissionRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .medium))
+            BurritoIcon(name: systemImage, size: 16)
                 .foregroundStyle(state == .granted ? BurritoTheme.accent : .secondary)
                 .frame(width: 36, height: 36)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
@@ -2267,9 +2529,8 @@ private struct PermissionRow: View {
             if state == .granted {
                 HStack(spacing: 7) {
                     ZStack {
-                        Rectangle().fill(BurritoTheme.accent)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 9, weight: .bold))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
+                        BurritoIcon(name: "checkmark", size: 9)
                             .foregroundStyle(.white)
                     }
                     .frame(width: 18, height: 18)
@@ -2296,17 +2557,17 @@ private struct BurritoActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(prominent ? Color(nsColor: .textBackgroundColor) : .primary)
             .padding(.horizontal, 18)
             .frame(height: 38)
             .background(
                 prominent ? Color.primary : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
                 if !prominent {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
             }
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
@@ -2323,7 +2584,7 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(destructive ? Color.red.opacity(0.82) : Color.secondary)
             .padding(.horizontal, 10)
             .frame(height: 28)
@@ -2331,10 +2592,10 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
                 configuration.isPressed
                     ? BurritoTheme.controlFill.opacity(1.35)
                     : BurritoTheme.controlFill,
-                in: Rectangle()
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
             .opacity(isEnabled ? 1 : 0.35)
@@ -2350,11 +2611,11 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .frame(height: 38)
-            .background(Color.red.opacity(0.78), in: Rectangle())
+            .background(Color.red.opacity(0.78), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.34)
             .burritoPressFeedback(
                 isPressed: configuration.isPressed,
@@ -2369,11 +2630,11 @@ private struct BurritoIconButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(width: 34, height: 34)
-            .background(BurritoTheme.controlFill, in: Rectangle())
-            .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.68 : 1) : 0.34)
             .burritoPressFeedback(
                 isPressed: configuration.isPressed,
@@ -2421,12 +2682,12 @@ private struct SidebarToggleButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(
-                systemName: isExpanded
+            BurritoIcon(
+                name: isExpanded
                     ? "arrow.left.to.line.compact"
-                    : "arrow.right.to.line.compact"
+                    : "arrow.right.to.line.compact",
+                size: 16
             )
-                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isHovered ? .primary : .secondary)
                 .frame(width: 30, height: 30)
                 .opacity(isHovered ? 1 : 0.76)
@@ -2446,13 +2707,12 @@ private struct SidebarHeaderAddButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 9, weight: .bold))
+            BurritoIcon(name: "plus", size: 9)
                 .foregroundStyle(isHovered ? .primary : .tertiary)
                 .frame(width: 22, height: 22)
                 .background(
                     isHovered ? BurritoTheme.controlFill : Color.clear,
-                    in: Rectangle()
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                 )
         }
         .buttonStyle(.plain)
@@ -2470,14 +2730,14 @@ private struct BurritoInlineButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
+            BurritoLabel(title, systemImage: systemImage)
                 .font(.spline(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -2524,11 +2784,10 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 11) {
-                Image(systemName: note.deletedAt == nil ? "note.text" : "trash")
-                    .font(.system(size: 13, weight: .medium))
+                BurritoIcon(name: note.deletedAt == nil ? "note.text" : "trash", size: 13)
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 34, height: 34)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
+                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(note.title)
@@ -2542,21 +2801,23 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
                 }
                 Spacer(minLength: 0)
                 if note.isFavorite, note.deletedAt == nil {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 10))
+                    BurritoIcon(
+                        name: "star.fill",
+                        size: 10,
+                        accessibilityLabel: "Favorite"
+                    )
                         .foregroundStyle(BurritoTheme.accent)
-                        .accessibilityLabel("Favorite")
                 }
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 10)
 
-            Rectangle()
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(BurritoTheme.softBorder)
                 .frame(height: 1)
 
             Text(sectionTitle.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .tracking(0.8)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 10)
@@ -2572,7 +2833,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
         .frame(width: 244)
         .background(BurritoTheme.raised)
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.5)
         }
         .presentationBackground(BurritoTheme.raised)
@@ -2612,8 +2873,7 @@ private struct BurritoPopoverRowLabel: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .medium))
+            BurritoIcon(name: systemImage, size: 11)
                 .foregroundStyle(tint ?? (isSelected ? BurritoTheme.accent : Color.secondary))
                 .frame(width: 16)
             Text(title)
@@ -2621,8 +2881,7 @@ private struct BurritoPopoverRowLabel: View {
                 .foregroundStyle(tint ?? Color.primary)
             Spacer()
             if isSelected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
+                BurritoIcon(name: "checkmark", size: 10)
                     .foregroundStyle(BurritoTheme.accent)
             }
         }
@@ -2631,14 +2890,14 @@ private struct BurritoPopoverRowLabel: View {
         .contentShape(Rectangle())
         .background(
             isHovered ? BurritoTheme.controlFill : Color.clear,
-            in: Rectangle()
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
     }
 }
 
 private struct BurritoPopoverDivider: View {
     var body: some View {
-        Rectangle()
+        RoundedRectangle(cornerRadius: 0, style: .continuous)
             .fill(BurritoTheme.softBorder)
             .frame(height: 1)
             .padding(.horizontal, 8)
@@ -2743,9 +3002,9 @@ private struct BurritoModalBackdrop<Content: View>: View {
             Color.black.opacity(0.36)
                 .ignoresSafeArea()
             content()
-                .background(BurritoTheme.paper, in: Rectangle())
+                .background(BurritoTheme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
         }
@@ -2769,9 +3028,9 @@ private struct NewFolderDialog: View {
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 13)
                 .frame(height: 42)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(create)
@@ -2844,7 +3103,7 @@ private struct SidebarItemLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label(title, systemImage: systemImage)
+            BurritoLabel(title, systemImage: systemImage)
                 .font(.spline(size: 13, weight: .regular))
                 .lineLimit(1)
             Spacer()
@@ -2878,18 +3137,18 @@ private struct SidebarNavigationButton: View {
         } label: {
             HStack(spacing: 8) {
                 if isSelected {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 3, height: 16)
                         .transition(.scale(scale: 0.8, anchor: .center).combined(with: .opacity))
                 }
                 Group {
                     if let markerColor {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(markerColor)
                             .frame(width: 8, height: 8)
                     } else {
-                        Image(systemName: systemImage)
+                        BurritoIcon(name: systemImage)
                             .foregroundStyle(isSelected ? BurritoTheme.accent : (isHovered ? .primary : .secondary))
                     }
                 }
@@ -2909,7 +3168,7 @@ private struct SidebarNavigationButton: View {
                         .padding(.vertical, 1)
                         .background(
                             isSelected ? BurritoTheme.accentSoft : (isHovered ? BurritoTheme.controlFill : Color.clear),
-                            in: Rectangle()
+                            in: RoundedRectangle(cornerRadius: 4, style: .continuous)
                         )
                 }
             }
@@ -2923,7 +3182,7 @@ private struct SidebarNavigationButton: View {
         .onHover { isHovered = $0 }
         .background(
             isSelected ? BurritoTheme.controlFill : (isHovered ? BurritoTheme.controlFill.opacity(0.45) : Color.clear),
-            in: Rectangle()
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .animation(reduceMotion ? nil : .burritoSpring, value: isSelected)
         .animation(
@@ -2944,104 +3203,100 @@ private struct CalendarCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 13, weight: .medium))
+                BurritoIcon(name: "calendar", size: 13)
                     .foregroundStyle(BurritoTheme.accent)
                 Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
-                    .font(.spline(size: 12, weight: .semibold))
+                    .font(.spline(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
                 Text("Recent & upcoming meetings")
                     .font(.spline(size: 12, weight: .regular))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 if calendarAccess.state == .authorized {
                     Button {
                         calendarAccess.refresh()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        BurritoLabel("Refresh", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
                     .font(.spline(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                     .help("Refresh upcoming Calendar events")
                 }
             }
-            .padding(.horizontal, 18)
-            .frame(height: 46)
+            .padding(.horizontal, 16)
+            .frame(height: 42)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder.opacity(0.75))
-                .frame(height: 1)
-
-            Group {
-                switch calendarAccess.state {
-                case .notDetermined:
-                    CalendarConnectionState(
-                        symbol: "calendar.badge.plus",
-                        title: "Bring your day into focus",
-                        detail: "Connect Calendar to see what’s coming up.",
-                        buttonTitle: "Connect Calendar"
-                    ) {
-                        Task { await calendarAccess.requestAccess() }
+            switch calendarAccess.state {
+            case .notDetermined:
+                CalendarConnectionState(
+                    symbol: "calendar.badge.plus",
+                    title: "Bring your day into focus",
+                    detail: "Connect Calendar to see what’s coming up.",
+                    buttonTitle: "Connect Calendar"
+                ) {
+                    Task { await calendarAccess.requestAccess() }
+                }
+            case .requesting:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Connecting Calendar…")
+                        .font(.spline(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+            case .authorized:
+                if calendarAccess.upcomingEvents.isEmpty {
+                    HStack(spacing: 8) {
+                        BurritoIcon(name: "calendar.badge.clock", size: 12)
+                            .foregroundStyle(.tertiary)
+                        Text("No timed events found from the last 24 hours onward.")
+                            .font(.spline(size: 11, weight: .regular))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
                     }
-                case .requesting:
-                    VStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Connecting Calendar…")
-                            .font(.spline(size: 13, weight: .regular, relativeTo: .callout))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .authorized:
-                    if calendarAccess.upcomingEvents.isEmpty {
-                        CalendarConnectionState(
-                            symbol: "calendar.badge.clock",
-                            title: "No recent or upcoming meetings",
-                            detail: "No timed events were found from the last 24 hours onward.",
-                            buttonTitle: nil,
-                            action: {}
-                        )
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
-                                index, event in
-                                UpcomingEventRow(event: event, startRecording: startRecording)
-                                if index < calendarAccess.upcomingEvents.count - 1 {
-                                    Rectangle()
-                                        .fill(BurritoTheme.softBorder)
-                                        .frame(height: 1)
-                                }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(calendarAccess.upcomingEvents.enumerated()), id: \.element.id) {
+                            index, event in
+                            UpcomingEventRow(event: event, startRecording: startRecording)
+                            if index < calendarAccess.upcomingEvents.count - 1 {
+                                RoundedRectangle(cornerRadius: 0, style: .continuous)
+                                    .fill(BurritoTheme.softBorder.opacity(0.5))
+                                    .frame(height: 1)
                             }
                         }
-                        .padding(.horizontal, 18)
                     }
-                case .denied:
-                    CalendarConnectionState(
-                        symbol: "calendar.badge.exclamationmark",
-                        title: "Calendar access is off",
-                        detail: "Allow Burrito in Privacy & Security → Calendars.",
-                        buttonTitle: "Open System Settings",
-                        action: openSettings
-                    )
-                case .failed(let message):
-                    CalendarConnectionState(
-                        symbol: "exclamationmark.triangle",
-                        title: "Calendar couldn’t load",
-                        detail: message,
-                        buttonTitle: "Try Again"
-                    ) {
-                        Task { await calendarAccess.requestAccess() }
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+            case .denied:
+                CalendarConnectionState(
+                    symbol: "calendar.badge.exclamationmark",
+                    title: "Calendar access is off",
+                    detail: "Allow Burrito in Privacy & Security → Calendars.",
+                    buttonTitle: "Open System Settings",
+                    action: openSettings
+                )
+            case .failed(let message):
+                CalendarConnectionState(
+                    symbol: "exclamationmark.triangle",
+                    title: "Calendar couldn’t load",
+                    detail: message,
+                    buttonTitle: "Try Again"
+                ) {
+                    Task { await calendarAccess.requestAccess() }
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 110)
         }
-        .background(BurritoTheme.raised.opacity(0.58))
+        .background(BurritoTheme.paper.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle()
-                .stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder.opacity(0.7), lineWidth: 0.75)
         }
-        .clipShape(Rectangle())
     }
 }
 
@@ -3053,34 +3308,24 @@ private struct CalendarConnectionState: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title)
-                .font(.spline(size: 13, weight: .semibold))
-            Text(detail)
-                .font(.spline(size: 11, weight: .regular))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+        HStack(spacing: 12) {
+            BurritoIcon(name: symbol, size: 16)
+                .foregroundStyle(BurritoTheme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.spline(size: 12, weight: .medium))
+                Text(detail)
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
             if let buttonTitle {
                 Button(buttonTitle, action: action)
                     .buttonStyle(HomeToolbarButtonStyle())
-                    .padding(.top, 3)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BurritoTheme.controlFill.opacity(0.3), in: Rectangle())
-        .overlay {
-            Rectangle()
-                .stroke(
-                    BurritoTheme.softBorder.opacity(0.7),
-                    style: StrokeStyle(lineWidth: 0.75, dash: [5, 5])
-                )
-        }
-        .padding(10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -3092,7 +3337,7 @@ private struct UpcomingEventRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.startDate.formatted(date: .omitted, time: .shortened))
-                    .font(.spline(size: 12, weight: .semibold).monospacedDigit())
+                    .font(.spline(size: 12, weight: .medium).monospacedDigit())
                     .lineLimit(1)
                     .fixedSize()
                 Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
@@ -3102,13 +3347,13 @@ private struct UpcomingEventRow: View {
             }
             .frame(width: 76, alignment: .leading)
 
-            Rectangle()
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(BurritoTheme.accent)
-                .frame(width: 3, height: 30)
+                .frame(width: 3, height: 26)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.spline(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .medium))
                     .lineLimit(1)
                 Text(
                     event.endDate < .now
@@ -3120,44 +3365,42 @@ private struct UpcomingEventRow: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button(
+            BurritoButton(
                 event.meetingURL == nil ? "Record" : "Join + Record",
                 systemImage: event.meetingURL == nil ? "waveform" : "video"
             ) {
                 startRecording(event)
             }
-                .buttonStyle(HomeToolbarButtonStyle())
+            .buttonStyle(HomeToolbarButtonStyle())
         }
-        .frame(minHeight: 58)
+        .frame(minHeight: 52)
     }
 }
 
 private struct TimelineNoteRow: View {
     let note: Note
+    var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: note.processingStage == nil ? "doc.text" : "ellipsis")
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-                .frame(width: 32, height: 32)
-                .background(BurritoTheme.controlFill.opacity(0.8), in: Rectangle())
+            BurritoIcon(name: note.processingStage == nil ? "doc.text" : "ellipsis", size: 13)
+                .foregroundStyle(isHovered ? BurritoTheme.accent : Color.secondary)
+                .frame(width: 24, height: 24)
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
-                        .font(.burritoDisplay(size: 15, weight: .medium))
-                        .tracking(-0.1)
+                        .font(.spline(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if note.isFavorite {
-                        Image(systemName: "star.fill")
-                            .font(.caption2)
+                        BurritoIcon(name: "star.fill", size: 10)
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
                 Text(note.processingStage?.rawValue ?? NoteExcerpt.text(for: note))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .tracking(0.25)
-                    .foregroundStyle(.tertiary)
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
@@ -3165,13 +3408,13 @@ private struct TimelineNoteRow: View {
                 FolderTag(folder: folder)
             }
             Text(note.updatedAt, style: .time)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.spline(size: 11, weight: .regular))
                 .monospacedDigit()
                 .foregroundStyle(.tertiary)
                 .frame(minWidth: 54, alignment: .trailing)
         }
-        .padding(.horizontal, 8)
-        .frame(height: 52)
+        .padding(.horizontal, 10)
+        .frame(height: 48)
         .contentShape(Rectangle())
     }
 }
@@ -3218,17 +3461,17 @@ private struct FolderTag: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                 .fill(color)
-                .frame(width: 5, height: 5)
+                .frame(width: 4, height: 4)
             Text(folder.name)
                 .lineLimit(1)
         }
-        .font(.system(size: 9, weight: .medium))
+        .font(.spline(size: 10, weight: .medium))
         .foregroundStyle(color)
         .padding(.horizontal, 6)
-        .frame(height: 17)
-        .background(color.opacity(0.13), in: Rectangle())
+        .frame(height: 18)
+        .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         .accessibilityLabel("Folder: \(folder.name)")
     }
 }
@@ -3250,7 +3493,7 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.alignment)
                 open()
             } label: {
-                TimelineNoteRow(note: note)
+                TimelineNoteRow(note: note, isHovered: isHovered)
             }
             .buttonStyle(.plain)
 
@@ -3258,16 +3501,16 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.generic)
                 showingActions.toggle()
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .semibold))
+                BurritoIcon(name: "ellipsis", size: 13)
                     .foregroundStyle(isHovered || showingActions ? .primary : .tertiary)
                     .frame(width: 30, height: 30)
                     .background(
                         showingActions ? BurritoTheme.controlFill : Color.clear,
-                        in: Rectangle()
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                     )
             }
             .buttonStyle(.plain)
+            .opacity(isHovered || showingActions ? 1 : 0.3)
             .help("Note actions")
             .accessibilityLabel("Actions for \(note.title)")
             .popover(
@@ -3280,12 +3523,15 @@ private struct TimelineNoteItem: View {
         }
         .padding(.trailing, 4)
         .background(
-            isHovered ? BurritoTheme.controlFill.opacity(0.34) : Color.clear,
-            in: Rectangle()
+            isHovered || showingActions ? BurritoTheme.paper.opacity(0.5) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .onHover { hover in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovered = hover
+            }
+        }
         .onChange(of: showingActions) { _, isPresented in
             if !isPresented {
                 showingFolders = false
@@ -3372,8 +3618,7 @@ private struct HomeEmptyState: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: isTrash ? "trash" : isSearching ? "magnifyingglass" : "waveform.badge.plus")
-                .font(.system(size: 26, weight: .light))
+            BurritoIcon(name: isTrash ? "trash" : isSearching ? "magnifyingglass" : "waveform.badge.plus", size: 26)
                 .foregroundStyle(.tertiary)
             VStack(spacing: 6) {
                 Text(isTrash ? "Trash is empty" : isSearching ? "No matching notes" : "Nothing captured yet")
@@ -3383,7 +3628,7 @@ private struct HomeEmptyState: View {
                     .foregroundStyle(.secondary)
             }
             if !isTrash && !isSearching {
-                Button("New recording", systemImage: "plus", action: start)
+                BurritoButton("New recording", systemImage: "plus", action: start)
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
             }
         }
@@ -3399,32 +3644,30 @@ private struct CaptureCapsule: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 ZStack {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 30, height: 30)
-                    Image(systemName: "waveform")
-                        .font(.system(size: 13, weight: .semibold))
+                    BurritoIcon(name: "waveform", size: 13)
                         .foregroundStyle(.white)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("New recording")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                     Text("⌘N")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.caption.weight(.semibold))
+                BurritoIcon(name: "arrow.up.right", size: 12)
                     .foregroundStyle(.tertiary)
             }
             .padding(9)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle()
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(BurritoTheme.softBorder)
         }
         .accessibilityHint("Opens recording options")
@@ -3437,8 +3680,7 @@ private struct NoteListEmptyState: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: isTrash ? "trash" : isSearching ? "magnifyingglass" : "note.text")
-                .font(.system(size: 22, weight: .light))
+            BurritoIcon(name: isTrash ? "trash" : isSearching ? "magnifyingglass" : "note.text", size: 22)
                 .foregroundStyle(.tertiary)
             Text(isTrash ? "Trash is empty" : isSearching ? "Nothing found" : "A quiet start")
                 .font(.headline)
@@ -3459,23 +3701,22 @@ private struct WelcomeWorkspaceView: View {
             BurritoTheme.paper.ignoresSafeArea()
             VStack(spacing: 22) {
                 ZStack {
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(BurritoTheme.accentSoft)
                         .frame(width: 86, height: 86)
-                    Image(systemName: "waveform.and.mic")
-                        .font(.system(size: 32, weight: .medium))
+                    BurritoIcon(name: "waveform.and.mic", size: 32)
                         .foregroundStyle(BurritoTheme.accent)
                 }
                 VStack(spacing: 8) {
                     Text("Capture it. Keep the good parts.")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: 28, weight: .medium))
                     Text("Burrito records what you hear, then turns it into notes\nthat stay private on your Mac.")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(3)
                 }
-                Button("Start a recording", systemImage: "waveform", action: start)
+                BurritoButton("Start a recording", systemImage: "waveform", action: start)
                     .buttonStyle(BurritoActionButtonStyle(prominent: true))
                 HStack(spacing: 8) {
                     BurritoPill(title: "Local", systemImage: "macbook")
@@ -3539,7 +3780,7 @@ private struct ActiveRecordingStage: View {
                 }
 
                 Text("LISTENING · ON THIS MAC")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.35)
                     .foregroundStyle(BurritoTheme.accent.opacity(0.82))
                     .padding(.top, 2)
@@ -3584,7 +3825,7 @@ private struct LiveAudioWaveform: View {
             let phase = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: 4) {
                 ForEach(0..<barCount, id: \.self) { index in
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 1.25, style: .continuous)
                         .fill(BurritoTheme.accent)
                         .frame(width: 2.5, height: 62)
                         .scaleEffect(
@@ -3644,29 +3885,28 @@ private struct RecordingControlButton: View {
             HStack(spacing: 8) {
                 ZStack {
                     if isRecording {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(BurritoTheme.accent.opacity(0.16))
                             .scaleEffect(1 + (audioEnergy * 0.1))
                             .opacity(0.6 + (audioEnergy * 0.4))
                     }
 
-                    Rectangle()
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(isRecording ? BurritoTheme.accent : BurritoTheme.accentSoft)
 
                     if isRecording {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(.white)
                             .frame(width: 8, height: 8)
                     } else {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 10, weight: .semibold))
+                        BurritoIcon(name: "waveform", size: 10)
                             .foregroundStyle(BurritoTheme.accent)
                     }
                 }
                 .frame(width: 24, height: 24)
 
                 Text(isRecording ? "Stop" : "Record more")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
 
                 if isRecording {
@@ -3681,14 +3921,14 @@ private struct RecordingControlButton: View {
             }
             .padding(.horizontal, 6)
             .frame(width: 132, height: 34)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(BurritoTheme.accentSoft)
                     .opacity(isHovered ? 0.34 : 0)
             }
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.85), lineWidth: 0.75)
             }
             .contentShape(Rectangle())
@@ -3729,20 +3969,18 @@ private struct ProcessingRail: View {
                 .tint(BurritoTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
                 Text(detail)
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("Private on this Mac")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 20)
-        .frame(height: 62)
-        .background(BurritoTheme.raised, in: Rectangle())
-        .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
+        .padding(.horizontal, 16)
+        .frame(height: 48)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder) }
         .accessibilityElement(children: .combine)
     }
 
@@ -3832,7 +4070,7 @@ private struct RecordingSetupView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Cancel", systemImage: "xmark") { dismiss() }
+                BurritoButton("Cancel", systemImage: "xmark") { dismiss() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(BurritoIconButtonStyle())
                     .keyboardShortcut(.cancelAction)
@@ -3840,8 +4078,7 @@ private struct RecordingSetupView: View {
 
             if let calendarEvent {
                 HStack(spacing: 12) {
-                    Image(systemName: "calendar.badge.checkmark")
-                        .font(.system(size: 18))
+                    BurritoIcon(name: "calendar.badge.checkmark", size: 18)
                         .foregroundStyle(BurritoTheme.accent)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
@@ -3851,14 +4088,14 @@ private struct RecordingSetupView: View {
                                     .hour().minute()
                             )
                         )
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                         Text(calendarEvent.calendarName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     if !calendarEvent.attendeeNames.isEmpty {
-                        Label(
+                        BurritoLabel(
                             "\(calendarEvent.attendeeNames.count)",
                             systemImage: "person.2"
                         )
@@ -3867,9 +4104,9 @@ private struct RecordingSetupView: View {
                     }
                 }
                 .padding(12)
-                .background(BurritoTheme.controlFill.opacity(0.6), in: Rectangle())
+                .background(BurritoTheme.controlFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder.opacity(0.7))
                 }
             }
 
@@ -3897,9 +4134,9 @@ private struct RecordingSetupView: View {
                 )
             }
             .zIndex(2)
-            .background(BurritoTheme.raised, in: Rectangle())
+            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder.opacity(0.7))
             }
 
@@ -3914,7 +4151,7 @@ private struct RecordingSetupView: View {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
                 Spacer()
-                Button("Start recording", systemImage: "waveform") {
+                BurritoButton("Start recording", systemImage: "waveform") {
                     guard let effectiveTemplate else { return }
                     start(
                         RecordingOptions(
@@ -4008,7 +4245,7 @@ private struct RecordingModePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Audio source")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
@@ -4017,8 +4254,7 @@ private struct RecordingModePicker: View {
                         selection = mode
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: mode.symbol)
-                                .font(.system(size: 15, weight: .medium))
+                            BurritoIcon(name: mode.symbol, size: 15)
                                 .foregroundStyle(
                                     selection == mode ? BurritoTheme.accent : .secondary
                                 )
@@ -4026,7 +4262,7 @@ private struct RecordingModePicker: View {
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(mode.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(.primary)
                                 Text(mode.description)
                                     .font(.system(size: 11))
@@ -4085,8 +4321,7 @@ private struct RecordingTemplatePicker: View {
                 Text(selectedTemplate?.name ?? "Choose")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                BurritoIcon(name: "chevron.down", size: 8)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
@@ -4119,8 +4354,7 @@ private struct RecordingLanguagePicker: View {
                 Text(selectedLanguage.compactTitle)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                BurritoIcon(name: "chevron.down", size: 8)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
@@ -4150,8 +4384,7 @@ private struct RecordingLanguageMenu: View {
     var body: some View {
         RecordingDropdownSurface(title: "Transcription language", width: 270) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
+                BurritoIcon(name: "magnifyingglass", size: 11)
                     .foregroundStyle(.tertiary)
                 TextField("Find a language", text: $query)
                     .textFieldStyle(.plain)
@@ -4193,7 +4426,7 @@ private struct RecordingDropdownSurface<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .tracking(0.9)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 5)
@@ -4234,8 +4467,7 @@ private struct RecordingTranscriptionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: installedModel == nil ? "apple.logo" : "waveform")
-                .font(.system(size: 13, weight: .medium))
+            BurritoIcon(name: installedModel == nil ? "apple.logo" : "waveform", size: 13)
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
@@ -4246,8 +4478,12 @@ private struct RecordingTranscriptionRow: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer()
-            Button("View models", systemImage: "chevron.right", action: openModels)
-                .labelStyle(.titleAndIcon)
+            Button(action: openModels) {
+                HStack(spacing: 5) {
+                    Text("View models")
+                    BurritoIcon(name: "chevron.right", size: 10)
+                }
+            }
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
@@ -4288,8 +4524,7 @@ private struct TemplateChoiceCard: View {
     var body: some View {
         Button(action: select) {
             HStack(spacing: 11) {
-                Image(systemName: template.symbol)
-                    .font(.system(size: 15, weight: .semibold))
+                BurritoIcon(name: template.symbol, size: 15)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -4303,8 +4538,7 @@ private struct TemplateChoiceCard: View {
                 if isSelected {
                     ZStack {
                         Rectangle().fill(BurritoTheme.accent)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 8, weight: .bold))
+                        BurritoIcon(name: "checkmark", size: 8)
                             .foregroundStyle(.white)
                     }
                     .frame(width: 17, height: 17)
@@ -4366,45 +4600,9 @@ private struct BurritoChoiceButton: View {
     }
 }
 
-private struct BurritoToggleRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button {
-            isOn.toggle()
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-                ZStack(alignment: isOn ? .trailing : .leading) {
-                    Rectangle()
-                        .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
-                        .frame(width: 38, height: 22)
-                    Rectangle()
-                        .fill(isOn ? Color.white : Color.secondary)
-                        .frame(width: 16, height: 16)
-                        .padding(3)
-                }
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 14)
-            .frame(height: 58)
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(isOn ? "On" : "Off")
-    }
-}
-
 private struct TemplatesView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let templates: [NoteTemplate]
 
     @State private var selectedTemplateID: UUID?
@@ -4418,57 +4616,79 @@ private struct TemplatesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 44)
 
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Templates")
-                        .font(.burritoDisplay(size: 34, weight: .regular))
-                        .tracking(-0.5)
-                    Text("Shape how Burrito turns a transcript into a finished note.")
-                        .font(.system(size: 14))
+            // Sleek Apple-Grade Header
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
+                        Text("Templates")
+                            .font(.spline(size: 26, weight: .medium))
+                            .foregroundStyle(.primary)
+
+                        Text("\(templates.count) available")
+                            .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
+                            }
+                    }
+
+                    Text("Shape how Burrito turns meeting transcripts into structured notes.")
+                        .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
                         .foregroundStyle(.secondary)
                 }
+
                 Spacer()
-                Button("New template", systemImage: "plus") {
+
+                Button {
                     editingTemplateID = nil
                     showingEditor = true
+                } label: {
+                    BurritoLabel("New Template", systemImage: "plus")
                 }
                 .buttonStyle(HomeToolbarButtonStyle())
             }
-            .padding(.horizontal, 38)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 36)
+            .padding(.bottom, 20)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
-
-            HStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(spacing: 3) {
-                        BurritoSectionLabel(title: "Library")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-
-                    ForEach(templates) { template in
-                            TemplateListRow(
-                            template: template,
-                            isSelected: selectedTemplateID == template.id,
-                                select: { selectedTemplateID = template.id }
-                        )
+            // Main Split Studio Container
+            HStack(spacing: 24) {
+                // Left Master List
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("TEMPLATES")
+                            .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
+                            .tracking(0.9)
+                            .foregroundStyle(.tertiary)
+                        Spacer()
                     }
-                }
-                    .padding(8)
-                }
-                .scrollIndicators(.hidden)
-                .frame(width: 230)
-                .background(BurritoTheme.sidebar.opacity(0.45))
+                    .padding(.horizontal, 10)
 
-                Rectangle()
-                    .fill(BurritoTheme.softBorder)
-                    .frame(width: 1)
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(templates) { template in
+                                TemplateListRow(
+                                    template: template,
+                                    isSelected: selectedTemplateID == template.id,
+                                    select: {
+                                        BurritoHaptics.trigger(.alignment)
+                                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                            selectedTemplateID = template.id
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .frame(width: 240)
 
+                // Right Detail Studio Card
                 if let template = selectedTemplate {
                     TemplatePromptDetail(
                         template: template,
@@ -4481,13 +4701,16 @@ private struct TemplatesView: View {
                         }
                     )
                 } else {
-                    ContentUnavailableView(
-                        "No templates",
+                    BurritoContentUnavailable(
+                        title: "No templates",
                         systemImage: "doc.text",
-                        description: Text("Create a template to define a note format.")
+                        description: Text("Create a template to define a custom note format.")
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .padding(.horizontal, 36)
+            .padding(.bottom, 32)
         }
         .background(BurritoTheme.canvas)
         .onAppear {
@@ -4546,117 +4769,213 @@ private struct TemplateListRow: View {
     let template: NoteTemplate
     let isSelected: Bool
     let select: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: select) {
-            HStack(spacing: 11) {
-                Image(systemName: template.symbol)
-                    .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
-                    .frame(width: 30, height: 30)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
+                        .frame(width: 32, height: 32)
+                    BurritoIcon(name: template.symbol, size: 13)
+                        .foregroundStyle(isSelected ? .white : BurritoTheme.accent)
+                }
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: isSelected ? .medium : .medium))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                     Text(template.isBuiltIn ? "Built in" : "Custom")
-                        .font(.caption)
+                        .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
                         .foregroundStyle(.tertiary)
                 }
+
                 Spacer()
+
                 if isSelected {
-                    Rectangle()
-                        .fill(BurritoTheme.accent)
-                        .frame(width: 3, height: 18)
+                    BurritoIcon(name: "checkmark", size: 10)
+                        .foregroundStyle(BurritoTheme.accent)
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 48)
+            .frame(height: 52)
+            .background(
+                isSelected
+                    ? BurritoTheme.raised
+                    : (isHovered ? BurritoTheme.controlFill.opacity(0.6) : Color.clear),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(isSelected ? BurritoTheme.accentSoft.opacity(0.62) : Color.clear)
+        .onHover { isHovered = $0 }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
 private struct TemplatePromptDetail: View {
+    private enum Tab {
+        case instructions
+        case systemPrompt
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let template: NoteTemplate
     let edit: () -> Void
     let delete: (() -> Void)?
+
+    @State private var activeTab: Tab = .instructions
+    @State private var copiedText = false
 
     private var systemPrompt: String {
         GenerationPrompt.finalInstructions(template: template.snapshot)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .center, spacing: 14) {
-                    Image(systemName: template.symbol)
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(BurritoTheme.accent)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(BurritoTheme.accentSoft)
                         .frame(width: 44, height: 44)
-                        .background(BurritoTheme.accentSoft, in: Rectangle())
+                    BurritoIcon(name: template.symbol, size: 18)
+                        .foregroundStyle(BurritoTheme.accent)
+                }
 
-                    VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
                         Text(template.name)
-                            .font(.burritoDisplay(size: 25, weight: .medium))
-                        Text(template.isBuiltIn ? "Built-in template" : "Custom template")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.spline(size: 20, weight: .medium))
+                            .foregroundStyle(.primary)
+
+                        Text(template.isBuiltIn ? "Built-in" : "Custom")
+                            .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
 
-                    Spacer()
+                    Text("Used by Burrito AI model during note synthesis")
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.tertiary)
+                }
 
+                Spacer()
+
+                HStack(spacing: 8) {
                     if let delete {
-                        Button("Delete", systemImage: "trash", action: delete)
+                        BurritoButton("Delete", systemImage: "trash", action: delete)
                             .buttonStyle(HomeToolbarButtonStyle(destructive: true))
                     }
-                    Button("Edit", systemImage: "pencil", action: edit)
+                    BurritoButton("Edit", systemImage: "pencil", action: edit)
                         .buttonStyle(HomeToolbarButtonStyle())
                 }
-
-                VStack(alignment: .leading, spacing: 9) {
-                    BurritoSectionLabel(title: "Template instructions")
-                    Text(template.instructions)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: Rectangle())
-                        .overlay {
-                            Rectangle().stroke(BurritoTheme.softBorder)
-                        }
-                }
-
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack {
-                        BurritoSectionLabel(title: "Complete system prompt")
-                        Spacer()
-                        Text("Read only")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Text(systemPrompt)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(BurritoTheme.raised, in: Rectangle())
-                        .overlay {
-                            Rectangle().stroke(BurritoTheme.softBorder)
-                        }
-                }
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .padding(30)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            HStack {
+                HStack(spacing: 2) {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            activeTab = .instructions
+                        }
+                    } label: {
+                        BurritoLabel("Instructions", systemImage: "doc.text")
+                            .font(.spline(size: 12, weight: activeTab == .instructions ? .medium : .regular))
+                            .foregroundStyle(activeTab == .instructions ? .primary : .secondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(activeTab == .instructions ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            activeTab = .systemPrompt
+                        }
+                    } label: {
+                        BurritoLabel("Full System Prompt", systemImage: "terminal")
+                            .font(.spline(size: 12, weight: activeTab == .systemPrompt ? .medium : .regular))
+                            .foregroundStyle(activeTab == .systemPrompt ? .primary : .secondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(activeTab == .systemPrompt ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(3)
+                .background(BurritoTheme.controlFill.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                }
+
+                Spacer()
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        activeTab == .instructions ? template.instructions : systemPrompt,
+                        forType: .string
+                    )
+                    copiedText = true
+                    BurritoHaptics.trigger(.alignment)
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        copiedText = false
+                    }
+                } label: {
+                    BurritoLabel(copiedText ? "Copied" : "Copy", systemImage: copiedText ? "checkmark" : "doc.on.doc")
+                        .font(.spline(size: 11, weight: .medium))
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(BurritoTheme.softBorder)
+                .frame(height: 1)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if activeTab == .instructions {
+                        Text(template.instructions)
+                            .font(.spline(size: 13, weight: .regular))
+                            .foregroundStyle(.primary.opacity(0.9))
+                            .lineSpacing(6)
+                            .textSelection(.enabled)
+                    } else {
+                        Text(systemPrompt)
+                            .font(.spline(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(5)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(BurritoTheme.softBorder)
+        }
     }
 }
 
@@ -4701,18 +5020,18 @@ private struct MarkdownNoteContent: View {
                 .padding(.top, level == 1 ? 6 : 10)
         case .paragraph(let text):
             inlineText(text)
-                .font(.system(size: 15))
+                .font(.spline(size: 14, weight: .regular))
                 .foregroundStyle(.primary.opacity(0.88))
                 .lineSpacing(5)
         case .unorderedList(let items):
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 11) {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                             .fill(BurritoTheme.accent)
                             .frame(width: 5, height: 5)
                         inlineText(item)
-                            .font(.system(size: 15))
+                            .font(.spline(size: 14, weight: .regular))
                             .lineSpacing(4)
                     }
                 }
@@ -4723,41 +5042,41 @@ private struct MarkdownNoteContent: View {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 11) {
                         Text("\(index + 1)")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.spline(size: 11, weight: .bold))
                             .foregroundStyle(BurritoTheme.accent)
                             .frame(width: 21, height: 21)
-                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                         inlineText(item)
-                            .font(.system(size: 15))
+                            .font(.spline(size: 14, weight: .regular))
                             .lineSpacing(4)
                     }
                 }
             }
         case .quote(let text):
             HStack(spacing: 14) {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(BurritoTheme.accent)
                     .frame(width: 3)
                 inlineText(text)
-                    .font(.burritoDisplay(size: 15).italic())
+                    .font(.spline(size: 14, weight: .regular).italic())
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)
                     .padding(.vertical, 8)
             }
             .padding(.horizontal, 14)
-            .background(BurritoTheme.accentSoft.opacity(0.55), in: Rectangle())
+            .background(BurritoTheme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         case .code(let text):
             ScrollView(.horizontal) {
                 Text(text)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.spline(size: 12.5, weight: .regular))
                     .foregroundStyle(.primary.opacity(0.82))
                     .textSelection(.enabled)
                     .padding(16)
             }
             .scrollIndicators(.hidden)
-            .background(BurritoTheme.controlFill, in: Rectangle())
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
-                Rectangle()
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         case .divider:
@@ -4784,11 +5103,11 @@ private struct MarkdownNoteContent: View {
     private func headingFont(level: Int) -> Font {
         switch level {
         case 1:
-            .burritoDisplay(size: 28, weight: .semibold)
+            .burritoDisplay(size: 28, weight: .medium)
         case 2:
-            .burritoDisplay(size: 21, weight: .semibold)
+            .burritoDisplay(size: 21, weight: .medium)
         default:
-            .burritoDisplay(size: 16, weight: .semibold)
+            .burritoDisplay(size: 16, weight: .medium)
         }
     }
 }
@@ -4801,9 +5120,9 @@ private struct NoteSourceLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: systemImage)
+            BurritoIcon(name: systemImage)
             Text(title.uppercased())
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
             Text(detail)
                 .foregroundStyle(.tertiary)
             Spacer()
@@ -4833,15 +5152,15 @@ private struct RecordingNotepadView: View {
                         .fill(BurritoTheme.accent)
                         .frame(width: 7, height: 7)
                     Text("RECORDING")
-                        .fontWeight(.semibold)
+                        .fontWeight(.medium)
                 }
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
                     .monospacedDigit()
-                Label(
+                BurritoLabel(
                     recordingMode == .meeting ? "CALL + MIC · ON DEVICE" : "MAC AUDIO · ON DEVICE",
                     systemImage: "lock.fill"
                 )
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(BurritoTheme.sage)
                 Spacer()
                 RecordingSourceLevel(
@@ -4925,7 +5244,7 @@ private struct RecordingSourceLevel: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: systemImage)
+            BurritoIcon(name: systemImage)
             Text(title)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -4943,13 +5262,15 @@ private struct RecordingSourceLevel: View {
     }
 }
 
-private struct MemoryChatMessage: Identifiable, Equatable {
+struct MemoryChatMessage: Identifiable, Equatable {
     let id: UUID
     let isUser: Bool
-    let text: String
+    var text: String
     let timestamp: Date
     let errorMessage: String?
     let scopeTitle: String?
+    let usedMeetingEvidence: Bool
+    let searchedMeetings: Bool
 
     init(
         id: UUID = UUID(),
@@ -4957,7 +5278,9 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         text: String,
         timestamp: Date = Date(),
         errorMessage: String? = nil,
-        scopeTitle: String? = nil
+        scopeTitle: String? = nil,
+        usedMeetingEvidence: Bool = false,
+        searchedMeetings: Bool = false
     ) {
         self.id = id
         self.isUser = isUser
@@ -4965,35 +5288,72 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         self.timestamp = timestamp
         self.errorMessage = errorMessage
         self.scopeTitle = scopeTitle
+        self.usedMeetingEvidence = usedMeetingEvidence
+        self.searchedMeetings = searchedMeetings
+    }
+}
+
+@MainActor
+@Observable
+final class MemoryChatSession {
+    var messages: [MemoryChatMessage] = []
+    var draft = ""
+    var isAnswering = false
+    var copiedMessageID: UUID?
+    var scopedDocumentID: UUID?
+    var mentionSelectionIndex = 0
+    @ObservationIgnored var answerTask: Task<Void, Never>?
+
+    func clear() {
+        answerTask?.cancel()
+        answerTask = nil
+        isAnswering = false
+        messages.removeAll()
+    }
+}
+
+@MainActor
+final class MemoryChatSessionStore {
+    let askBurrito = MemoryChatSession()
+    private var noteSessions: [UUID: MemoryChatSession] = [:]
+
+    func session(for noteID: UUID) -> MemoryChatSession {
+        if let session = noteSessions[noteID] {
+            return session
+        }
+        let session = MemoryChatSession()
+        noteSessions[noteID] = session
+        return session
     }
 }
 
 private struct MemoryChatView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @Bindable var session: MemoryChatSession
     let title: String
     let subtitle: String
     let documents: [MemoryDocument]
+    var usesSingleMeetingContext = false
     let languageIdentifier: String
     let openCitation: (MemoryCitation) -> Void
 
-    @State private var messages: [MemoryChatMessage] = []
-    @State private var question = ""
-    @State private var isAnswering = false
-    @State private var answerTask: Task<Void, Never>?
-    @State private var copiedMessageID: UUID?
-    @State private var scopedDocument: MemoryDocument?
-    @State private var mentionSelectionIndex = 0
     @FocusState private var questionFocused: Bool
 
+    private var scopedDocument: MemoryDocument? {
+        guard let scopedDocumentID = session.scopedDocumentID else { return nil }
+        return documents.first { $0.noteID == scopedDocumentID }
+    }
+
     private var canAsk: Bool {
-        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !documents.isEmpty
-            && !isAnswering
+        !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !session.isAnswering
             && highlightedMentionDocument == nil
     }
 
     private var mentionQuery: String? {
         guard scopedDocument == nil else { return nil }
-        return MemoryMention.query(in: question)
+        return MemoryMention.query(in: session.draft)
     }
 
     private var matchingMentionDocuments: [MemoryDocument] {
@@ -5010,14 +5370,22 @@ private struct MemoryChatView: View {
     }
 
     private var highlightedMentionDocument: MemoryDocument? {
-        guard matchingMentionDocuments.indices.contains(mentionSelectionIndex) else {
+        guard matchingMentionDocuments.indices.contains(session.mentionSelectionIndex) else {
             return nil
         }
-        return matchingMentionDocuments[mentionSelectionIndex]
+        return matchingMentionDocuments[session.mentionSelectionIndex]
     }
 
     private var suggestedPrompts: [String] {
-        [
+        guard !documents.isEmpty else {
+            return [
+                "Help me draft a concise project update.",
+                "Explain a difficult idea in simple terms.",
+                "Brainstorm five names for a new product.",
+                "Turn my rough thoughts into an action plan."
+            ]
+        }
+        return [
             "What were the key decisions made?",
             "List all action items and assignees.",
             "What were the main objections or concerns?",
@@ -5027,75 +5395,68 @@ private struct MemoryChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 14) {
-                Text("@")
-                    .font(.burritoDisplay(size: 28, weight: .semibold))
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 30, alignment: .leading)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.burritoDisplay(size: 24, weight: .medium))
-                    Text(subtitle)
-                        .font(.spline(size: 11, weight: .regular))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-
-                HStack(spacing: 12) {
-                    if !messages.isEmpty {
-                        Button {
-                            BurritoHaptics.trigger(.alignment)
-                            answerTask?.cancel()
-                            answerTask = nil
-                            isAnswering = false
-                            withAnimation(.burritoSpring) {
-                                messages.removeAll()
-                            }
-                        } label: {
-                            Label("Clear chat", systemImage: "trash")
-                                .font(.spline(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .frame(height: 28)
-                                .background(BurritoTheme.controlFill, in: Rectangle())
-                                .overlay {
-                                    Rectangle().stroke(BurritoTheme.softBorder)
-                                }
-                        }
-                        .buttonStyle(.plain)
+            if !usesSingleMeetingContext {
+                HStack(alignment: .center, spacing: 14) {
+                    Text("@")
+                        .font(.spline(size: 26, weight: .medium))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 24, alignment: .leading)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.spline(size: 20, weight: .medium))
+                            .foregroundStyle(.primary)
+                        Text(subtitle)
+                            .font(.spline(size: 12, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.secondary)
                     }
+                    Spacer()
 
-                    Label("On device", systemImage: "lock.fill")
-                        .font(.spline(size: 11, weight: .semibold))
-                        .foregroundStyle(BurritoTheme.sage)
+                    HStack(spacing: 10) {
+                        if !session.messages.isEmpty {
+                            clearChatButton
+                        }
+
+                        BurritoLabel("On device", systemImage: "lock.fill")
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
+                            }
+                    }
                 }
-            }
-            .padding(.horizontal, 38)
-            .frame(height: 78)
+                .padding(.horizontal, 36)
+                .frame(height: 64)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
+                Divider()
+            }
+
+            if usesSingleMeetingContext, !session.messages.isEmpty {
+                HStack {
+                    Spacer()
+                    clearChatButton
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 44)
+                Divider()
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        if documents.isEmpty {
-                            ContentUnavailableView(
-                                "No transcript evidence",
-                                systemImage: "text.magnifyingglass",
-                                description: Text("Record and transcribe a meeting before asking questions.")
-                                    .font(.spline(size: 12, weight: .regular))
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 90)
-                        } else if messages.isEmpty {
+                        if session.messages.isEmpty {
                             VStack(alignment: .leading, spacing: 22) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Ask anything about your meetings")
+                                    Text(documents.isEmpty
+                                        ? "Ask Burrito anything"
+                                        : "Ask anything — or search your meetings")
                                         .font(.burritoDisplay(size: 22, weight: .medium))
-                                    Text("Burrito retrieves grounded transcript passages and provides cited answers using local AI.")
+                                    Text(documents.isEmpty
+                                        ? "Chat with your selected on-device model. Meeting search becomes available after you record a transcript."
+                                        : "Burrito answers general questions and can retrieve cited passages from your local transcripts when needed.")
                                         .font(.spline(size: 13, weight: .regular))
                                         .foregroundStyle(.secondary)
                                         .lineSpacing(4)
@@ -5103,7 +5464,7 @@ private struct MemoryChatView: View {
 
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("SUGGESTED QUESTIONS")
-                                        .font(.spline(size: 9, weight: .semibold))
+                                        .font(.spline(size: 9, weight: .medium))
                                         .tracking(0.7)
                                         .foregroundStyle(.tertiary)
 
@@ -5114,8 +5475,7 @@ private struct MemoryChatView: View {
                                                 submitPrompt(prompt)
                                             } label: {
                                                 HStack(spacing: 8) {
-                                                    Image(systemName: "text.bubble")
-                                                        .font(.system(size: 11))
+                                                    BurritoIcon(name: "text.bubble", size: 11)
                                                         .foregroundStyle(BurritoTheme.accent)
                                                     Text(prompt)
                                                         .font(.spline(size: 12, weight: .regular))
@@ -5123,15 +5483,14 @@ private struct MemoryChatView: View {
                                                         .lineLimit(2)
                                                         .multilineTextAlignment(.leading)
                                                     Spacer()
-                                                    Image(systemName: "arrow.up.right")
-                                                        .font(.system(size: 10))
+                                                    BurritoIcon(name: "arrow.up.right", size: 10)
                                                         .foregroundStyle(.tertiary)
                                                 }
                                                 .padding(12)
                                                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                                                .background(BurritoTheme.raised, in: Rectangle())
+                                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                                 .overlay {
-                                                    Rectangle().stroke(BurritoTheme.softBorder)
+                                                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                                                 }
                                             }
                                             .buttonStyle(.plain)
@@ -5141,9 +5500,12 @@ private struct MemoryChatView: View {
                             }
                             .padding(.top, 42)
                         } else {
-                            ForEach(messages) { msg in
+                            ForEach(session.messages) { msg in
                                 if msg.isUser {
                                     userMessageBubble(msg)
+                                        .id(msg.id)
+                                } else if msg.text.isEmpty && msg.errorMessage == nil && session.isAnswering {
+                                    assistantSkeletonCard
                                         .id(msg.id)
                                 } else {
                                     assistantMessageCard(msg)
@@ -5151,10 +5513,6 @@ private struct MemoryChatView: View {
                                 }
                             }
 
-                            if isAnswering {
-                                thinkingCard
-                                    .id("thinking-indicator")
-                            }
                         }
                     }
                     .frame(maxWidth: 760, alignment: .leading)
@@ -5164,10 +5522,10 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)
-                .onChange(of: messages) { _, _ in
+                .onChange(of: session.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: isAnswering) { _, answering in
+                .onChange(of: session.isAnswering) { _, answering in
                     if answering {
                         scrollToBottom(proxy: proxy)
                     }
@@ -5183,24 +5541,23 @@ private struct MemoryChatView: View {
                 HStack(spacing: 10) {
                     if let scopedDocument {
                         Button {
-                            self.scopedDocument = nil
+                            session.scopedDocumentID = nil
                             questionFocused = true
                         } label: {
                             HStack(spacing: 5) {
                                 Text("@")
-                                    .fontWeight(.semibold)
+                                    .fontWeight(.medium)
                                 Text(scopedDocument.title)
                                     .lineLimit(1)
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .bold))
+                                BurritoIcon(name: "xmark", size: 8)
                             }
                             .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
                             .foregroundStyle(BurritoTheme.accent)
                             .padding(.horizontal, 8)
                             .frame(height: 28)
-                            .background(BurritoTheme.accentSoft, in: Rectangle())
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             .overlay {
-                                Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.28))
                             }
                         }
                         .buttonStyle(.plain)
@@ -5211,7 +5568,7 @@ private struct MemoryChatView: View {
                     TextField(
                         scopedDocument.map { "Ask about \($0.title)…" }
                             ?? "Ask anything — type @ to choose a meeting",
-                        text: $question
+                        text: $session.draft
                     )
                     .textFieldStyle(.plain)
                     .font(.spline(size: 13, weight: .regular))
@@ -5227,23 +5584,22 @@ private struct MemoryChatView: View {
                         moveMentionSelection(by: -1)
                         return .handled
                     }
-                    .onChange(of: question) { _, _ in
-                        mentionSelectionIndex = 0
+                    .onChange(of: session.draft) { _, _ in
+                        session.mentionSelectionIndex = 0
                     }
 
-                    if isAnswering {
+                    if session.isAnswering {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.horizontal, 4)
                     } else {
                         Button(action: ask) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 12, weight: .bold))
+                            BurritoIcon(name: "arrow.up", size: 12)
                                 .foregroundStyle(canAsk ? .white : Color.secondary)
                                 .frame(width: 28, height: 28)
                                 .background(
                                     canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
-                                    in: Rectangle()
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -5254,9 +5610,9 @@ private struct MemoryChatView: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(minHeight: 48)
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
             }
             .frame(maxWidth: 760)
@@ -5265,18 +5621,13 @@ private struct MemoryChatView: View {
         }
         .background(BurritoTheme.canvas)
         .onAppear { questionFocused = true }
-        .onDisappear {
-            answerTask?.cancel()
-            answerTask = nil
-            isAnswering = false
-        }
     }
 
     private var mentionPicker: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("CHOOSE A MEETING")
-                    .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                    .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
                 Spacer()
@@ -5307,7 +5658,7 @@ private struct MemoryChatView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Text("@")
-                                .font(.spline(size: 13, weight: .semibold))
+                                .font(.spline(size: 13, weight: .medium))
                                 .foregroundStyle(BurritoTheme.accent)
                                 .frame(width: 18)
                             Text(document.title)
@@ -5322,48 +5673,76 @@ private struct MemoryChatView: View {
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(
-                            index == mentionSelectionIndex
+                            index == session.mentionSelectionIndex
                                 ? BurritoTheme.accentSoft
                                 : Color.clear,
-                            in: Rectangle()
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .background(BurritoTheme.raised, in: Rectangle())
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
         }
+    }
+
+    private var clearChatButton: some View {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                session.clear()
+            }
+        } label: {
+            BurritoLabel("Clear chat", systemImage: "trash")
+                .font(.spline(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(
+                    BurritoTheme.controlFill,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+        }
+        .buttonStyle(.plain)
     }
 
     private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
         HStack {
             Spacer(minLength: 60)
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 6) {
                     Text("YOU")
-                        .font(.spline(size: 9, weight: .semibold))
+                        .font(.spline(size: 9, weight: .medium))
                         .foregroundStyle(BurritoTheme.accent)
                     Text(msg.timestamp, format: .dateTime.hour().minute())
                         .font(.spline(size: 9, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 6) {
                     if let scopeTitle = msg.scopeTitle {
-                        Text("@\(scopeTitle)")
-                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
-                            .foregroundStyle(BurritoTheme.accent)
+                        HStack(spacing: 4) {
+                            Text("@")
+                                .font(.spline(size: 10, weight: .medium))
+                            Text(scopeTitle)
+                                .font(.spline(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(BurritoTheme.accent)
                     }
                     Text(msg.text)
                         .font(.spline(size: 13, weight: .regular))
                         .foregroundStyle(.primary)
                 }
                 .padding(14)
-                .background(BurritoTheme.accentSoft, in: Rectangle())
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.accent.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.accent.opacity(0.3))
                 }
             }
         }
@@ -5371,44 +5750,51 @@ private struct MemoryChatView: View {
 
     private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                NoteSourceLabel(
-                    title: "Burrito answer",
-                    detail: msg.scopeTitle.map { "Scoped to \($0)" }
-                        ?? "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
-                    systemImage: "text.bubble"
-                )
-                Spacer()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(msg.text, forType: .string)
-                    BurritoHaptics.trigger(.alignment)
-                    withAnimation(.burritoSpring) {
-                        copiedMessageID = msg.id
-                    }
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        if copiedMessageID == msg.id {
-                            copiedMessageID = nil
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 10))
-                        Text(copiedMessageID == msg.id ? "Copied" : "Copy")
-                            .font(.spline(size: 10, weight: .regular))
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(BurritoTheme.accentSoft)
+                        .frame(width: 22, height: 22)
+                    BurritoIcon(name: "sparkles", size: 11)
+                        .foregroundStyle(BurritoTheme.accent)
                 }
-                .buttonStyle(.plain)
+                Text("Burrito AI")
+                    .font(.spline(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if msg.errorMessage == nil {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(msg.text, forType: .string)
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            session.copiedMessageID = msg.id
+                        }
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if session.copiedMessageID == msg.id {
+                                session.copiedMessageID = nil
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            BurritoIcon(name: session.copiedMessageID == msg.id ? "checkmark" : "doc.on.doc", size: 10)
+                            Text(session.copiedMessageID == msg.id ? "Copied" : "Copy")
+                                .font(.spline(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             if let error = msg.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
+                BurritoLabel(error, systemImage: "exclamationmark.triangle")
                     .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.red)
             } else {
@@ -5418,42 +5804,45 @@ private struct MemoryChatView: View {
                 )
             }
         }
-        .padding(18)
-        .background(BurritoTheme.raised, in: Rectangle())
+        .padding(16)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 
-    private var thinkingCard: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .controlSize(.small)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Burrito is analyzing transcripts…")
-                    .font(.spline(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                Text("Searching bounded passages on-device")
-                    .font(.spline(size: 10, weight: .regular))
-                    .foregroundStyle(.secondary)
+    private var assistantSkeletonCard: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { timeline in
+            let pulse = reduceMotion
+                ? 0.55
+                : 0.45 + (sin(timeline.date.timeIntervalSinceReferenceDate * 3) + 1) * 0.12
+
+            VStack(alignment: .leading, spacing: 10) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                    .padding(.trailing, 90)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                    .padding(.trailing, 220)
             }
-            Spacer()
+            .foregroundStyle(BurritoTheme.controlFill)
+            .opacity(pulse)
         }
-        .padding(14)
-        .background(BurritoTheme.raised.opacity(0.7), in: Rectangle())
+        .padding(18)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Generating answer")
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if let lastID = messages.last?.id {
-            withAnimation(.burritoSpring) {
+        if let lastID = session.messages.last?.id {
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
                 proxy.scrollTo(lastID, anchor: .bottom)
-            }
-        } else if isAnswering {
-            withAnimation(.burritoSpring) {
-                proxy.scrollTo("thinking-indicator", anchor: .bottom)
             }
         }
     }
@@ -5469,28 +5858,36 @@ private struct MemoryChatView: View {
     private func moveMentionSelection(by offset: Int) {
         guard !matchingMentionDocuments.isEmpty else { return }
         let count = matchingMentionDocuments.count
-        mentionSelectionIndex = (mentionSelectionIndex + offset + count) % count
+        session.mentionSelectionIndex = (session.mentionSelectionIndex + offset + count) % count
     }
 
     private func selectMention(_ document: MemoryDocument) {
-        scopedDocument = document
-        question = MemoryMention.questionWithoutQuery(in: question)
-        mentionSelectionIndex = 0
+        session.scopedDocumentID = document.noteID
+        session.draft = MemoryMention.questionWithoutQuery(in: session.draft)
+        session.mentionSelectionIndex = 0
         questionFocused = true
         BurritoHaptics.trigger(.alignment)
     }
 
     private func submitPrompt(_ prompt: String) {
-        question = prompt
+        session.draft = prompt
         ask()
     }
 
     private func ask() {
         guard canAsk else { return }
-        let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedQuestion = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let submittedScope = scopedDocument
-        question = ""
-        scopedDocument = nil
+        let conversation = session.messages
+            .filter { $0.errorMessage == nil }
+            .map {
+                BurritoChatTurn(
+                    role: $0.isUser ? .user : .assistant,
+                    text: $0.text
+                )
+            }
+        session.draft = ""
+        session.scopedDocumentID = nil
         BurritoHaptics.trigger(.alignment)
 
         let userMsg = MemoryChatMessage(
@@ -5498,44 +5895,75 @@ private struct MemoryChatView: View {
             text: submittedQuestion,
             scopeTitle: submittedScope?.title
         )
-        withAnimation(.burritoSpring) {
-            messages.append(userMsg)
+        let assistantID = UUID()
+        let assistantTimestamp = Date()
+        let assistantPlaceholder = MemoryChatMessage(
+            id: assistantID,
+            isUser: false,
+            text: "",
+            timestamp: assistantTimestamp,
+            scopeTitle: submittedScope?.title
+        )
+        withAnimation(reduceMotion ? nil : .burritoSpring) {
+            session.messages.append(userMsg)
+            session.messages.append(assistantPlaceholder)
         }
+        let searchScope = submittedScope ?? (usesSingleMeetingContext ? documents.first : nil)
+        let meetingSearchRequired = MeetingQueryIntent.requiresSearch(
+            submittedQuestion,
+            hasDefaultMeetingScope: usesSingleMeetingContext,
+            hasExplicitMeetingScope: submittedScope != nil
+        )
+        session.isAnswering = true
 
-        let evidence = submittedScope.map {
-            LocalMemory.retrieve(question: submittedQuestion, scopedTo: $0)
-        } ?? LocalMemory.retrieve(question: submittedQuestion, from: documents)
-        isAnswering = true
-
-        answerTask = Task {
-            let result = await FoundationMemoryAnswerer.shared.answer(
+        session.answerTask = Task {
+            let result = await BurritoChatAnswerer.shared.answer(
                 question: submittedQuestion,
-                evidence: evidence,
-                languageIdentifier: languageIdentifier
+                conversation: conversation,
+                documents: documents,
+                scopedDocument: searchScope,
+                meetingSearchRequired: meetingSearchRequired,
+                languageIdentifier: languageIdentifier,
+                onTextUpdate: { partialText in
+                    guard let index = session.messages.firstIndex(where: { $0.id == assistantID }) else {
+                        return
+                    }
+                    session.messages[index].text = partialText
+                }
             )
 
             guard !Task.isCancelled else { return }
 
-            withAnimation(.burritoSpring) {
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
                 switch result {
-                case .success(let value):
+                case .success(let response):
                     let botMsg = MemoryChatMessage(
+                        id: assistantID,
                         isUser: false,
-                        text: value,
-                        scopeTitle: submittedScope?.title
+                        text: response.text,
+                        timestamp: assistantTimestamp,
+                        scopeTitle: submittedScope?.title,
+                        usedMeetingEvidence: response.usedMeetingEvidence,
+                        searchedMeetings: response.searchedMeetings
                     )
-                    messages.append(botMsg)
+                    if let index = session.messages.firstIndex(where: { $0.id == assistantID }) {
+                        session.messages[index] = botMsg
+                    }
                 case .failure(let error):
                     let botMsg = MemoryChatMessage(
+                        id: assistantID,
                         isUser: false,
                         text: "Could not retrieve answer.",
+                        timestamp: assistantTimestamp,
                         errorMessage: error.recoveryMessage,
                         scopeTitle: submittedScope?.title
                     )
-                    messages.append(botMsg)
+                    if let index = session.messages.firstIndex(where: { $0.id == assistantID }) {
+                        session.messages[index] = botMsg
+                    }
                 }
-                isAnswering = false
-                answerTask = nil
+                session.isAnswering = false
+                session.answerTask = nil
             }
             BurritoHaptics.trigger(.levelChange)
         }
@@ -5596,14 +6024,14 @@ private struct NoteEditingView: View {
                 isHuman: true
             )
             TextEditor(text: $userNotes)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
                 .frame(minHeight: 110, maxHeight: 190)
                 .padding(12)
-                .background(BurritoTheme.raised, in: Rectangle())
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.accent.opacity(0.28))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.accent.opacity(0.28))
                 }
 
             NoteSourceLabel(
@@ -5612,14 +6040,14 @@ private struct NoteEditingView: View {
                 systemImage: "sparkles"
             )
             TextEditor(text: $generatedNotes)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: .infinity)
                 .padding(12)
-                .background(BurritoTheme.controlFill, in: Rectangle())
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
-                    Rectangle().stroke(BurritoTheme.softBorder)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                 }
         }
         .frame(maxWidth: 820, maxHeight: .infinity)
@@ -5629,86 +6057,75 @@ private struct NoteEditingView: View {
     }
 }
 
+private struct HeaderSegmentTabButton: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            BurritoIcon(name: systemImage, size: 13)
+                .foregroundStyle(isSelected ? BurritoTheme.accent : Color.secondary)
+                .frame(width: 34, height: 28)
+                .background(
+                    isSelected ? BurritoTheme.accentSoft : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(title)
+    }
+}
+
 private struct MeetingContextPanel: View {
     let event: CalendarEventSnapshot
     let relatedNotes: [Note]
     let selectNote: (UUID) -> Void
 
-    private var peopleSummary: String? {
-        if !event.attendeeNames.isEmpty {
-            return event.attendeeNames.joined(separator: ", ")
-        }
-        return event.organizerName.map { "Organized by \($0)" }
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 16))
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 24, height: 24)
+        HStack(spacing: 8) {
+            BurritoIcon(name: "calendar.badge.checkmark", size: 11)
+                .foregroundStyle(BurritoTheme.accent)
+            Text(event.startDate, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
+                .foregroundStyle(.primary)
+            Text("· \(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)")
+                .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(event.startDate, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                        .font(.spline(size: 12, weight: .semibold))
-                    Text(
-                        "\(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)"
-                    )
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                    .foregroundStyle(.secondary)
-                    if let peopleSummary {
-                        Text(peopleSummary)
-                            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+            if let meetingURL = event.meetingURL {
+                Spacer(minLength: 4)
+                BurritoButton("Join", systemImage: "video") {
+                    NSWorkspace.shared.open(meetingURL)
                 }
-
-                Spacer()
-
-                if let meetingURL = event.meetingURL {
-                    Button("Join meeting", systemImage: "video") {
-                        NSWorkspace.shared.open(meetingURL)
-                    }
-                    .buttonStyle(HomeToolbarButtonStyle())
-                }
-            }
-
-            if !relatedNotes.isEmpty {
-                Divider()
-                HStack(spacing: 8) {
-                    Text("Related")
-                        .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
-                        .foregroundStyle(.secondary)
-                    ForEach(relatedNotes.prefix(3)) { relatedNote in
-                        Button {
-                            selectNote(relatedNote.id)
-                        } label: {
-                            Text(relatedNote.title)
-                                .lineLimit(1)
-                        }
-                        .buttonStyle(.plain)
-                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(BurritoTheme.controlFill, in: Rectangle())
-                    }
-                }
+                .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
+                .buttonStyle(HomeToolbarButtonStyle())
             }
         }
-        .padding(12)
-        .background(BurritoTheme.raised.opacity(0.6), in: Rectangle())
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            Rectangle().stroke(BurritoTheme.softBorder.opacity(0.7))
+            RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 }
 
 private struct NoteDetailView: View {
+    private enum Tab {
+        case notes
+        case transcript
+        case chat
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var note: Note
+    @Bindable var chatSession: MemoryChatSession
     let externalCitedSegmentID: UUID?
     let relatedNotes: [Note]
     let coordinator: AppCoordinator
@@ -5719,7 +6136,7 @@ private struct NoteDetailView: View {
     let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: Tab = .notes
     @State private var isEditingMarkdown = false
     @State private var showingFolderPopover = false
     @State private var showingMorePopover = false
@@ -5731,105 +6148,269 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
             if !isRecordingThisNote {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("Untitled note", text: titleBinding)
-                        .textFieldStyle(.plain)
-                        .font(.burritoDisplay(size: 34, weight: .regular))
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    // Back Button
+                    BurritoButton("Back to notes", systemImage: "chevron.left") {
+                        backAction()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(BurritoIconButtonStyle())
+                    .accessibilityHint("Returns to the notes library")
 
-                    HStack(spacing: 8) {
-                        BurritoPill(
-                            title: note.updatedAt.formatted(date: .abbreviated, time: .omitted),
-                            systemImage: "calendar"
-                        )
-                        BurritoPill(
-                            title: Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)),
-                            systemImage: "clock"
-                        )
-                        BurritoPill(
-                            title: note.templateSnapshot.name,
-                            systemImage: note.templateSnapshot.symbol
-                        )
-                        BurritoInlineButton(
-                            title: note.folder?.name ?? "Add to folder",
-                            systemImage: "folder"
+                    // Left-aligned Segmented Tab Bar (Notes, Transcript, Ask AI)
+                    HStack(spacing: 2) {
+                        HeaderSegmentTabButton(
+                            title: "Notes",
+                            systemImage: "doc.text",
+                            isSelected: selectedTab == .notes
                         ) {
-                            showingFolderPopover.toggle()
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .notes
+                            }
                         }
-                        .popover(
-                            isPresented: $showingFolderPopover,
-                            attachmentAnchor: .rect(.bounds),
-                            arrowEdge: .top
+
+                        HeaderSegmentTabButton(
+                            title: "Transcript",
+                            systemImage: "waveform",
+                            isSelected: selectedTab == .transcript
                         ) {
-                            BurritoPopoverPanel(title: "Move to folder") {
-                                BurritoPopoverRow(
-                                    title: "No folder",
-                                    systemImage: "tray",
-                                    isSelected: note.folder == nil
-                                ) {
-                                    note.folder = nil
-                                    showingFolderPopover = false
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .transcript
+                            }
+                        }
+
+                        HeaderSegmentTabButton(
+                            title: "Ask AI",
+                            systemImage: "sparkles",
+                            isSelected: selectedTab == .chat
+                        ) {
+                            BurritoHaptics.trigger(.alignment)
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .chat
+                            }
+                        }
+                    }
+                    .padding(3)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+
+                    if selectedTab != .chat {
+                        // Meeting Title aligned directly on the left after tabs
+                        TextField("Untitled note", text: titleBinding)
+                            .textFieldStyle(.plain)
+                            .font(.spline(size: 15, weight: .medium))
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+
+                        // Right Controller Group
+                        HStack(spacing: 8) {
+                            if selectedTab == .notes {
+                                Button {
+                                    BurritoHaptics.trigger(.alignment)
+                                    withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                        isEditingMarkdown.toggle()
+                                    }
+                                } label: {
+                                    BurritoLabel(
+                                        isEditingMarkdown ? "Done" : "Edit",
+                                        systemImage: isEditingMarkdown ? "checkmark" : "pencil"
+                                    )
+                                    .font(.spline(size: 12, weight: .medium))
                                 }
-                                ForEach(folders) { folder in
+                                .buttonStyle(HomeToolbarButtonStyle())
+                                .help(isEditingMarkdown ? "Finish editing" : "Edit note")
+                            }
+
+                            Button {
+                                copyMarkdown()
+                            } label: {
+                                BurritoIcon(name: didCopyNotes ? "checkmark" : "doc.on.doc")
+                                    .contentTransition(.symbolEffect(.replace))
+                                    .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .help(didCopyNotes ? "Copied" : "Copy notes")
+
+                            Button {
+                                exportAction()
+                            } label: {
+                                BurritoIcon(name: "square.and.arrow.up")
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .help("Export Markdown")
+
+                            // 3-Dot Options Button
+                            Button {
+                                showingMorePopover.toggle()
+                            } label: {
+                                BurritoIcon(name: "ellipsis")
+                                    .rotationEffect(.degrees(90))
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .accessibilityLabel("More options")
+                            .popover(
+                                isPresented: $showingMorePopover,
+                                attachmentAnchor: .rect(.bounds),
+                                arrowEdge: .top
+                            ) {
+                                BurritoPopoverPanel {
                                     BurritoPopoverRow(
-                                        title: folder.name,
-                                        systemImage: "folder",
-                                        isSelected: note.folder?.id == folder.id
+                                        title: note.folder.map { "Folder: \($0.name)" } ?? "Add to folder…",
+                                        systemImage: "folder"
                                     ) {
-                                        note.folder = folder
-                                        showingFolderPopover = false
+                                        showingMorePopover = false
+                                        showingFolderPopover = true
+                                    }
+
+                                    BurritoPopoverRow(
+                                        title: "Generate again",
+                                        systemImage: "arrow.clockwise"
+                                    ) {
+                                        showingMorePopover = false
+                                        requestRegeneration()
+                                    }
+
+                                    BurritoPopoverDivider()
+
+                                    ShareLink(item: note.exportedMarkdown) {
+                                        BurritoPopoverRowLabel(
+                                            title: "Share",
+                                            systemImage: "paperplane"
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if let path = note.systemAudioRelativePath {
+                                        BurritoPopoverRow(
+                                            title: "Play system audio",
+                                            systemImage: "play.fill"
+                                        ) {
+                                            play(fileStore.url(forRelativePath: path))
+                                            showingMorePopover = false
+                                        }
+                                    }
+                                    if let path = note.microphoneAudioRelativePath {
+                                        BurritoPopoverRow(
+                                            title: "Play microphone",
+                                            systemImage: "mic.fill"
+                                        ) {
+                                            play(fileStore.url(forRelativePath: path))
+                                            showingMorePopover = false
+                                        }
+                                    }
+                                    if player?.isPlaying == true {
+                                        BurritoPopoverRow(
+                                            title: "Stop audio",
+                                            systemImage: "stop.fill"
+                                        ) {
+                                            player?.stop()
+                                            showingMorePopover = false
+                                        }
                                     }
                                 }
                             }
+                            .popover(
+                                isPresented: $showingFolderPopover,
+                                attachmentAnchor: .rect(.bounds),
+                                arrowEdge: .top
+                            ) {
+                                folderPopoverContent
+                            }
                         }
-                        BurritoInlineButton(
-                            title: "Generate again",
-                            systemImage: "arrow.clockwise"
-                        ) {
-                            requestRegeneration()
-                        }
-                        .disabled(note.transcriptSegments.isEmpty || note.processingStage != nil)
+                    } else {
+                        Spacer()
+                    }
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 48)
+                .background(BurritoTheme.canvas)
+            }
+
+            // Sub-Header Metadata Strip (Hidden in Chat Tab for 100% clean canvas)
+            if !isRecordingThisNote && selectedTab != .chat {
+                HStack(spacing: 8) {
+                    HStack(spacing: 6) {
+                        BurritoIcon(name: "calendar", size: 11)
+                            .foregroundStyle(.tertiary)
+                        Text(note.updatedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("·")
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+
+                    HStack(spacing: 6) {
+                        BurritoIcon(name: "clock", size: 11)
+                            .foregroundStyle(.tertiary)
+                        Text(Duration.seconds(note.duration).formatted(.time(pattern: .minuteSecond)))
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("·")
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+
+                    HStack(spacing: 6) {
+                        BurritoIcon(name: note.templateSnapshot.symbol, size: 11)
+                            .foregroundStyle(.tertiary)
+                        Text(note.templateSnapshot.name)
+                            .font(.spline(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
 
                     if let calendarEvent = note.calendarEvent {
-                        MeetingContextPanel(
-                            event: calendarEvent,
-                            relatedNotes: relatedNotes,
-                            selectNote: selectRelatedNote
-                        )
-                    }
+                        Text("·")
+                            .font(.spline(size: 11, weight: .regular))
+                            .foregroundStyle(.tertiary)
 
-                    HStack(spacing: 20) {
-                        EditorTabButton(title: "Notes", isSelected: selectedTab == 0) {
-                            selectedTab = 0
+                        HStack(spacing: 6) {
+                            BurritoIcon(name: "calendar.badge.checkmark", size: 11)
+                                .foregroundStyle(BurritoTheme.accent)
+                            Text("\(calendarEvent.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) \(calendarEvent.startDate.formatted(.dateTime.hour().minute()))–\(calendarEvent.endDate.formatted(.dateTime.hour().minute()))")
+                                .font(.spline(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
                         }
-                        EditorTabButton(title: "Transcript", isSelected: selectedTab == 1) {
-                            selectedTab = 1
-                        }
-                        EditorTabButton(title: "Ask", isSelected: selectedTab == 2) {
-                            selectedTab = 2
-                        }
-                        Spacer()
-                        if selectedTab == 0 {
-                            BurritoInlineButton(
-                                title: isEditingMarkdown ? "Done" : "Edit",
-                                systemImage: isEditingMarkdown ? "checkmark" : "pencil"
-                            ) {
-                                withAnimation(.smooth(duration: 0.2)) {
-                                    isEditingMarkdown.toggle()
+
+                        if let meetingURL = calendarEvent.meetingURL {
+                            Button {
+                                NSWorkspace.shared.open(meetingURL)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    BurritoIcon(name: "video.fill", size: 9)
+                                    Text("Join")
+                                        .font(.spline(size: 10, weight: .medium))
+                                }
+                                .foregroundStyle(BurritoTheme.accent)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(BurritoTheme.accent.opacity(0.3))
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .help("Join meeting video call")
                         }
                     }
+
+                    Spacer()
                 }
-                .frame(maxWidth: 820, alignment: .leading)
                 .padding(.horizontal, 44)
-                .padding(.top, 72)
-                .frame(maxWidth: .infinity)
-                .transition(.opacity)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
             }
 
+            // Full Height Content Body
             if isRecordingThisNote {
                 RecordingNotepadView(
                     title: titleBinding,
@@ -5840,13 +6421,13 @@ private struct NoteDetailView: View {
                     recordingMode: note.recordingMode
                 )
                 .transition(.opacity)
-            } else if selectedTab == 0 {
+            } else if selectedTab == .notes {
                 if isEditingMarkdown {
                     NoteEditingView(
                         userNotes: userNotesBinding,
                         generatedNotes: notesBinding
                     )
-                        .transition(.opacity)
+                    .transition(.opacity)
                 } else {
                     ScrollView {
                         NoteProvenanceView(
@@ -5854,23 +6435,24 @@ private struct NoteDetailView: View {
                             generatedNotes: note.markdownBody,
                             openTranscript: { id in
                                 citedSegmentID = id
-                                selectedTab = 1
+                                selectedTab = .transcript
                             }
                         )
-                            .frame(maxWidth: 820, alignment: .leading)
-                            .padding(.horizontal, 44)
-                            .padding(.vertical, 30)
-                            .hidesEnclosingScrollIndicators()
+                        .frame(maxWidth: 820, alignment: .leading)
+                        .padding(.horizontal, 44)
+                        .padding(.vertical, 24)
+                        .hidesEnclosingScrollIndicators()
                     }
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
                 }
-            } else if selectedTab == 1 {
+            } else if selectedTab == .transcript {
                 TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
             } else {
                 MemoryChatView(
+                    session: chatSession,
                     title: "Ask this meeting",
-                    subtitle: "Answers use this transcript only.",
+                    subtitle: "Chat generally; meeting questions use this transcript.",
                     documents: [
                         MemoryDocument(
                             noteID: note.id,
@@ -5879,11 +6461,12 @@ private struct NoteDetailView: View {
                             segments: note.transcriptSegments
                         ),
                     ],
+                    usesSingleMeetingContext: true,
                     languageIdentifier: note.languageIdentifier
                 ) { citation in
                     guard citation.noteID == note.id else { return }
                     citedSegmentID = citation.segmentID
-                    selectedTab = 1
+                    selectedTab = .transcript
                 }
             }
         }
@@ -5894,91 +6477,6 @@ private struct NoteDetailView: View {
         }
         .onChange(of: externalCitedSegmentID) {
             openExternalCitation()
-        }
-        .overlay(alignment: .top) {
-            HStack {
-                if !isRecordingThisNote {
-                    Button("Back to notes", systemImage: "chevron.left") {
-                        backAction()
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityHint("Returns to the notes library")
-                }
-                Spacer()
-                if !isRecordingThisNote {
-                    Button {
-                        copyMarkdown()
-                    } label: {
-                        Image(systemName: didCopyNotes ? "checkmark" : "doc.on.doc")
-                            .contentTransition(.symbolEffect(.replace))
-                            .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel(didCopyNotes ? "Notes copied" : "Copy notes")
-                    .help(didCopyNotes ? "Copied" : "Copy notes")
-                    Button {
-                        exportAction()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel("Export Markdown")
-                    .help("Export Markdown")
-                    Button {
-                        showingMorePopover.toggle()
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .rotationEffect(.degrees(90))
-                    }
-                    .buttonStyle(BurritoIconButtonStyle())
-                    .accessibilityLabel("More actions")
-                    .popover(
-                        isPresented: $showingMorePopover,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        BurritoPopoverPanel {
-                            ShareLink(item: note.exportedMarkdown) {
-                                BurritoPopoverRowLabel(
-                                    title: "Share",
-                                    systemImage: "paperplane"
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            if let path = note.systemAudioRelativePath {
-                                BurritoPopoverDivider()
-                                BurritoPopoverRow(
-                                    title: "Play system audio",
-                                    systemImage: "play.fill"
-                                ) {
-                                    play(fileStore.url(forRelativePath: path))
-                                    showingMorePopover = false
-                                }
-                            }
-                            if let path = note.microphoneAudioRelativePath {
-                                BurritoPopoverRow(
-                                    title: "Play microphone",
-                                    systemImage: "mic.fill"
-                                ) {
-                                    play(fileStore.url(forRelativePath: path))
-                                    showingMorePopover = false
-                                }
-                            }
-                            if player?.isPlaying == true {
-                                BurritoPopoverRow(
-                                    title: "Stop audio",
-                                    systemImage: "stop.fill"
-                                ) {
-                                    player?.stop()
-                                    showingMorePopover = false
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(14)
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
@@ -5999,7 +6497,7 @@ private struct NoteDetailView: View {
                 } else {
                     if note.notesMayBeOutdated {
                         HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                            BurritoIcon(name: "exclamationmark.triangle.fill")
                                 .foregroundStyle(BurritoTheme.accent)
                             Text("The transcript changed. Generated notes may be outdated.")
                             Spacer()
@@ -6026,7 +6524,7 @@ private struct NoteDetailView: View {
             .padding(.horizontal, 40)
             .padding(.bottom, 22)
         }
-        .overlay {
+        .overlay(alignment: .center) {
             if confirmingRegeneration {
                 BurritoModalBackdrop {
                     BurritoMessageDialog(
@@ -6048,7 +6546,30 @@ private struct NoteDetailView: View {
     private func openExternalCitation() {
         guard let externalCitedSegmentID else { return }
         citedSegmentID = externalCitedSegmentID
-        selectedTab = 1
+        selectedTab = .transcript
+    }
+
+    private var folderPopoverContent: some View {
+        BurritoPopoverPanel(title: "Move to folder") {
+            BurritoPopoverRow(
+                title: "No folder",
+                systemImage: "tray",
+                isSelected: note.folder == nil
+            ) {
+                note.folder = nil
+                showingFolderPopover = false
+            }
+            ForEach(folders) { folder in
+                BurritoPopoverRow(
+                    title: folder.name,
+                    systemImage: "folder",
+                    isSelected: note.folder?.id == folder.id
+                ) {
+                    note.folder = folder
+                    showingFolderPopover = false
+                }
+            }
+        }
     }
 
     private var isRecordingThisNote: Bool {
@@ -6147,7 +6668,7 @@ private struct EditorTabButton: View {
         } label: {
             VStack(spacing: 7) {
                 Text(title)
-                    .font(.spline(size: 13, weight: isSelected ? .semibold : .regular))
+                    .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? .primary : (isHovered ? .primary : .secondary))
                 ZStack {
                     Rectangle()
@@ -6282,8 +6803,7 @@ private struct TemplateSymbolPicker: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: selection)
-                    .font(.system(size: 15, weight: .medium))
+                BurritoIcon(name: selection, size: 15)
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 34, height: 34)
                     .background(BurritoTheme.accentSoft, in: Rectangle())
@@ -6296,8 +6816,7 @@ private struct TemplateSymbolPicker: View {
                 Spacer()
 
                 HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 10))
+                    BurritoIcon(name: "magnifyingglass", size: 10)
                         .foregroundStyle(.tertiary)
                     TextField("Search symbols", text: $query)
                         .textFieldStyle(.plain)
@@ -6306,7 +6825,7 @@ private struct TemplateSymbolPicker: View {
                         Button {
                             query = ""
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            BurritoIcon(name: "xmark.circle.fill")
                                 .foregroundStyle(.tertiary)
                         }
                         .buttonStyle(.plain)
@@ -6341,8 +6860,7 @@ private struct TemplateSymbolPicker: View {
                                 selection = option.systemName
                             } label: {
                                 VStack(spacing: 5) {
-                                    Image(systemName: option.systemName)
-                                        .font(.system(size: 15, weight: .medium))
+                                    BurritoIcon(name: option.systemName, size: 15)
                                     Text(option.title)
                                         .font(.system(size: 9, weight: .medium))
                                         .lineLimit(1)
@@ -6490,7 +7008,7 @@ private struct TranscriptEditor: View {
                                     )
                                         .textFieldStyle(.plain)
                                         .frame(maxWidth: 120)
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10, weight: .medium))
                                         .tracking(0.5)
                                         .foregroundStyle(sourceTint(for: segment.source))
                                         .help("Edit this passage’s speaker name")
