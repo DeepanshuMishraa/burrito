@@ -378,10 +378,10 @@ struct ContentView: View {
                 TemplatesView(templates: templates)
             } else if sidebarSelection == .memory {
                 MemoryChatView(
-                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask your meetings",
+                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask Burrito",
                     subtitle: memoryFolder == nil
-                        ? "Search every local transcript with cited answers."
-                        : "Search this folder's local transcripts with cited answers.",
+                        ? "Chat generally or search local transcripts with cited answers."
+                        : "Chat generally or search this folder's transcripts.",
                     documents: memoryNotes.map(memoryDocument),
                     languageIdentifier: defaultLanguage
                 ) { citation in
@@ -5254,6 +5254,7 @@ private struct MemoryChatMessage: Identifiable, Equatable {
     let timestamp: Date
     let errorMessage: String?
     let scopeTitle: String?
+    let usedMeetingEvidence: Bool
 
     init(
         id: UUID = UUID(),
@@ -5261,7 +5262,8 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         text: String,
         timestamp: Date = Date(),
         errorMessage: String? = nil,
-        scopeTitle: String? = nil
+        scopeTitle: String? = nil,
+        usedMeetingEvidence: Bool = false
     ) {
         self.id = id
         self.isUser = isUser
@@ -5269,6 +5271,7 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         self.timestamp = timestamp
         self.errorMessage = errorMessage
         self.scopeTitle = scopeTitle
+        self.usedMeetingEvidence = usedMeetingEvidence
     }
 }
 
@@ -5290,7 +5293,6 @@ private struct MemoryChatView: View {
 
     private var canAsk: Bool {
         !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !documents.isEmpty
             && !isAnswering
             && highlightedMentionDocument == nil
     }
@@ -5321,7 +5323,15 @@ private struct MemoryChatView: View {
     }
 
     private var suggestedPrompts: [String] {
-        [
+        guard !documents.isEmpty else {
+            return [
+                "Help me draft a concise project update.",
+                "Explain a difficult idea in simple terms.",
+                "Brainstorm five names for a new product.",
+                "Turn my rough thoughts into an action plan."
+            ]
+        }
+        return [
             "What were the key decisions made?",
             "List all action items and assignees.",
             "What were the main objections or concerns?",
@@ -5388,21 +5398,16 @@ private struct MemoryChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        if documents.isEmpty {
-                            BurritoContentUnavailable(
-                                title: "No transcript evidence",
-                                systemImage: "text.magnifyingglass",
-                                description: Text("Record and transcribe a meeting before asking questions.")
-                                    .font(.spline(size: 12, weight: .regular))
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 90)
-                        } else if messages.isEmpty {
+                        if messages.isEmpty {
                             VStack(alignment: .leading, spacing: 22) {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Ask anything about your meetings")
+                                    Text(documents.isEmpty
+                                        ? "Ask Burrito anything"
+                                        : "Ask anything — or search your meetings")
                                         .font(.burritoDisplay(size: 22, weight: .medium))
-                                    Text("Burrito retrieves grounded transcript passages and provides cited answers using local AI.")
+                                    Text(documents.isEmpty
+                                        ? "Chat with your selected on-device model. Meeting search becomes available after you record a transcript."
+                                        : "Burrito answers general questions and can retrieve cited passages from your local transcripts when needed.")
                                         .font(.spline(size: 13, weight: .regular))
                                         .foregroundStyle(.secondary)
                                         .lineSpacing(4)
@@ -5677,8 +5682,10 @@ private struct MemoryChatView: View {
             HStack {
                 NoteSourceLabel(
                     title: "Burrito answer",
-                    detail: msg.scopeTitle.map { "Scoped to \($0)" }
-                        ?? "Cited from \(documents.count) local meeting\(documents.count == 1 ? "" : "s")",
+                    detail: msg.usedMeetingEvidence
+                        ? msg.scopeTitle.map { "Scoped to \($0)" }
+                            ?? "Grounded in local meeting transcripts"
+                        : "Answered by the selected on-device model",
                     systemImage: "text.bubble"
                 )
                 Spacer()
@@ -5732,10 +5739,10 @@ private struct MemoryChatView: View {
             ProgressView()
                 .controlSize(.small)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Burrito is analyzing transcripts…")
+                Text("Burrito is thinking…")
                     .font(.spline(size: 12, weight: .medium))
                     .foregroundStyle(.primary)
-                Text("Searching bounded passages on-device")
+                Text("Using the selected on-device model and meeting tools")
                     .font(.spline(size: 10, weight: .regular))
                     .foregroundStyle(.secondary)
             }
@@ -5804,15 +5811,25 @@ private struct MemoryChatView: View {
             messages.append(userMsg)
         }
 
-        let evidence = submittedScope.map {
-            LocalMemory.retrieve(question: submittedQuestion, scopedTo: $0)
-        } ?? LocalMemory.retrieve(question: submittedQuestion, from: documents)
+        let conversation = messages
+            .dropLast()
+            .filter { $0.errorMessage == nil }
+            .suffix(8)
+            .map {
+                BurritoChatTurn(
+                    role: $0.isUser ? .user : .assistant,
+                    text: $0.text
+                )
+            }
+        let searchScope = submittedScope ?? (documents.count == 1 ? documents.first : nil)
         isAnswering = true
 
         answerTask = Task {
-            let result = await FoundationMemoryAnswerer.shared.answer(
+            let result = await BurritoChatAnswerer.shared.answer(
                 question: submittedQuestion,
-                evidence: evidence,
+                conversation: conversation,
+                documents: documents,
+                scopedDocument: searchScope,
                 languageIdentifier: languageIdentifier
             )
 
@@ -5820,11 +5837,12 @@ private struct MemoryChatView: View {
 
             withAnimation(.burritoSpring) {
                 switch result {
-                case .success(let value):
+                case .success(let response):
                     let botMsg = MemoryChatMessage(
                         isUser: false,
-                        text: value,
-                        scopeTitle: submittedScope?.title
+                        text: response.text,
+                        scopeTitle: submittedScope?.title,
+                        usedMeetingEvidence: response.usedMeetingEvidence
                     )
                     messages.append(botMsg)
                 case .failure(let error):
@@ -6298,7 +6316,7 @@ private struct NoteDetailView: View {
             } else {
                 MemoryChatView(
                     title: "Ask this meeting",
-                    subtitle: "Answers use this transcript only.",
+                    subtitle: "Chat generally; meeting questions use this transcript.",
                     documents: [
                         MemoryDocument(
                             noteID: note.id,

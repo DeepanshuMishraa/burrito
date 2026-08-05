@@ -316,6 +316,47 @@ struct TranscriptTests {
 
 @Suite("Local memory")
 struct LocalMemoryTests {
+    @Test("Chat prompt separates general knowledge from meeting retrieval")
+    func generalChatPrompt() {
+        #expect(BurritoChatPrompt.instructions(scopedToMeeting: false).contains(
+            "Do not assume every question is about meetings"
+        ))
+        #expect(BurritoChatPrompt.instructions(scopedToMeeting: false).contains(
+            MeetingSearchTool.name
+        ))
+    }
+
+    @Test("Meeting search tool returns citable transcript passages")
+    func meetingSearchTool() async throws {
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let collector = MeetingEvidenceCollector()
+        let tool = MeetingSearchTool.make(
+            documents: [document],
+            scopedDocument: nil,
+            collector: collector
+        )
+
+        let output = try await tool.execute(["query": "When is the launch date?"])
+        let evidenceText = try #require(output["evidence"]?.stringValue)
+        let collected = await collector.snapshot()
+
+        #expect(evidenceText.contains("October 12"))
+        #expect(evidenceText.contains("burrito://memory/"))
+        #expect(collected.count == 1)
+    }
+
     @Test("Library questions retrieve the most relevant transcript passage")
     func retrievesRelevantEvidence() {
         let launch = MemoryDocument(
@@ -690,6 +731,30 @@ struct FoundationModelAdapterTests {
             "Use only supplied facts.",
             "Summarize this transcript.",
         ])
+    }
+
+    @Test("Routes chat history and meeting tools through the Swift AI SDK")
+    func routesChatToolsThroughSDK() async throws {
+        let model = MockLanguageModel(text: "Hello! How can I help?")
+        let adapter = FoundationModelAdapter(model: model)
+        let tool = AI.Tool(
+            name: MeetingSearchTool.name,
+            description: "Search meetings",
+            parameters: ["type": "object", "properties": [:]]
+        )
+
+        let response = try await adapter.completeChat(
+            instructions: "Be helpful.",
+            conversation: [BurritoChatTurn(role: .user, text: "Hello")],
+            question: "How are you?",
+            tools: [tool],
+            maximumResponseTokens: 512
+        )
+
+        #expect(response == "Hello! How can I help?")
+        let request = try #require(model.requests.first)
+        #expect(request.messages.map(\.role) == [.system, .user, .user])
+        #expect(request.tools.map(\.name) == [MeetingSearchTool.name])
     }
 }
 
