@@ -83,9 +83,9 @@ struct BurritoSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Spacer()
+                    Spacer(minLength: 20)
 
-                    // Apple-Grade 3-Tab Segmented Control
+                    // Apple-Grade Segmented Control (Fixed single-line width)
                     HStack(spacing: 2) {
                         ForEach(SettingsTab.allCases) { tab in
                             Button {
@@ -101,6 +101,8 @@ struct BurritoSettingsView: View {
                                 BurritoLabel(tab.title, systemImage: tab.symbol)
                                     .font(.spline(size: 12, weight: selected == tab ? .semibold : .regular))
                                     .foregroundStyle(selected == tab ? .primary : .secondary)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                     .padding(.horizontal, 14)
                                     .frame(height: 32)
                                     .background(
@@ -122,6 +124,7 @@ struct BurritoSettingsView: View {
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                     }
+                    .layoutPriority(1)
                 }
                 .padding(.bottom, 28)
 
@@ -159,21 +162,30 @@ private struct SettingsPane: View {
         VStack(alignment: .leading, spacing: 0) {
             switch tab {
             case .general:
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 26) {
                     VStack(alignment: .leading, spacing: 10) {
                         BurritoSectionLabel(title: "RECORDING & AUDIO")
 
-                        SettingsToggleRow(
-                            title: "Include microphone by default",
-                            detail: "Capture your microphone alongside system audio for every new recording.",
-                            isOn: $microphoneDefault
-                        )
+                        // Apple-Style Grouped Form Card
+                        VStack(spacing: 0) {
+                            SettingsFormToggleRow(
+                                title: "Include microphone by default",
+                                detail: "Capture your microphone alongside system audio for every new recording.",
+                                isOn: $microphoneDefault
+                            )
 
-                        SettingsToggleRow(
-                            title: "Keep audio backups",
-                            detail: "Retain audio after successful transcription to allow regenerating notes later.",
-                            isOn: $retainAudioDefault
-                        )
+                            Divider().padding(.leading, 16)
+
+                            SettingsFormToggleRow(
+                                title: "Keep audio backups",
+                                detail: "Retain audio after successful transcription to allow regenerating notes later.",
+                                isOn: $retainAudioDefault
+                            )
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                        }
 
                         SettingsFootnote("System audio is always captured privately. Burrito never records screen frames.")
                     }
@@ -494,7 +506,7 @@ private struct SettingsChoice: View {
     }
 }
 
-private struct SettingsToggleRow: View {
+private struct SettingsFormToggleRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String
@@ -511,31 +523,32 @@ private struct SettingsToggleRow: View {
                 }
             }
         } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).foregroundStyle(.primary)
-                    Text(detail).font(.spline(size: 11, weight: .regular, relativeTo: .caption)).foregroundStyle(.secondary)
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.spline(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
-                    .frame(width: 42, height: 24)
+                    .frame(width: 40, height: 22)
                     .overlay(alignment: isOn ? .trailing : .leading) {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(.white)
-                            .frame(width: 18, height: 18)
+                            .frame(width: 16, height: 16)
                             .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
                             .padding(3)
                     }
             }
-            .padding(16)
-            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
-            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.bottom, 16)
     }
 }
 
