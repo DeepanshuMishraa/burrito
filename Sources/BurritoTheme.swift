@@ -261,7 +261,7 @@ struct BurritoToggleRow: View {
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 38, height: 22)
                 Rectangle()
-                    .fill(isOn ? Color.white : Color.secondary)
+                    .fill(Color.white)
                     .frame(width: 16, height: 16)
                     .padding(3)
             }

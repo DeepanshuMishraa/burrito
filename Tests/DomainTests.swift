@@ -377,14 +377,30 @@ struct LocalMemoryTests {
         ))
     }
 
-    @Test("Meeting search tool returns citable transcript passages")
-    func meetingSearchTool() async throws {
+    @Test("Grounded retry never streams the false refusal")
+    func suppressesFalseRefusalBeforeRetry() async throws {
+        let noteID = UUID()
+        let segmentID = UUID()
+        let citation = "burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"
+        let refusal = "I don't have access to your meeting transcripts."
+        let corrected = "The launch is October 12. [source](\(citation))"
+        let model = MockLanguageModel(responses: [
+            [.textDelta(refusal), .finish(reason: .stop, usage: Usage())],
+            [.textDelta(corrected), .finish(reason: .stop, usage: Usage())],
+        ])
+        let adapter = FoundationModelAdapter(
+            model: model,
+            tokenMeasurer: CharacterTokenMeasurer(size: 32_768)
+        )
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
         let document = MemoryDocument(
-            noteID: UUID(),
+            noteID: noteID,
             title: "Launch planning",
             updatedAt: .now,
             segments: [
                 TranscriptSegment(
+                    id: segmentID,
                     source: .system,
                     startTime: 12,
                     duration: 3,
@@ -392,9 +408,58 @@ struct LocalMemoryTests {
                 ),
             ]
         )
+
+        let result = await answerer.answer(
+            question: "When is the launch?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: document,
+            meetingSearchRequired: true,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(updates.allSatisfy { !$0.contains("don't have access") })
+        #expect(updates.last == response.text)
+        #expect(response.text.contains(corrected))
+    }
+
+    @Test("Meeting search tool returns citable transcript passages")
+    func meetingSearchTool() async throws {
+        let noteID = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+        let segmentID = try #require(UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let unrelated = MemoryDocument(
+            noteID: UUID(),
+            title: "Hiring review",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 4,
+                    duration: 2,
+                    text: "We should interview two design candidates."
+                ),
+            ]
+        )
         let collector = MeetingEvidenceCollector()
         let tool = MeetingSearchTool.make(
-            documents: [document],
+            documents: [unrelated, document],
             scopedDocument: nil,
             collector: collector
         )
@@ -404,8 +469,13 @@ struct LocalMemoryTests {
         let collected = await collector.snapshot()
 
         #expect(evidenceText.contains("October 12"))
-        #expect(evidenceText.contains("burrito://memory/"))
+        #expect(!evidenceText.contains("design candidates"))
+        #expect(evidenceText.contains(
+            "[source](burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString))"
+        ))
         #expect(collected.count == 1)
+        #expect(collected.first?.noteID == noteID)
+        #expect(collected.first?.segment.id == segmentID)
     }
 
     @Test("Library questions retrieve the most relevant transcript passage")
@@ -770,6 +840,14 @@ private final class StreamedTextRecorder {
     }
 }
 
+private actor InferenceLeaseProbe {
+    private(set) var wasAcquired = false
+
+    func markAcquired() {
+        wasAcquired = true
+    }
+}
+
 @Suite("Foundation model adapter")
 struct FoundationModelAdapterTests {
     @Test("Routes prompts through the Swift AI SDK")
@@ -937,6 +1015,8 @@ struct LocalLanguageModelTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         try Data("{}".utf8).write(to: directory.appending(path: "config.json"))
+        try Data("{}".utf8).write(to: directory.appending(path: "tokenizer.json"))
+        try Data("{}".utf8).write(to: directory.appending(path: "tokenizer_config.json"))
         try Data("first".utf8).write(
             to: directory.appending(path: "model-00001-of-00002.safetensors")
         )
@@ -946,12 +1026,46 @@ struct LocalLanguageModelTests {
             """.utf8
         ).write(to: directory.appending(path: "model.safetensors.index.json"))
 
-        #expect(!LocalLanguageModelStore.containsCompleteModel(at: directory))
+        let revision = "test-revision"
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: revision
+        )
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
 
         try Data("second".utf8).write(
             to: directory.appending(path: "model-00002-of-00002.safetensors")
         )
-        #expect(LocalLanguageModelStore.containsCompleteModel(at: directory))
+        #expect(LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "stale-revision"
+        ))
+    }
+
+    @Test("Local inference leases serialize model runtimes")
+    func serializesLocalInference() async throws {
+        let gate = LocalModelInferenceGate()
+        let firstLease = try await gate.acquire()
+        let probe = InferenceLeaseProbe()
+        let waiter = Task {
+            let secondLease = try await gate.acquire()
+            await probe.markAcquired()
+            await gate.release(secondLease)
+        }
+
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(!(await probe.wasAcquired))
+
+        await gate.release(firstLease)
+        try await waiter.value
+        #expect(await probe.wasAcquired)
     }
 
     @Test("Swift AI SDK tools map into Qwen chat history")

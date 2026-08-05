@@ -6,6 +6,62 @@ import MLXLMCommon
 import Observation
 import Tokenizers
 
+actor LocalModelInferenceGate {
+    struct Lease: Equatable, Sendable {
+        fileprivate let id: UUID
+    }
+
+    static let shared = LocalModelInferenceGate()
+
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Lease, any Error>
+    }
+
+    private var activeLease: Lease?
+    private var waiters: [Waiter] = []
+
+    func acquire() async throws -> Lease {
+        try Task.checkCancellation()
+        if activeLease == nil {
+            let lease = Lease(id: UUID())
+            activeLease = lease
+            return lease
+        }
+
+        let waiterID = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    waiters.append(Waiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(waiterID) }
+        }
+    }
+
+    func release(_ lease: Lease) {
+        guard activeLease == lease else { return }
+        if waiters.isEmpty {
+            activeLease = nil
+            return
+        }
+        let waiter = waiters.removeFirst()
+        let nextLease = Lease(id: UUID())
+        activeLease = nextLease
+        waiter.continuation.resume(returning: nextLease)
+    }
+
+    private func cancelWaiter(_ id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+        let waiter = waiters.remove(at: index)
+        waiter.continuation.resume(throwing: CancellationError())
+    }
+}
+
 enum LocalLanguageModelState: Equatable {
     case notInstalled
     case paused(progress: Double)
@@ -21,6 +77,12 @@ final class LocalLanguageModelStore {
 
     private(set) var states: [LocalLanguageModelVariant: LocalLanguageModelState] = [:]
     private(set) var selection: GenerationModelSelection
+    @ObservationIgnored private var downloads: [LocalLanguageModelVariant: Download] = [:]
+
+    private struct Download {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
 
     private init() {
         selection = GenerationModelSelection.resolve(
@@ -61,7 +123,27 @@ final class LocalLanguageModelStore {
     }
 
     func install(_ variant: LocalLanguageModelVariant) async {
-        guard !isDownloading(variant) else { return }
+        guard downloads[variant] == nil else { return }
+        let downloadID = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performInstall(variant, downloadID: downloadID)
+        }
+        downloads[variant] = Download(id: downloadID, task: task)
+        await task.value
+        if downloads[variant]?.id == downloadID {
+            downloads[variant] = nil
+        }
+    }
+
+    func cancelInstallation(_ variant: LocalLanguageModelVariant) {
+        downloads[variant]?.task.cancel()
+    }
+
+    private func performInstall(
+        _ variant: LocalLanguageModelVariant,
+        downloadID: UUID
+    ) async {
         states[variant] = .downloading(progress: 0)
         let configuration = variant.remoteConfiguration
         do {
@@ -70,7 +152,10 @@ final class LocalLanguageModelStore {
                 configuration: configuration
             ) { [weak self] progress in
                 Task { @MainActor [weak self] in
-                    guard let self, case .downloading = self.states[variant] else {
+                    guard let self,
+                          self.downloads[variant]?.id == downloadID,
+                          case .downloading = self.states[variant]
+                    else {
                         return
                     }
                     self.states[variant] = .downloading(
@@ -78,6 +163,13 @@ final class LocalLanguageModelStore {
                     )
                 }
             }
+            guard Self.containsRuntimeFiles(at: variant.modelDirectory) else {
+                throw LocalLanguageModelError.incompleteDownload(variant.displayName)
+            }
+            try Self.markInstallationComplete(
+                at: variant.modelDirectory,
+                revision: variant.revision
+            )
             guard Self.isInstalled(variant) else {
                 throw LocalLanguageModelError.incompleteDownload(variant.displayName)
             }
@@ -100,12 +192,47 @@ final class LocalLanguageModelStore {
     }
 
     nonisolated static func isInstalled(_ variant: LocalLanguageModelVariant) -> Bool {
-        containsCompleteModel(at: variant.modelDirectory)
+        containsCompleteModel(
+            at: variant.modelDirectory,
+            expectedRevision: variant.revision
+        )
     }
 
-    nonisolated static func containsCompleteModel(at directory: URL) -> Bool {
+    nonisolated static func containsCompleteModel(
+        at directory: URL,
+        expectedRevision: String
+    ) -> Bool {
+        guard let markerData = try? Data(
+            contentsOf: directory.appending(path: installationMarkerName)
+        ),
+        let marker = try? JSONDecoder().decode(InstallationMarker.self, from: markerData),
+        marker.revision == expectedRevision
+        else {
+            return false
+        }
+        return containsRuntimeFiles(at: directory)
+    }
+
+    nonisolated static func markInstallationComplete(
+        at directory: URL,
+        revision: String
+    ) throws {
+        let data = try JSONEncoder().encode(InstallationMarker(revision: revision))
+        try data.write(
+            to: directory.appending(path: installationMarkerName),
+            options: .atomic
+        )
+    }
+
+    nonisolated private static func containsRuntimeFiles(at directory: URL) -> Bool {
         guard FileManager.default.fileExists(
             atPath: directory.appending(path: "config.json").path
+        ),
+        FileManager.default.fileExists(
+            atPath: directory.appending(path: "tokenizer.json").path
+        ),
+        FileManager.default.fileExists(
+            atPath: directory.appending(path: "tokenizer_config.json").path
         ),
         let files = try? FileManager.default.contentsOfDirectory(
             at: directory,
@@ -190,6 +317,12 @@ final class LocalLanguageModelStore {
             case weightMap = "weight_map"
         }
     }
+
+    private struct InstallationMarker: Codable {
+        let revision: String
+    }
+
+    private nonisolated static let installationMarkerName = ".burrito-installation.json"
 }
 
 extension LocalLanguageModelVariant {
@@ -222,22 +355,37 @@ actor LocalLanguageModelRuntime {
 
     private var loadedVariant: LocalLanguageModelVariant?
     private var container: ModelContainer?
+    private var idleReleaseTask: Task<Void, Never>?
 
     func release() {
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
         container = nil
         loadedVariant = nil
     }
 
     func tokenCount(_ text: String, using variant: LocalLanguageModelVariant) async throws -> Int {
-        let container = try await container(for: variant)
-        defer { release() }
-        return await container.encode(text).count
+        let lease = try await LocalModelInferenceGate.shared.acquire()
+        do {
+            try Task.checkCancellation()
+            await ParakeetTranscriber.shared.release()
+            let container = try await container(for: variant)
+            let count = await container.encode(text).count
+            scheduleIdleRelease()
+            await LocalModelInferenceGate.shared.release(lease)
+            return count
+        } catch {
+            await LocalModelInferenceGate.shared.release(lease)
+            throw error
+        }
     }
 
     func generate(
         request: LanguageModelRequest,
         using variant: LocalLanguageModelVariant
     ) async throws -> AsyncStream<Generation> {
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
         let container = try await container(for: variant)
         let input = try await container.prepare(
             input: try MLXRequestMapper.input(from: request)
@@ -264,13 +412,21 @@ actor LocalLanguageModelRuntime {
         }
         container = nil
         loadedVariant = nil
-        await ParakeetTranscriber.shared.release()
         let loaded = try await LLMModelFactory.shared.loadContainer(
             configuration: ModelConfiguration(directory: variant.modelDirectory)
         )
         container = loaded
         loadedVariant = variant
         return loaded
+    }
+
+    private func scheduleIdleRelease() {
+        idleReleaseTask?.cancel()
+        idleReleaseTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await self?.release()
+        }
     }
 }
 
@@ -295,61 +451,67 @@ struct MLXLanguageModel: AI.LanguageModel {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let generations = try await runtime.generate(
-                        request: request,
-                        using: variant
-                    )
-                    var emittedToolCall = false
-                    for await generation in generations {
-                        switch generation {
-                        case .chunk(let text):
-                            continuation.yield(.textDelta(text))
-                        case .toolCall(let toolCall):
-                            emittedToolCall = true
-                            continuation.yield(
-                                .toolCall(
-                                    AI.ToolCall(
-                                        id: UUID().uuidString,
-                                        name: toolCall.function.name,
-                                        arguments: try MLXRequestMapper.aiJSON(
-                                            from: toolCall.function.arguments
+                    let lease = try await LocalModelInferenceGate.shared.acquire()
+                    do {
+                        try Task.checkCancellation()
+                        await ParakeetTranscriber.shared.release()
+                        let generations = try await runtime.generate(
+                            request: request,
+                            using: variant
+                        )
+                        var emittedToolCall = false
+                        for await generation in generations {
+                            switch generation {
+                            case .chunk(let text):
+                                continuation.yield(.textDelta(text))
+                            case .toolCall(let toolCall):
+                                emittedToolCall = true
+                                continuation.yield(
+                                    .toolCall(
+                                        AI.ToolCall(
+                                            id: UUID().uuidString,
+                                            name: toolCall.function.name,
+                                            arguments: try MLXRequestMapper.aiJSON(
+                                                from: toolCall.function.arguments
+                                            )
                                         )
                                     )
                                 )
-                            )
-                        case .info(let info):
-                            let reason: FinishReason
-                            if emittedToolCall {
-                                reason = .toolCalls
-                            } else {
-                                reason = switch info.stopReason {
-                                case .stop: .stop
-                                case .length: .length
-                                case .cancelled: .error
+                            case .info(let info):
+                                let reason: FinishReason
+                                if emittedToolCall {
+                                    reason = .toolCalls
+                                } else {
+                                    reason = switch info.stopReason {
+                                    case .stop: .stop
+                                    case .length: .length
+                                    case .cancelled: .error
+                                    }
                                 }
-                            }
-                            continuation.yield(
-                                .finish(
-                                    reason: reason,
-                                    usage: Usage(
-                                        inputTokens: info.promptTokenCount,
-                                        outputTokens: info.generationTokenCount
+                                continuation.yield(
+                                    .finish(
+                                        reason: reason,
+                                        usage: Usage(
+                                            inputTokens: info.promptTokenCount,
+                                            outputTokens: info.generationTokenCount
+                                        )
                                     )
                                 )
-                            )
+                            }
                         }
+                        await runtime.release()
+                        await LocalModelInferenceGate.shared.release(lease)
+                        continuation.finish()
+                    } catch {
+                        await runtime.release()
+                        await LocalModelInferenceGate.shared.release(lease)
+                        throw error
                     }
-                    await runtime.release()
-                    continuation.finish()
                 } catch {
-                    await runtime.release()
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in
-                task.cancel()
-                Task { await runtime.release() }
-            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }

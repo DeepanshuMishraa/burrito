@@ -1497,9 +1497,12 @@ private struct SidebarAccountCard: View {
 
                     Spacer()
 
-                    BurritoIcon(name: "ellipsis", size: 10)
+                    BurritoIcon(
+                        name: "ellipsis",
+                        size: 10,
+                        accessibilityLabel: "Account and updates"
+                    )
                         .foregroundStyle(.tertiary)
-                        .accessibilityLabel("Account and updates")
                 }
                 .padding(11)
                 .contentShape(Rectangle())
@@ -1974,7 +1977,7 @@ private struct ModelsView: View {
                                         case .notInstalled, .paused, .failed:
                                             Task { await languageModelStore.install(variant) }
                                         case .downloading:
-                                            break
+                                            languageModelStore.cancelInstallation(variant)
                                         }
                                     }
 
@@ -2062,6 +2065,11 @@ private struct GenerationModelCatalogRow: View {
                 }
             case .downloading(let progress):
                 VStack(alignment: .trailing, spacing: 7) {
+                    BurritoInlineButton(
+                        title: "Cancel",
+                        systemImage: "xmark",
+                        action: action
+                    )
                     Text("\(Int(progress * 100))%")
                         .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                         .foregroundStyle(.secondary)
@@ -2793,9 +2801,12 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
                 }
                 Spacer(minLength: 0)
                 if note.isFavorite, note.deletedAt == nil {
-                    BurritoIcon(name: "star.fill", size: 10)
+                    BurritoIcon(
+                        name: "star.fill",
+                        size: 10,
+                        accessibilityLabel: "Favorite"
+                    )
                         .foregroundStyle(BurritoTheme.accent)
-                        .accessibilityLabel("Favorite")
                 }
             }
             .padding(.horizontal, 11)

@@ -570,6 +570,23 @@ enum MemoryAnswer {
 actor BurritoChatAnswerer {
     static let shared = BurritoChatAnswerer()
 
+    typealias AdapterResolver = @Sendable (String) async -> Result<
+        FoundationModelAdapter,
+        BurritoError
+    >
+
+    private let resolveAdapter: AdapterResolver
+
+    init(
+        resolveAdapter: @escaping AdapterResolver = { languageIdentifier in
+            await SelectedLanguageModelAdapter.shared.resolve(
+                languageIdentifier: languageIdentifier
+            )
+        }
+    ) {
+        self.resolveAdapter = resolveAdapter
+    }
+
     func answer(
         question: String,
         conversation: [BurritoChatTurn],
@@ -579,9 +596,7 @@ actor BurritoChatAnswerer {
         languageIdentifier: String,
         onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
     ) async -> Result<BurritoChatResponse, BurritoError> {
-        let resolved = await SelectedLanguageModelAdapter.shared.resolve(
-            languageIdentifier: languageIdentifier
-        )
+        let resolved = await resolveAdapter(languageIdentifier)
         let adapter: FoundationModelAdapter
         switch resolved {
         case .success(let resolvedAdapter):
@@ -617,6 +632,13 @@ actor BurritoChatAnswerer {
             } else {
                 prefetchedEvidence = []
             }
+            let shouldBufferInitialAnswer = meetingSearchRequired
+            let initialTextUpdate: @MainActor @Sendable (String) -> Void
+            if shouldBufferInitialAnswer {
+                initialTextUpdate = { _ in }
+            } else {
+                initialTextUpdate = onTextUpdate
+            }
             let answer = try await adapter.completeChatStreaming(
                 instructions: BurritoChatPrompt.instructions(
                     scopedToMeeting: scopedDocument != nil
@@ -628,7 +650,7 @@ actor BurritoChatAnswerer {
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
                 maximumResponseTokens: 1_024,
-                onTextUpdate: onTextUpdate
+                onTextUpdate: initialTextUpdate
             )
             var trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
@@ -678,6 +700,9 @@ actor BurritoChatAnswerer {
                         searchedMeetings: true
                     )
                 )
+            }
+            if shouldBufferInitialAnswer {
+                await onTextUpdate(supported)
             }
             return .success(
                 BurritoChatResponse(

@@ -135,28 +135,6 @@ struct BurritoButton: View {
     }
 }
 
-struct BurritoMenu<Content: View>: View {
-    let title: String
-    let systemImage: String
-    @ViewBuilder let content: () -> Content
-
-    init(
-        _ title: String,
-        systemImage: String,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.content = content
-    }
-
-    var body: some View {
-        Menu(content: content) {
-            BurritoLabel(title, systemImage: systemImage)
-        }
-    }
-}
-
 struct BurritoContentUnavailable: View {
     let title: String
     let systemImage: String
