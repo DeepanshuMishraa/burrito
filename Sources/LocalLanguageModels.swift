@@ -154,6 +154,7 @@ final class LocalLanguageModelStore {
         states[variant] = .downloading(progress: 0)
         let configuration = variant.remoteConfiguration
         do {
+            try Self.markInstallationStarted(at: variant.modelDirectory)
             _ = try await downloadModel(
                 hub: defaultHubApi,
                 configuration: configuration
@@ -247,6 +248,20 @@ final class LocalLanguageModelStore {
             to: directory.appending(path: installationMarkerName),
             options: .atomic
         )
+        try? FileManager.default.removeItem(
+            at: directory.appending(path: incompleteInstallationMarkerName)
+        )
+    }
+
+    nonisolated static func markInstallationStarted(at directory: URL) throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try Data().write(
+            to: directory.appending(path: incompleteInstallationMarkerName),
+            options: .atomic
+        )
     }
 
     nonisolated static func migrateLegacyInstallation(
@@ -255,6 +270,9 @@ final class LocalLanguageModelStore {
     ) throws {
         guard !FileManager.default.fileExists(
             atPath: directory.appending(path: installationMarkerName).path
+        ),
+        !FileManager.default.fileExists(
+            atPath: directory.appending(path: incompleteInstallationMarkerName).path
         ),
         containsRuntimeFiles(at: directory)
         else {
@@ -356,6 +374,8 @@ final class LocalLanguageModelStore {
     }
 
     private nonisolated static let installationMarkerName = ".burrito-installation.json"
+    private nonisolated static let incompleteInstallationMarkerName =
+        ".burrito-installation-incomplete"
     private nonisolated static let activeInstallationDirectories = Mutex<Set<URL>>([])
 }
 

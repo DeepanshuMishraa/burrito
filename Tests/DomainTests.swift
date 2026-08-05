@@ -357,11 +357,45 @@ struct LocalMemoryTests {
             hasDefaultMeetingScope: true,
             hasExplicitMeetingScope: false
         ))
+        #expect(MeetingQueryIntent.isClearlyGeneral("Help me write an email"))
+        #expect(!MeetingQueryIntent.isClearlyGeneral(
+            "What were the main objections or concerns?"
+        ))
         #expect(!MeetingQueryIntent.requiresSearch(
             "Help me write a transcriptome research summary",
             hasDefaultMeetingScope: false,
             hasExplicitMeetingScope: false
         ))
+    }
+
+    @Test("General chat streams while tool-capable answers remain buffered")
+    func streamsClearlyGeneralChat() async throws {
+        let model = MockLanguageModel(responses: [[
+            .textDelta("Here is "),
+            .textDelta("a draft."),
+            .finish(reason: .stop, usage: Usage()),
+        ]])
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: "Help me write an email",
+            conversation: [],
+            documents: [],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let request = try #require(model.requests.first)
+        let updates = await recorder.updates
+
+        #expect(request.tools.isEmpty)
+        #expect(updates.first == "Here is ")
+        #expect(updates.last == response.text)
+        #expect(updates.count >= 2)
     }
 
     @Test("False transcript-access refusals are detected for grounded retry")
@@ -1244,6 +1278,48 @@ struct LocalLanguageModelTests {
             atPath: directory.appending(path: ".burrito-installation.json").path
         ))
 
+        #expect(LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
+        ))
+    }
+
+    @Test("Failed downloads are not migrated after active tracking ends")
+    func rejectsMarkerlessFailedDownload() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try LocalLanguageModelStore.markInstallationStarted(at: directory)
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "test-revision"
+        #expect(!LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: revision
+        )
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(
+                path: ".burrito-installation-incomplete"
+            ).path
+        ))
         #expect(LocalLanguageModelStore.containsInstalledModel(
             at: directory,
             expectedRevision: revision,

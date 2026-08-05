@@ -203,9 +203,27 @@ enum MeetingQueryIntent {
         return scopedReferences.contains(where: normalized.contains)
     }
 
+    static func isClearlyGeneral(_ question: String) -> Bool {
+        let normalized = question
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let generalPrefixes = [
+            "hello", "hi", "hey", "thanks", "thank you",
+            "help me write", "write me", "draft", "rewrite", "proofread",
+            "brainstorm", "explain",
+        ]
+        return generalPrefixes.contains(where: { containsWholeTerm($0, atStartOf: normalized) })
+    }
+
     private static func containsWholeTerm(_ term: String, in text: String) -> Bool {
         let escapedTerm = NSRegularExpression.escapedPattern(for: term)
         let pattern = "(?<![\\p{L}\\p{N}])\(escapedTerm)(?![\\p{L}\\p{N}])"
+        return text.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private static func containsWholeTerm(_ term: String, atStartOf text: String) -> Bool {
+        let escapedTerm = NSRegularExpression.escapedPattern(for: term)
+        let pattern = "^\(escapedTerm)(?![\\p{L}\\p{N}])"
         return text.range(of: pattern, options: .regularExpression) != nil
     }
 }
@@ -635,18 +653,26 @@ actor BurritoChatAnswerer {
             } else {
                 prefetchedEvidence = []
             }
+            let streamsDirectly = !meetingSearchRequired
+                && MeetingQueryIntent.isClearlyGeneral(question)
+            let streamUpdate: @MainActor @Sendable (String) -> Void
+            if streamsDirectly {
+                streamUpdate = onTextUpdate
+            } else {
+                streamUpdate = { _ in }
+            }
             let answer = try await adapter.completeChatStreaming(
                 instructions: BurritoChatPrompt.instructions(
                     scopedToMeeting: scopedDocument != nil
                 ),
                 conversation: conversation,
                 question: question,
-                tools: [tool],
+                tools: streamsDirectly ? [] : [tool],
                 meetingEvidence: prefetchedEvidence.isEmpty
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
                 maximumResponseTokens: 1_024,
-                onTextUpdate: { _ in }
+                onTextUpdate: streamUpdate
             )
             var trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
@@ -657,7 +683,9 @@ actor BurritoChatAnswerer {
             let evidence = await collector.snapshot()
             let searchedMeetings = await collector.searchWasPerformed()
             guard !evidence.isEmpty else {
-                await onTextUpdate(trimmed)
+                if !streamsDirectly {
+                    await onTextUpdate(trimmed)
+                }
                 return .success(
                     BurritoChatResponse(
                         text: trimmed,
