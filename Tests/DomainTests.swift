@@ -887,6 +887,14 @@ struct TemplateTests {
         #expect(TemplateSymbolOption.matching("  ").count == TemplateSymbolOption.all.count)
     }
 
+    @Test("Every app icon resolves to a Phosphor icon")
+    func resolvesEveryAppIcon() {
+        #expect(BurritoIconCatalog.allAliasesAreValid)
+        #expect(TemplateSymbolOption.all.allSatisfy {
+            BurritoIconCatalog.supports($0.systemName)
+        })
+    }
+
     @Test(
         "Every built-in template contributes its instructions to the final prompt",
         arguments: BuiltInTemplate.allCases

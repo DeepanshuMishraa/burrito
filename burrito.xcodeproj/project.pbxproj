@@ -25,6 +25,7 @@
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
+		7E94552B34DEA490005B6D50 /* PhosphorSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
@@ -45,6 +46,7 @@
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
 		FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80312D2153FF4924DF498F98 /* CoordinatorTests.swift */; };
 		FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A639102CCFABB8A22A07D3 /* AppCommands.swift */; };
+		FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +90,7 @@
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
+		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
@@ -104,6 +107,7 @@
 				BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */,
 				A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */,
 				423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */,
+				7E94552B34DEA490005B6D50 /* PhosphorSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +161,7 @@
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
 				9F27CD15A054415C3F40F273 /* AppFeedback.swift */,
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
+				C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
 				0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */,
 				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
@@ -220,6 +225,7 @@
 				BF1585C55A8225C58A754212 /* AI */,
 				1ADC8A04BD0CC461DBBB407C /* MLXLLM */,
 				D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */,
+				1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -277,6 +283,7 @@
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
 				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
@@ -313,6 +320,7 @@
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
+				FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
 				63D6B5E998CF954795A8BBB2 /* BurritoUpdateManager.swift in Sources */,
 				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
@@ -646,6 +654,14 @@
 				minimumVersion = 2.9.0;
 			};
 		};
+		EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phosphor-icons/swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -653,6 +669,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
+		};
+		1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */;
+			productName = PhosphorSwift;
 		};
 		299A838A7B8892CA4C7945E3 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

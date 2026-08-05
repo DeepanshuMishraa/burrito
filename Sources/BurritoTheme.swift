@@ -168,7 +168,7 @@ struct BurritoPill: View {
     let systemImage: String
 
     var body: some View {
-        Label(title, systemImage: systemImage)
+        BurritoLabel(title, systemImage: systemImage)
             .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
@@ -214,8 +214,7 @@ struct BurritoLanguagePicker: View {
                     .font(.spline(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                BurritoIcon(name: "chevron.down", size: 8)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
@@ -234,8 +233,7 @@ struct BurritoLanguagePicker: View {
         ) {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                    BurritoIcon(name: "magnifyingglass", size: 11)
                         .foregroundStyle(.tertiary)
                     TextField("Find a language", text: $query)
                         .textFieldStyle(.plain)
@@ -277,8 +275,7 @@ struct BurritoLanguagePicker: View {
                     .foregroundStyle(.primary)
                 Spacer()
                 if selection == language.identifier {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                    BurritoIcon(name: "checkmark", size: 10)
                         .foregroundStyle(BurritoTheme.accent)
                 }
             }

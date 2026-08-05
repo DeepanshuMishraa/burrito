@@ -1,5 +1,5 @@
 {
-  "originHash" : "51f6359359be01e316d9caa1862328e5f22fe76a829f9014dfc9eaa169d57d59",
+  "originHash" : "821ddae48ef2b9dba4aea6bb947b6582baeb2d59f955ddae96202bd2130678a2",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -53,6 +53,15 @@
       "state" : {
         "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
         "version" : "2.9.4"
+      }
+    },
+    {
+      "identity" : "swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/phosphor-icons/swift.git",
+      "state" : {
+        "revision" : "9a9467181782bbe319ad4935d0993c77cd8a5fbc",
+        "version" : "2.1.0"
       }
     },
     {

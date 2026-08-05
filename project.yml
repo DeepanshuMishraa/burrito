@@ -24,6 +24,9 @@ packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm.git
     exactVersion: 2.31.3
+  PhosphorSwift:
+    url: https://github.com/phosphor-icons/swift.git
+    exactVersion: 2.1.0
 targets:
   burrito:
     type: application
@@ -43,6 +46,7 @@ targets:
         product: MLXLLM
       - package: MLXSwiftLM
         product: MLXLMCommon
+      - package: PhosphorSwift
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

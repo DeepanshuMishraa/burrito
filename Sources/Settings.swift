@@ -93,7 +93,7 @@ struct BurritoSettingsView: View {
                                 }
                             }
                         } label: {
-                            Label(tab.title, systemImage: tab.symbol)
+                            BurritoLabel(tab.title, systemImage: tab.symbol)
                                 .font(.spline(size: 13, weight: selected == tab ? .semibold : .regular))
                                 .foregroundStyle(selected == tab ? .primary : .secondary)
                                 .padding(.horizontal, 12)
@@ -231,8 +231,7 @@ private struct OwnershipSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: 15, weight: .medium))
+                BurritoIcon(name: "shippingbox", size: 15)
                     .foregroundStyle(BurritoTheme.accent)
                     .frame(width: 36, height: 36)
                     .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -249,13 +248,13 @@ private struct OwnershipSettingsCard: View {
             }
 
             HStack(spacing: 10) {
-                Button("Export Library", systemImage: "square.and.arrow.up") {
+                BurritoButton("Export Library", systemImage: "square.and.arrow.up") {
                     exportLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
                 .disabled(status?.isRunning == true)
 
-                Button("Import Backup", systemImage: "square.and.arrow.down") {
+                BurritoButton("Import Backup", systemImage: "square.and.arrow.down") {
                     importLibrary()
                 }
                 .buttonStyle(SettingsActionButtonStyle())
@@ -269,7 +268,7 @@ private struct OwnershipSettingsCard: View {
                             .controlSize(.small)
                             .tint(.secondary)
                     } else {
-                        Image(systemName: status.symbol)
+                        BurritoIcon(name: status.symbol)
                     }
                     Text(status.message)
                 }
@@ -298,8 +297,7 @@ private struct LanguageCoverageCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "checkmark.shield")
-                .font(.system(size: 15, weight: .medium))
+            BurritoIcon(name: "checkmark.shield", size: 15)
                 .foregroundStyle(BurritoTheme.accent)
                 .frame(width: 34, height: 34)
                 .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -326,8 +324,7 @@ private struct CalendarConnectionSettingsRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "calendar")
-                .font(.system(size: 16, weight: .medium))
+            BurritoIcon(name: "calendar", size: 16)
                 .foregroundStyle(
                     calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
                 )
@@ -369,7 +366,7 @@ private struct CalendarConnectionSettingsRow: View {
                 .controlSize(.small)
                 .frame(width: 120)
         case .authorized:
-            Label("Connected", systemImage: "checkmark")
+            BurritoLabel("Connected", systemImage: "checkmark")
                 .font(.spline(size: 13, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
         case .denied:
@@ -447,7 +444,7 @@ private struct SettingsChoice: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: symbol)
+                BurritoIcon(name: symbol)
                     .foregroundStyle(isSelected ? BurritoTheme.accent : .secondary)
                 Text(title)
                 Spacer()
@@ -456,8 +453,7 @@ private struct SettingsChoice: View {
                     .frame(width: 20, height: 20)
                     .overlay {
                         if isSelected {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
+                            BurritoIcon(name: "checkmark", size: 9)
                                 .foregroundStyle(.white)
                         }
                     }
@@ -527,7 +523,7 @@ private struct SettingsFootnote: View {
     }
 
     var body: some View {
-        Label(text, systemImage: "lock.shield")
+        BurritoLabel(text, systemImage: "lock.shield")
             .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
     }
