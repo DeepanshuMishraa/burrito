@@ -5250,11 +5250,12 @@ private struct RecordingSourceLevel: View {
 private struct MemoryChatMessage: Identifiable, Equatable {
     let id: UUID
     let isUser: Bool
-    let text: String
+    var text: String
     let timestamp: Date
     let errorMessage: String?
     let scopeTitle: String?
     let usedMeetingEvidence: Bool
+    let searchedMeetings: Bool
 
     init(
         id: UUID = UUID(),
@@ -5263,7 +5264,8 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         timestamp: Date = Date(),
         errorMessage: String? = nil,
         scopeTitle: String? = nil,
-        usedMeetingEvidence: Bool = false
+        usedMeetingEvidence: Bool = false,
+        searchedMeetings: Bool = false
     ) {
         self.id = id
         self.isUser = isUser
@@ -5272,13 +5274,17 @@ private struct MemoryChatMessage: Identifiable, Equatable {
         self.errorMessage = errorMessage
         self.scopeTitle = scopeTitle
         self.usedMeetingEvidence = usedMeetingEvidence
+        self.searchedMeetings = searchedMeetings
     }
 }
 
 private struct MemoryChatView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let title: String
     let subtitle: String
     let documents: [MemoryDocument]
+    var usesSingleMeetingContext = false
     let languageIdentifier: String
     let openCitation: (MemoryCitation) -> Void
 
@@ -5455,16 +5461,15 @@ private struct MemoryChatView: View {
                                 if msg.isUser {
                                     userMessageBubble(msg)
                                         .id(msg.id)
+                                } else if msg.text.isEmpty && msg.errorMessage == nil && isAnswering {
+                                    assistantSkeletonCard
+                                        .id(msg.id)
                                 } else {
                                     assistantMessageCard(msg)
                                         .id(msg.id)
                                 }
                             }
 
-                            if isAnswering {
-                                thinkingCard
-                                    .id("thinking-indicator")
-                            }
                         }
                     }
                     .frame(maxWidth: 760, alignment: .leading)
@@ -5678,17 +5683,22 @@ private struct MemoryChatView: View {
     }
 
     private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                NoteSourceLabel(
-                    title: "Burrito answer",
-                    detail: msg.usedMeetingEvidence
-                        ? msg.scopeTitle.map { "Scoped to \($0)" }
-                            ?? "Grounded in local meeting transcripts"
-                        : "Answered by the selected on-device model",
-                    systemImage: "text.bubble"
-                )
-                Spacer()
+        HStack(alignment: .top, spacing: 12) {
+            Group {
+                if let error = msg.errorMessage {
+                    BurritoLabel(error, systemImage: "exclamationmark.triangle")
+                        .font(.spline(size: 11, weight: .regular))
+                        .foregroundStyle(.red)
+                } else {
+                    MarkdownNoteContent(
+                        markdown: msg.text,
+                        openMemory: openCitation
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if msg.errorMessage == nil {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(msg.text, forType: .string)
@@ -5715,17 +5725,6 @@ private struct MemoryChatView: View {
                 }
                 .buttonStyle(.plain)
             }
-
-            if let error = msg.errorMessage {
-                BurritoLabel(error, systemImage: "exclamationmark.triangle")
-                    .font(.spline(size: 11, weight: .regular))
-                    .foregroundStyle(.red)
-            } else {
-                MarkdownNoteContent(
-                    markdown: msg.text,
-                    openMemory: openCitation
-                )
-            }
         }
         .padding(18)
         .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -5734,35 +5733,38 @@ private struct MemoryChatView: View {
         }
     }
 
-    private var thinkingCard: some View {
-        HStack(spacing: 12) {
-            ProgressView()
-                .controlSize(.small)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Burrito is thinking…")
-                    .font(.spline(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                Text("Using the selected on-device model and meeting tools")
-                    .font(.spline(size: 10, weight: .regular))
-                    .foregroundStyle(.secondary)
+    private var assistantSkeletonCard: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { timeline in
+            let pulse = reduceMotion
+                ? 0.55
+                : 0.45 + (sin(timeline.date.timeIntervalSinceReferenceDate * 3) + 1) * 0.12
+
+            VStack(alignment: .leading, spacing: 10) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                    .padding(.trailing, 90)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .frame(height: 12)
+                    .padding(.trailing, 220)
             }
-            Spacer()
+            .foregroundStyle(BurritoTheme.controlFill)
+            .opacity(pulse)
         }
-        .padding(14)
-        .background(BurritoTheme.raised.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(18)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Generating answer")
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
         if let lastID = messages.last?.id {
             withAnimation(.burritoSpring) {
                 proxy.scrollTo(lastID, anchor: .bottom)
-            }
-        } else if isAnswering {
-            withAnimation(.burritoSpring) {
-                proxy.scrollTo("thinking-indicator", anchor: .bottom)
             }
         }
     }
@@ -5798,6 +5800,14 @@ private struct MemoryChatView: View {
         guard canAsk else { return }
         let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         let submittedScope = scopedDocument
+        let conversation = messages
+            .filter { $0.errorMessage == nil }
+            .map {
+                BurritoChatTurn(
+                    role: $0.isUser ? .user : .assistant,
+                    text: $0.text
+                )
+            }
         question = ""
         scopedDocument = nil
         BurritoHaptics.trigger(.alignment)
@@ -5807,21 +5817,25 @@ private struct MemoryChatView: View {
             text: submittedQuestion,
             scopeTitle: submittedScope?.title
         )
+        let assistantID = UUID()
+        let assistantTimestamp = Date()
+        let assistantPlaceholder = MemoryChatMessage(
+            id: assistantID,
+            isUser: false,
+            text: "",
+            timestamp: assistantTimestamp,
+            scopeTitle: submittedScope?.title
+        )
         withAnimation(.burritoSpring) {
             messages.append(userMsg)
+            messages.append(assistantPlaceholder)
         }
-
-        let conversation = messages
-            .dropLast()
-            .filter { $0.errorMessage == nil }
-            .suffix(8)
-            .map {
-                BurritoChatTurn(
-                    role: $0.isUser ? .user : .assistant,
-                    text: $0.text
-                )
-            }
-        let searchScope = submittedScope ?? (documents.count == 1 ? documents.first : nil)
+        let searchScope = submittedScope ?? (usesSingleMeetingContext ? documents.first : nil)
+        let meetingSearchRequired = MeetingQueryIntent.requiresSearch(
+            submittedQuestion,
+            hasDefaultMeetingScope: usesSingleMeetingContext,
+            hasExplicitMeetingScope: submittedScope != nil
+        )
         isAnswering = true
 
         answerTask = Task {
@@ -5830,7 +5844,14 @@ private struct MemoryChatView: View {
                 conversation: conversation,
                 documents: documents,
                 scopedDocument: searchScope,
-                languageIdentifier: languageIdentifier
+                meetingSearchRequired: meetingSearchRequired,
+                languageIdentifier: languageIdentifier,
+                onTextUpdate: { partialText in
+                    guard let index = messages.firstIndex(where: { $0.id == assistantID }) else {
+                        return
+                    }
+                    messages[index].text = partialText
+                }
             )
 
             guard !Task.isCancelled else { return }
@@ -5839,20 +5860,29 @@ private struct MemoryChatView: View {
                 switch result {
                 case .success(let response):
                     let botMsg = MemoryChatMessage(
+                        id: assistantID,
                         isUser: false,
                         text: response.text,
+                        timestamp: assistantTimestamp,
                         scopeTitle: submittedScope?.title,
-                        usedMeetingEvidence: response.usedMeetingEvidence
+                        usedMeetingEvidence: response.usedMeetingEvidence,
+                        searchedMeetings: response.searchedMeetings
                     )
-                    messages.append(botMsg)
+                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
+                        messages[index] = botMsg
+                    }
                 case .failure(let error):
                     let botMsg = MemoryChatMessage(
+                        id: assistantID,
                         isUser: false,
                         text: "Could not retrieve answer.",
+                        timestamp: assistantTimestamp,
                         errorMessage: error.recoveryMessage,
                         scopeTitle: submittedScope?.title
                     )
-                    messages.append(botMsg)
+                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
+                        messages[index] = botMsg
+                    }
                 }
                 isAnswering = false
                 answerTask = nil
@@ -6325,6 +6355,7 @@ private struct NoteDetailView: View {
                             segments: note.transcriptSegments
                         ),
                     ],
+                    usesSingleMeetingContext: true,
                     languageIdentifier: note.languageIdentifier
                 ) { citation in
                     guard citation.noteID == note.id else { return }

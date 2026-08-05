@@ -326,6 +326,40 @@ struct LocalMemoryTests {
         ))
     }
 
+    @Test("Meeting intent deterministically routes explicit and contextual questions")
+    func meetingIntentRouting() {
+        #expect(MeetingQueryIntent.requiresSearch(
+            "Tell me about this",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: true
+        ))
+        #expect(MeetingQueryIntent.requiresSearch(
+            "What decisions were made in the meeting?",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
+        #expect(MeetingQueryIntent.requiresSearch(
+            "Summarize this",
+            hasDefaultMeetingScope: true,
+            hasExplicitMeetingScope: false
+        ))
+        #expect(!MeetingQueryIntent.requiresSearch(
+            "Help me write an email",
+            hasDefaultMeetingScope: true,
+            hasExplicitMeetingScope: false
+        ))
+    }
+
+    @Test("False transcript-access refusals are detected for grounded retry")
+    func detectsFalseTranscriptRefusal() {
+        #expect(MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I don't have access to your meeting transcripts. Please select a meeting."
+        ))
+        #expect(!MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I couldn't find a deadline in the retrieved transcript passages."
+        ))
+    }
+
     @Test("Meeting search tool returns citable transcript passages")
     func meetingSearchTool() async throws {
         let document = MemoryDocument(
@@ -710,6 +744,15 @@ private struct CharacterTokenMeasurer: PromptTokenMeasuring {
     func tokenCount(_ text: String) async throws -> Int { text.count }
 }
 
+@MainActor
+private final class StreamedTextRecorder {
+    private(set) var updates: [String] = []
+
+    func record(_ text: String) {
+        updates.append(text)
+    }
+}
+
 @Suite("Foundation model adapter")
 struct FoundationModelAdapterTests {
     @Test("Routes prompts through the Swift AI SDK")
@@ -733,28 +776,59 @@ struct FoundationModelAdapterTests {
         ])
     }
 
-    @Test("Routes chat history and meeting tools through the Swift AI SDK")
+    @Test("Streams n-1 chat history and meeting tools through the Swift AI SDK")
     func routesChatToolsThroughSDK() async throws {
         let model = MockLanguageModel(text: "Hello! How can I help?")
         let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
         let tool = AI.Tool(
             name: MeetingSearchTool.name,
             description: "Search meetings",
             parameters: ["type": "object", "properties": [:]]
         )
 
-        let response = try await adapter.completeChat(
+        let response = try await adapter.completeChatStreaming(
             instructions: "Be helpful.",
-            conversation: [BurritoChatTurn(role: .user, text: "Hello")],
+            conversation: [
+                BurritoChatTurn(role: .user, text: "Hello"),
+                BurritoChatTurn(role: .assistant, text: "Hi!"),
+            ],
             question: "How are you?",
             tools: [tool],
-            maximumResponseTokens: 512
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
         )
 
         #expect(response == "Hello! How can I help?")
         let request = try #require(model.requests.first)
-        #expect(request.messages.map(\.role) == [.system, .user, .user])
+        #expect(request.messages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(request.messages.map(\.text) == [
+            "Be helpful.", "Hello", "Hi!", "How are you?",
+        ])
         #expect(request.tools.map(\.name) == [MeetingSearchTool.name])
+        let lastUpdate = await recorder.updates.last
+        #expect(lastUpdate == response)
+    }
+
+    @Test("Injects prefetched meeting evidence before the question")
+    func injectsMeetingEvidence() async throws {
+        let model = MockLanguageModel(text: "The launch is October 12.")
+        let adapter = FoundationModelAdapter(model: model)
+
+        _ = try await adapter.completeChatStreaming(
+            instructions: "Use meeting evidence.",
+            conversation: [],
+            question: "When is the launch?",
+            tools: [],
+            meetingEvidence: "Passage: The launch is October 12.",
+            maximumResponseTokens: 512,
+            onTextUpdate: { _ in }
+        )
+
+        let request = try #require(model.requests.first)
+        #expect(request.messages.map(\.role) == [.system, .user, .user])
+        #expect(request.messages[1].text.contains("The launch is October 12"))
+        #expect(request.messages[2].text == "When is the launch?")
     }
 }
 
