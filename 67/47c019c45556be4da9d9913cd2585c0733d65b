@@ -1,0 +1,14 @@
+Sources/Settings.swift
+  h_b26cb4eddfa21f 86,88,104-105,127,165,169-188,509,526-533,538,542,547-549
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6747c019c45556be4da9d9913cd2585c0733d65b",
+  "prompts": {},
+  "humans": {
+    "h_b26cb4eddfa21f": {
+      "author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
