@@ -61,6 +61,7 @@ final class LocalLanguageModelStore {
     }
 
     func install(_ variant: LocalLanguageModelVariant) async {
+        guard !isDownloading(variant) else { return }
         states[variant] = .downloading(progress: 0)
         let configuration = variant.remoteConfiguration
         do {
@@ -69,7 +70,10 @@ final class LocalLanguageModelStore {
                 configuration: configuration
             ) { [weak self] progress in
                 Task { @MainActor [weak self] in
-                    self?.states[variant] = .downloading(
+                    guard let self, case .downloading = self.states[variant] else {
+                        return
+                    }
+                    self.states[variant] = .downloading(
                         progress: min(1, max(0, progress.fractionCompleted))
                     )
                 }
@@ -96,18 +100,49 @@ final class LocalLanguageModelStore {
     }
 
     nonisolated static func isInstalled(_ variant: LocalLanguageModelVariant) -> Bool {
-        let directory = variant.modelDirectory
+        containsCompleteModel(at: variant.modelDirectory)
+    }
+
+    nonisolated static func containsCompleteModel(at directory: URL) -> Bool {
         guard FileManager.default.fileExists(
             atPath: directory.appending(path: "config.json").path
         ),
         let files = try? FileManager.default.contentsOfDirectory(
             at: directory,
-            includingPropertiesForKeys: nil
+            includingPropertiesForKeys: [.fileSizeKey]
         )
         else {
             return false
         }
-        return files.contains { $0.pathExtension == "safetensors" }
+        let safetensors = files.filter { $0.pathExtension == "safetensors" }
+        guard !safetensors.isEmpty else { return false }
+
+        let indexURL = directory.appending(path: "model.safetensors.index.json")
+        if FileManager.default.fileExists(atPath: indexURL.path) {
+            guard let data = try? Data(contentsOf: indexURL),
+                  let index = try? JSONDecoder().decode(SafetensorsIndex.self, from: data)
+            else {
+                return false
+            }
+            let expectedShards = Set(index.weightMap.values)
+            guard !expectedShards.isEmpty else { return false }
+            return expectedShards.allSatisfy { shard in
+                isNonEmptyFile(directory.appending(path: shard))
+            }
+        }
+
+        guard safetensors.allSatisfy({ !$0.lastPathComponent.contains("-of-") }) else {
+            return false
+        }
+        return safetensors.allSatisfy(isNonEmptyFile)
+    }
+
+    nonisolated private static func isNonEmptyFile(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        else {
+            return false
+        }
+        return values.isRegularFile == true && (values.fileSize ?? 0) > 0
     }
 
     nonisolated private static func persistedState(
@@ -146,6 +181,14 @@ final class LocalLanguageModelStore {
     private func isDownloading(_ variant: LocalLanguageModelVariant) -> Bool {
         guard case .downloading = states[variant] else { return false }
         return true
+    }
+
+    private struct SafetensorsIndex: Decodable {
+        let weightMap: [String: String]
+
+        private enum CodingKeys: String, CodingKey {
+            case weightMap = "weight_map"
+        }
     }
 }
 
@@ -187,6 +230,7 @@ actor LocalLanguageModelRuntime {
 
     func tokenCount(_ text: String, using variant: LocalLanguageModelVariant) async throws -> Int {
         let container = try await container(for: variant)
+        defer { release() }
         return await container.encode(text).count
     }
 
@@ -220,6 +264,7 @@ actor LocalLanguageModelRuntime {
         }
         container = nil
         loadedVariant = nil
+        await ParakeetTranscriber.shared.release()
         let loaded = try await LLMModelFactory.shared.loadContainer(
             configuration: ModelConfiguration(directory: variant.modelDirectory)
         )
@@ -294,12 +339,17 @@ struct MLXLanguageModel: AI.LanguageModel {
                             )
                         }
                     }
+                    await runtime.release()
                     continuation.finish()
                 } catch {
+                    await runtime.release()
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in task.cancel() }
+            continuation.onTermination = { _ in
+                task.cancel()
+                Task { await runtime.release() }
+            }
         }
     }
 }

@@ -79,6 +79,7 @@ enum BurritoIconCatalog {
 struct BurritoIcon: View {
     let name: String
     var size: CGFloat = 15
+    var accessibilityLabel: String? = nil
 
     var body: some View {
         image
@@ -86,7 +87,8 @@ struct BurritoIcon: View {
             .renderingMode(.template)
             .scaledToFit()
             .frame(width: size, height: size)
-            .accessibilityHidden(true)
+            .accessibilityHidden(accessibilityLabel == nil)
+            .accessibilityLabel(accessibilityLabel ?? "")
     }
 
     private var image: Image {

@@ -117,6 +117,11 @@ actor ParakeetTranscriber {
     private var manager: AsrManager?
     private var loadedVariant: ParakeetModelVariant?
 
+    func release() {
+        manager = nil
+        loadedVariant = nil
+    }
+
     func transcribe(
         fileURL: URL,
         source: AudioSource,
@@ -144,6 +149,7 @@ actor ParakeetTranscriber {
             return manager
         }
 
+        await LocalLanguageModelRuntime.shared.release()
         let models = try await AsrModels.loadFromCache(version: variant.fluidAudioVersion)
         let newManager = AsrManager(config: .default, models: models)
         manager = newManager

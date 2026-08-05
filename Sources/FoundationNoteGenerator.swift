@@ -185,10 +185,12 @@ enum MeetingQueryIntent {
         let normalized = question
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         let meetingTerms = [
-            "meeting", "transcript", "action item", "decision", "discussed", "said",
-            "attendee", "deadline", "next step", "follow-up", "follow up",
+            "meeting", "meetings", "transcript", "transcripts", "action item",
+            "action items", "decision", "decisions", "discussed", "said", "attendee",
+            "attendees", "deadline", "deadlines", "next step", "next steps", "follow-up",
+            "follow up",
         ]
-        if meetingTerms.contains(where: normalized.contains) {
+        if meetingTerms.contains(where: { containsWholeTerm($0, in: normalized) }) {
             return true
         }
         guard hasDefaultMeetingScope else {
@@ -199,6 +201,12 @@ enum MeetingQueryIntent {
             "what did we", "what did they", "what was decided",
         ]
         return scopedReferences.contains(where: normalized.contains)
+    }
+
+    private static func containsWholeTerm(_ term: String, in text: String) -> Bool {
+        let escapedTerm = NSRegularExpression.escapedPattern(for: term)
+        let pattern = "(?<![\\p{L}\\p{N}])\(escapedTerm)(?![\\p{L}\\p{N}])"
+        return text.range(of: pattern, options: .regularExpression) != nil
     }
 }
 
@@ -535,8 +543,7 @@ enum MemoryAnswer {
             return nil
         }
         let destinations = Set(rendered.runs.compactMap { $0.link?.absoluteString })
-        let allowed = Set(evidence.compactMap { $0.citationURL?.absoluteString })
-        guard destinations.isEmpty, !evidence.isEmpty, destinations.isSubset(of: allowed) else {
+        guard destinations.isEmpty, !evidence.isEmpty else {
             return nil
         }
         let sources = evidence.prefix(3).compactMap { item -> String? in
@@ -551,6 +558,7 @@ enum MemoryAnswer {
     static func falselyClaimsNoMeetingAccess(_ answer: String) -> Bool {
         let normalized = answer
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .replacingOccurrences(of: "’", with: "'")
         let refusalPhrases = [
             "don't have access", "do not have access", "cannot access", "can't access",
             "please select a meeting", "no meeting is selected",
@@ -922,20 +930,22 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         contentFilterMessage: String,
         onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
     ) async throws -> String {
+        var accumulatedText = ""
         var currentStepText = ""
-        var finalText = ""
         var finishReason: FinishReason?
 
         for try await part in result.fullStream {
             switch part {
             case .startStep:
                 currentStepText = ""
-                await onTextUpdate("")
             case .textDelta(let delta):
                 currentStepText += delta
-                await onTextUpdate(currentStepText)
+                await onTextUpdate(accumulatedText + currentStepText)
             case .finishStep(let step):
-                finalText = step.text
+                let completedStepText = step.text.isEmpty ? currentStepText : step.text
+                accumulatedText += completedStepText
+                currentStepText = ""
+                await onTextUpdate(accumulatedText)
             case .finish(let reason, _):
                 finishReason = reason
             default:
@@ -945,7 +955,7 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         guard finishReason != .contentFilter else {
             throw BurritoError.generationFailed(details: contentFilterMessage)
         }
-        return finalText.isEmpty ? currentStepText : finalText
+        return accumulatedText + currentStepText
     }
 
     private func response(

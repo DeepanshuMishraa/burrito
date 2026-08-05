@@ -722,11 +722,10 @@ enum LocalLanguageModelVariant: String, CaseIterable, Identifiable, Equatable, S
     }
 
     var downloadSize: String {
-        switch self {
-        case .small: "≈ 1.8 GB"
-        case .medium: "≈ 3.1 GB"
-        case .large: "≈ 6.0 GB"
-        }
+        "≈ " + ByteCountFormatter.string(
+            fromByteCount: downloadSizeBytes,
+            countStyle: .decimal
+        )
     }
 
     var downloadSizeBytes: Int64 {

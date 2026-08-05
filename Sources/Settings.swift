@@ -117,6 +117,7 @@ struct BurritoSettingsView: View {
                                     }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(selected == tab ? .isSelected : [])
                         }
                     }
                     .padding(3)
@@ -168,18 +169,20 @@ private struct SettingsPane: View {
 
                         // Apple-Style Grouped Form Card
                         VStack(spacing: 0) {
-                            SettingsFormToggleRow(
+                            BurritoToggleRow(
                                 title: "Include microphone by default",
-                                detail: "Capture your microphone alongside system audio for every new recording.",
-                                isOn: $microphoneDefault
+                                subtitle: "Capture your microphone alongside system audio for every new recording.",
+                                isOn: $microphoneDefault,
+                                style: .settingsForm
                             )
 
                             Divider().padding(.leading, 16)
 
-                            SettingsFormToggleRow(
+                            BurritoToggleRow(
                                 title: "Keep audio backups",
-                                detail: "Retain audio after successful transcription to allow regenerating notes later.",
-                                isOn: $retainAudioDefault
+                                subtitle: "Retain audio after successful transcription to allow regenerating notes later.",
+                                isOn: $retainAudioDefault,
+                                style: .settingsForm
                             )
                         }
                         .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -503,52 +506,7 @@ private struct SettingsChoice: View {
             }
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct SettingsFormToggleRow: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let title: String
-    let detail: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button {
-            BurritoHaptics.trigger(.alignment)
-            if reduceMotion {
-                isOn.toggle()
-            } else {
-                withAnimation(.burritoSpring) {
-                    isOn.toggle()
-                }
-            }
-        } label: {
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.spline(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Text(detail)
-                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
-                    .frame(width: 40, height: 22)
-                    .overlay(alignment: isOn ? .trailing : .leading) {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(.white)
-                            .frame(width: 16, height: 16)
-                            .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
-                            .padding(3)
-                    }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

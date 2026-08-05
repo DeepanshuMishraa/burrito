@@ -175,46 +175,45 @@ private struct BurritoMenuBarMenu: View {
 
     var body: some View {
         if coordinator.captureState.isRecording {
-            BurritoButton(
-                "Recording · \(Duration.seconds(coordinator.elapsed).formatted(.time(pattern: .minuteSecond)))",
-                systemImage: "record.circle.fill"
+            Button(
+                "Recording · \(Duration.seconds(coordinator.elapsed).formatted(.time(pattern: .minuteSecond)))"
             ) {}
-            .disabled(true)
+                .disabled(true)
 
             if let event = coordinator.activeCalendarEvent {
-                BurritoButton(event.title, systemImage: "calendar") {}
+                Button(event.title) {}
                     .disabled(true)
             }
 
             if coordinator.smartStopStatus == .suggested {
-                BurritoButton("Meeting looks finished", systemImage: "checkmark.circle") {}
+                Button("Meeting looks finished") {}
                     .disabled(true)
                 Button("Keep Recording") {
                     coordinator.keepRecording()
                 }
             }
 
-            BurritoButton("Stop and Build Note", systemImage: "stop.fill") {
+            Button("Stop and Build Note") {
                 Task { await coordinator.stop(context: modelContext) }
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
 
             Divider()
 
-            BurritoButton("Open Active Recording", systemImage: "macwindow") {
+            Button("Open Active Recording") {
                 openMainWindow()
             }
         } else {
-            BurritoMenu("Start Recording", systemImage: "record.circle") {
-                BurritoButton("Listen Along", systemImage: "speaker.wave.2") {
+            Menu("Start Recording") {
+                Button("Listen Along") {
                     startQuickRecording(mode: .listenAlong)
                 }
-                BurritoButton("Meeting Mode", systemImage: "person.2.wave.2") {
+                Button("Meeting Mode") {
                     startQuickRecording(mode: .meeting)
                 }
             }
 
-            BurritoButton("New Recording…", systemImage: "slider.horizontal.3") {
+            Button("New Recording…") {
                 openRecordingSetup()
             }
             .keyboardShortcut("n", modifiers: .command)
@@ -222,28 +221,25 @@ private struct BurritoMenuBarMenu: View {
             Divider()
 
             if let event = nextMeeting {
-                BurritoMenu("Next: \(event.title)", systemImage: "calendar") {
-                    BurritoButton(
-                        event.startDate.formatted(date: .abbreviated, time: .shortened),
-                        systemImage: "clock"
-                    ) {}
-                    .disabled(true)
+                Menu("Next: \(event.title)") {
+                    Button(event.startDate.formatted(date: .abbreviated, time: .shortened)) {}
+                        .disabled(true)
 
                     if event.meetingURL != nil {
-                        BurritoButton("Join + Record", systemImage: "video.fill") {
+                        Button("Join + Record") {
                             start(event, joinsMeeting: true)
                         }
                     }
-                    BurritoButton("Record Without Joining", systemImage: "waveform") {
+                    Button("Record Without Joining") {
                         start(event, joinsMeeting: false)
                     }
                 }
             } else {
-                BurritoButton("No Upcoming Meetings", systemImage: "calendar.badge.clock") {}
+                Button("No Upcoming Meetings") {}
                     .disabled(true)
             }
 
-            BurritoButton("Refresh Calendar", systemImage: "arrow.clockwise") {
+            Button("Refresh Calendar") {
                 calendarAccess.refresh()
                 Task {
                     await MeetingReminderScheduler.shared.synchronize(
@@ -255,7 +251,7 @@ private struct BurritoMenuBarMenu: View {
             Divider()
 
             if let error = coordinator.lastError {
-                BurritoButton("Recording Needs Attention", systemImage: "exclamationmark.triangle") {
+                Button("Recording Needs Attention") {
                     openMainWindow()
                 }
                 .help(error.recoveryMessage)
@@ -265,7 +261,7 @@ private struct BurritoMenuBarMenu: View {
                 openMainWindow()
             }
 
-            BurritoButton("Settings…", systemImage: "gearshape") {
+            Button("Settings…") {
                 openMainWindow()
                 NotificationCenter.default.post(name: .burritoOpenSettings, object: nil)
             }

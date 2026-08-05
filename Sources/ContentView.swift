@@ -1728,10 +1728,16 @@ private struct NotificationPermissionCard: View {
 }
 
 private struct ModelsView: View {
+    private enum Tab {
+        case speechToText
+        case textModels
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var modelStore: ParakeetModelStore
     @Bindable var languageModelStore: LocalLanguageModelStore
 
-    @State private var selectedTab = 0 // 0: Speech to Text, 1: Text Models
+    @State private var selectedTab: Tab = .speechToText
 
     private var hasInstalledModels: Bool {
         ParakeetModelVariant.allCases.contains {
@@ -1783,15 +1789,17 @@ private struct ModelsView: View {
                 HStack(spacing: 2) {
                     Button {
                         BurritoHaptics.trigger(.alignment)
-                        withAnimation(.burritoSpring) { selectedTab = 0 }
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            selectedTab = .speechToText
+                        }
                     } label: {
                         BurritoLabel("Speech to Text", systemImage: "waveform")
-                            .font(.spline(size: 12, weight: selectedTab == 0 ? .medium : .regular))
-                            .foregroundStyle(selectedTab == 0 ? .primary : .secondary)
+                            .font(.spline(size: 12, weight: selectedTab == .speechToText ? .medium : .regular))
+                            .foregroundStyle(selectedTab == .speechToText ? .primary : .secondary)
                             .padding(.horizontal, 14)
                             .frame(height: 32)
                             .background(
-                                selectedTab == 0 ? BurritoTheme.controlFill : Color.clear,
+                                selectedTab == .speechToText ? BurritoTheme.controlFill : Color.clear,
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                             )
                     }
@@ -1799,15 +1807,17 @@ private struct ModelsView: View {
 
                     Button {
                         BurritoHaptics.trigger(.alignment)
-                        withAnimation(.burritoSpring) { selectedTab = 1 }
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            selectedTab = .textModels
+                        }
                     } label: {
                         BurritoLabel("Text Models", systemImage: "sparkles")
-                            .font(.spline(size: 12, weight: selectedTab == 1 ? .medium : .regular))
-                            .foregroundStyle(selectedTab == 1 ? .primary : .secondary)
+                            .font(.spline(size: 12, weight: selectedTab == .textModels ? .medium : .regular))
+                            .foregroundStyle(selectedTab == .textModels ? .primary : .secondary)
                             .padding(.horizontal, 14)
                             .frame(height: 32)
                             .background(
-                                selectedTab == 1 ? BurritoTheme.controlFill : Color.clear,
+                                selectedTab == .textModels ? BurritoTheme.controlFill : Color.clear,
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                             )
                     }
@@ -1825,7 +1835,7 @@ private struct ModelsView: View {
             // Content Body for Selected Tab
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if selectedTab == 0 {
+                    if selectedTab == .speechToText {
                         // SPEECH TO TEXT TAB
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 14) {
@@ -2055,9 +2065,19 @@ private struct GenerationModelCatalogRow: View {
                     Text("\(Int(progress * 100))%")
                         .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                         .foregroundStyle(.secondary)
-                    ProgressView(value: progress).frame(width: 82)
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                .fill(BurritoTheme.controlFill)
+                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                .fill(BurritoTheme.accent)
+                                .frame(width: proxy.size.width * progress)
+                        }
+                    }
+                    .frame(width: 82, height: 3)
                 }
                 .accessibilityLabel("Installing \(title)")
+                .accessibilityValue("\(Int(progress * 100)) percent")
             case .installed:
                 BurritoInlineButton(title: "Use", systemImage: "checkmark", action: action)
             case .failed(let message):
@@ -4447,8 +4467,12 @@ private struct RecordingTranscriptionRow: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer()
-            BurritoButton("View models", systemImage: "chevron.right", action: openModels)
-                .labelStyle(.titleAndIcon)
+            Button(action: openModels) {
+                HStack(spacing: 5) {
+                    Text("View models")
+                    BurritoIcon(name: "chevron.right", size: 10)
+                }
+            }
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
@@ -4565,45 +4589,9 @@ private struct BurritoChoiceButton: View {
     }
 }
 
-private struct BurritoToggleRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button {
-            isOn.toggle()
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
-                ZStack(alignment: isOn ? .trailing : .leading) {
-                    Rectangle()
-                        .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
-                        .frame(width: 38, height: 22)
-                    Rectangle()
-                        .fill(isOn ? Color.white : Color.secondary)
-                        .frame(width: 16, height: 16)
-                        .padding(3)
-                }
-            }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 14)
-            .frame(height: 58)
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(isOn ? "On" : "Off")
-    }
-}
-
 private struct TemplatesView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let templates: [NoteTemplate]
 
     @State private var selectedTemplateID: UUID?
@@ -4677,7 +4665,7 @@ private struct TemplatesView: View {
                                     isSelected: selectedTemplateID == template.id,
                                     select: {
                                         BurritoHaptics.trigger(.alignment)
-                                        withAnimation(.burritoSpring) {
+                                        withAnimation(reduceMotion ? nil : .burritoSpring) {
                                             selectedTemplateID = template.id
                                         }
                                     }
@@ -4823,11 +4811,17 @@ private struct TemplateListRow: View {
 }
 
 private struct TemplatePromptDetail: View {
+    private enum Tab {
+        case instructions
+        case systemPrompt
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let template: NoteTemplate
     let edit: () -> Void
     let delete: (() -> Void)?
 
-    @State private var activeTab = 0
+    @State private var activeTab: Tab = .instructions
     @State private var copiedText = false
 
     private var systemPrompt: String {
@@ -4885,26 +4879,30 @@ private struct TemplatePromptDetail: View {
             HStack {
                 HStack(spacing: 2) {
                     Button {
-                        withAnimation(.burritoSpring) { activeTab = 0 }
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            activeTab = .instructions
+                        }
                     } label: {
                         BurritoLabel("Instructions", systemImage: "doc.text")
-                            .font(.spline(size: 12, weight: activeTab == 0 ? .medium : .regular))
-                            .foregroundStyle(activeTab == 0 ? .primary : .secondary)
+                            .font(.spline(size: 12, weight: activeTab == .instructions ? .medium : .regular))
+                            .foregroundStyle(activeTab == .instructions ? .primary : .secondary)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
-                            .background(activeTab == 0 ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(activeTab == .instructions ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
                     Button {
-                        withAnimation(.burritoSpring) { activeTab = 1 }
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
+                            activeTab = .systemPrompt
+                        }
                     } label: {
                         BurritoLabel("Full System Prompt", systemImage: "terminal")
-                            .font(.spline(size: 12, weight: activeTab == 1 ? .medium : .regular))
-                            .foregroundStyle(activeTab == 1 ? .primary : .secondary)
+                            .font(.spline(size: 12, weight: activeTab == .systemPrompt ? .medium : .regular))
+                            .foregroundStyle(activeTab == .systemPrompt ? .primary : .secondary)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
-                            .background(activeTab == 1 ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .background(activeTab == .systemPrompt ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -4918,7 +4916,10 @@ private struct TemplatePromptDetail: View {
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(activeTab == 0 ? template.instructions : systemPrompt, forType: .string)
+                    NSPasteboard.general.setString(
+                        activeTab == .instructions ? template.instructions : systemPrompt,
+                        forType: .string
+                    )
                     copiedText = true
                     BurritoHaptics.trigger(.alignment)
                     Task {
@@ -4940,7 +4941,7 @@ private struct TemplatePromptDetail: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if activeTab == 0 {
+                    if activeTab == .instructions {
                         Text(template.instructions)
                             .font(.spline(size: 13, weight: .regular))
                             .foregroundStyle(.primary.opacity(0.9))
@@ -5402,23 +5403,7 @@ private struct MemoryChatView: View {
 
                     HStack(spacing: 10) {
                         if !session.messages.isEmpty {
-                            Button {
-                                BurritoHaptics.trigger(.alignment)
-                                withAnimation(.burritoSpring) {
-                                    session.clear()
-                                }
-                            } label: {
-                                BurritoLabel("Clear chat", systemImage: "trash")
-                                    .font(.spline(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 28)
-                                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
-                                    }
-                            }
-                            .buttonStyle(.plain)
+                            clearChatButton
                         }
 
                         BurritoLabel("On device", systemImage: "lock.fill")
@@ -5435,6 +5420,16 @@ private struct MemoryChatView: View {
                 .padding(.horizontal, 36)
                 .frame(height: 64)
 
+                Divider()
+            }
+
+            if usesSingleMeetingContext, !session.messages.isEmpty {
+                HStack {
+                    Spacer()
+                    clearChatButton
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 44)
                 Divider()
             }
 
@@ -5516,7 +5511,7 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)
-                .onChange(of: session.messages) { _, _ in
+                .onChange(of: session.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: session.isAnswering) { _, answering in
@@ -5683,6 +5678,30 @@ private struct MemoryChatView: View {
         }
     }
 
+    private var clearChatButton: some View {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                session.clear()
+            }
+        } label: {
+            BurritoLabel("Clear chat", systemImage: "trash")
+                .font(.spline(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background(
+                    BurritoTheme.controlFill,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
     private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
         HStack {
             Spacer(minLength: 60)
@@ -5739,7 +5758,7 @@ private struct MemoryChatView: View {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(msg.text, forType: .string)
                         BurritoHaptics.trigger(.alignment)
-                        withAnimation(.burritoSpring) {
+                        withAnimation(reduceMotion ? nil : .burritoSpring) {
                             session.copiedMessageID = msg.id
                         }
                         Task {
@@ -5811,7 +5830,7 @@ private struct MemoryChatView: View {
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
         if let lastID = session.messages.last?.id {
-            withAnimation(.burritoSpring) {
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
                 proxy.scrollTo(lastID, anchor: .bottom)
             }
         }
@@ -5874,7 +5893,7 @@ private struct MemoryChatView: View {
             timestamp: assistantTimestamp,
             scopeTitle: submittedScope?.title
         )
-        withAnimation(.burritoSpring) {
+        withAnimation(reduceMotion ? nil : .burritoSpring) {
             session.messages.append(userMsg)
             session.messages.append(assistantPlaceholder)
         }
@@ -5904,7 +5923,7 @@ private struct MemoryChatView: View {
 
             guard !Task.isCancelled else { return }
 
-            withAnimation(.burritoSpring) {
+            withAnimation(reduceMotion ? nil : .burritoSpring) {
                 switch result {
                 case .success(let response):
                     let botMsg = MemoryChatMessage(
@@ -6044,6 +6063,8 @@ private struct HeaderSegmentTabButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .help(title)
     }
 }
@@ -6083,8 +6104,15 @@ private struct MeetingContextPanel: View {
 }
 
 private struct NoteDetailView: View {
+    private enum Tab {
+        case notes
+        case transcript
+        case chat
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var note: Note
     @Bindable var chatSession: MemoryChatSession
     let externalCitedSegmentID: UUID?
@@ -6097,7 +6125,7 @@ private struct NoteDetailView: View {
     let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: Tab = .notes
     @State private var isEditingMarkdown = false
     @State private var showingFolderPopover = false
     @State private var showingMorePopover = false
@@ -6109,7 +6137,6 @@ private struct NoteDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
             // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
             if !isRecordingThisNote {
                 HStack(spacing: 12) {
@@ -6126,28 +6153,34 @@ private struct NoteDetailView: View {
                         HeaderSegmentTabButton(
                             title: "Notes",
                             systemImage: "doc.text",
-                            isSelected: selectedTab == 0
+                            isSelected: selectedTab == .notes
                         ) {
                             BurritoHaptics.trigger(.alignment)
-                            withAnimation(.burritoSpring) { selectedTab = 0 }
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .notes
+                            }
                         }
 
                         HeaderSegmentTabButton(
                             title: "Transcript",
                             systemImage: "waveform",
-                            isSelected: selectedTab == 1
+                            isSelected: selectedTab == .transcript
                         ) {
                             BurritoHaptics.trigger(.alignment)
-                            withAnimation(.burritoSpring) { selectedTab = 1 }
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .transcript
+                            }
                         }
 
                         HeaderSegmentTabButton(
                             title: "Ask AI",
                             systemImage: "sparkles",
-                            isSelected: selectedTab == 2
+                            isSelected: selectedTab == .chat
                         ) {
                             BurritoHaptics.trigger(.alignment)
-                            withAnimation(.burritoSpring) { selectedTab = 2 }
+                            withAnimation(reduceMotion ? nil : .burritoSpring) {
+                                selectedTab = .chat
+                            }
                         }
                     }
                     .padding(3)
@@ -6156,8 +6189,7 @@ private struct NoteDetailView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                     }
 
-                    // In Chat Tab (selectedTab == 2), hide title and action buttons to provide a completely clean space
-                    if selectedTab != 2 {
+                    if selectedTab != .chat {
                         // Meeting Title aligned directly on the left after tabs
                         TextField("Untitled note", text: titleBinding)
                             .textFieldStyle(.plain)
@@ -6168,10 +6200,10 @@ private struct NoteDetailView: View {
 
                         // Right Controller Group
                         HStack(spacing: 8) {
-                            if selectedTab == 0 {
+                            if selectedTab == .notes {
                                 Button {
                                     BurritoHaptics.trigger(.alignment)
-                                    withAnimation(.burritoSpring) {
+                                    withAnimation(reduceMotion ? nil : .burritoSpring) {
                                         isEditingMarkdown.toggle()
                                     }
                                 } label: {
@@ -6273,6 +6305,13 @@ private struct NoteDetailView: View {
                                     }
                                 }
                             }
+                            .popover(
+                                isPresented: $showingFolderPopover,
+                                attachmentAnchor: .rect(.bounds),
+                                arrowEdge: .top
+                            ) {
+                                folderPopoverContent
+                            }
                         }
                     } else {
                         Spacer()
@@ -6284,7 +6323,7 @@ private struct NoteDetailView: View {
             }
 
             // Sub-Header Metadata Strip (Hidden in Chat Tab for 100% clean canvas)
-            if !isRecordingThisNote && selectedTab != 2 {
+            if !isRecordingThisNote && selectedTab != .chat {
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         BurritoIcon(name: "calendar", size: 11)
@@ -6371,7 +6410,7 @@ private struct NoteDetailView: View {
                     recordingMode: note.recordingMode
                 )
                 .transition(.opacity)
-            } else if selectedTab == 0 {
+            } else if selectedTab == .notes {
                 if isEditingMarkdown {
                     NoteEditingView(
                         userNotes: userNotesBinding,
@@ -6385,7 +6424,7 @@ private struct NoteDetailView: View {
                             generatedNotes: note.markdownBody,
                             openTranscript: { id in
                                 citedSegmentID = id
-                                selectedTab = 1
+                                selectedTab = .transcript
                             }
                         )
                         .frame(maxWidth: 820, alignment: .leading)
@@ -6396,7 +6435,7 @@ private struct NoteDetailView: View {
                     .scrollIndicators(.hidden)
                     .transition(.opacity)
                 }
-            } else if selectedTab == 1 {
+            } else if selectedTab == .transcript {
                 TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
             } else {
                 MemoryChatView(
@@ -6416,38 +6455,12 @@ private struct NoteDetailView: View {
                 ) { citation in
                     guard citation.noteID == note.id else { return }
                     citedSegmentID = citation.segmentID
-                    selectedTab = 1
+                    selectedTab = .transcript
                 }
             }
         }
         .background(BurritoTheme.canvas)
         .navigationTitle("")
-        .popover(
-            isPresented: $showingFolderPopover,
-            attachmentAnchor: .rect(.bounds),
-            arrowEdge: .top
-        ) {
-            BurritoPopoverPanel(title: "Move to folder") {
-                BurritoPopoverRow(
-                    title: "No folder",
-                    systemImage: "tray",
-                    isSelected: note.folder == nil
-                ) {
-                    note.folder = nil
-                    showingFolderPopover = false
-                }
-                ForEach(folders) { folder in
-                    BurritoPopoverRow(
-                        title: folder.name,
-                        systemImage: "folder",
-                        isSelected: note.folder?.id == folder.id
-                    ) {
-                        note.folder = folder
-                        showingFolderPopover = false
-                    }
-                }
-            }
-        }
         .onAppear {
             openExternalCitation()
         }
@@ -6522,7 +6535,30 @@ private struct NoteDetailView: View {
     private func openExternalCitation() {
         guard let externalCitedSegmentID else { return }
         citedSegmentID = externalCitedSegmentID
-        selectedTab = 1
+        selectedTab = .transcript
+    }
+
+    private var folderPopoverContent: some View {
+        BurritoPopoverPanel(title: "Move to folder") {
+            BurritoPopoverRow(
+                title: "No folder",
+                systemImage: "tray",
+                isSelected: note.folder == nil
+            ) {
+                note.folder = nil
+                showingFolderPopover = false
+            }
+            ForEach(folders) { folder in
+                BurritoPopoverRow(
+                    title: folder.name,
+                    systemImage: "folder",
+                    isSelected: note.folder?.id == folder.id
+                ) {
+                    note.folder = folder
+                    showingFolderPopover = false
+                }
+            }
+        }
     }
 
     private var isRecordingThisNote: Bool {

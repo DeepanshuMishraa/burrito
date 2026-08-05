@@ -357,12 +357,20 @@ struct LocalMemoryTests {
             hasDefaultMeetingScope: true,
             hasExplicitMeetingScope: false
         ))
+        #expect(!MeetingQueryIntent.requiresSearch(
+            "Help me write a transcriptome research summary",
+            hasDefaultMeetingScope: false,
+            hasExplicitMeetingScope: false
+        ))
     }
 
     @Test("False transcript-access refusals are detected for grounded retry")
     func detectsFalseTranscriptRefusal() {
         #expect(MemoryAnswer.falselyClaimsNoMeetingAccess(
             "I don't have access to your meeting transcripts. Please select a meeting."
+        ))
+        #expect(MemoryAnswer.falselyClaimsNoMeetingAccess(
+            "I don’t have access to your meeting transcripts."
         ))
         #expect(!MemoryAnswer.falselyClaimsNoMeetingAccess(
             "I couldn't find a deadline in the retrieved transcript passages."
@@ -819,6 +827,47 @@ struct FoundationModelAdapterTests {
         #expect(lastUpdate == response)
     }
 
+    @Test("Streaming preserves text across tool-call steps")
+    func preservesTextAcrossToolSteps() async throws {
+        let toolCall = AI.ToolCall(
+            id: "call-1",
+            name: "lookup",
+            arguments: [:]
+        )
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("Step one. "),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("Final step."),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
+        let tool = AI.Tool(
+            name: "lookup",
+            description: "Look up context",
+            parameters: ["type": "object", "properties": [:]],
+            execute: { _ in ["result": "done"] }
+        )
+
+        let response = try await adapter.completeChatStreaming(
+            instructions: "Use the tool.",
+            conversation: [],
+            question: "Continue across steps.",
+            tools: [tool],
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
+        )
+
+        #expect(response == "Step one. Final step.")
+        let lastUpdate = await recorder.updates.last
+        #expect(lastUpdate == response)
+    }
+
     @Test("Injects prefetched meeting evidence before the question")
     func injectsMeetingEvidence() async throws {
         let model = MockLanguageModel(text: "The launch is October 12.")
@@ -847,7 +896,7 @@ struct LocalLanguageModelTests {
     func catalogMetadata() {
         #expect(LocalLanguageModelVariant.allCases == [.small, .medium, .large])
         #expect(LocalLanguageModelVariant.small.parameterCount == "2B parameters")
-        #expect(LocalLanguageModelVariant.medium.downloadSize == "≈ 3.1 GB")
+        #expect(LocalLanguageModelVariant.medium.downloadSize == "≈ 3.06 GB")
         #expect(LocalLanguageModelVariant.large.downloadSizeBytes == 5_980_000_000)
         #expect(
             LocalLanguageModelVariant.small.revision
@@ -875,6 +924,34 @@ struct LocalLanguageModelTests {
                 isInstalled: { _ in false }
             ) == .apple
         )
+    }
+
+    @Test("Interrupted sharded model bundles are not installed")
+    func rejectsIncompleteShardedBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try Data("{}".utf8).write(to: directory.appending(path: "config.json"))
+        try Data("first".utf8).write(
+            to: directory.appending(path: "model-00001-of-00002.safetensors")
+        )
+        try Data(
+            """
+            {"weight_map":{"layer.0":"model-00001-of-00002.safetensors","layer.1":"model-00002-of-00002.safetensors"}}
+            """.utf8
+        ).write(to: directory.appending(path: "model.safetensors.index.json"))
+
+        #expect(!LocalLanguageModelStore.containsCompleteModel(at: directory))
+
+        try Data("second".utf8).write(
+            to: directory.appending(path: "model-00002-of-00002.safetensors")
+        )
+        #expect(LocalLanguageModelStore.containsCompleteModel(at: directory))
     }
 
     @Test("Swift AI SDK tools map into Qwen chat history")
