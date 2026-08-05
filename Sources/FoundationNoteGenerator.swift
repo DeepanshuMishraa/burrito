@@ -635,13 +635,6 @@ actor BurritoChatAnswerer {
             } else {
                 prefetchedEvidence = []
             }
-            let validatesMeetingAnswer = meetingSearchRequired
-            let initialTextUpdate: @MainActor @Sendable (String) -> Void
-            if validatesMeetingAnswer {
-                initialTextUpdate = { _ in }
-            } else {
-                initialTextUpdate = onTextUpdate
-            }
             let answer = try await adapter.completeChatStreaming(
                 instructions: BurritoChatPrompt.instructions(
                     scopedToMeeting: scopedDocument != nil
@@ -653,7 +646,7 @@ actor BurritoChatAnswerer {
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
                 maximumResponseTokens: 1_024,
-                onTextUpdate: initialTextUpdate
+                onTextUpdate: { _ in }
             )
             var trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
@@ -664,6 +657,7 @@ actor BurritoChatAnswerer {
             let evidence = await collector.snapshot()
             let searchedMeetings = await collector.searchWasPerformed()
             guard !evidence.isEmpty else {
+                await onTextUpdate(trimmed)
                 return .success(
                     BurritoChatResponse(
                         text: trimmed,
@@ -710,9 +704,7 @@ actor BurritoChatAnswerer {
                     )
                 )
             }
-            if validatesMeetingAnswer {
-                await onTextUpdate(supported)
-            }
+            await onTextUpdate(supported)
             return .success(
                 BurritoChatResponse(
                     text: supported,

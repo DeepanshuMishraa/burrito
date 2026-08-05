@@ -496,6 +496,63 @@ struct LocalMemoryTests {
         #expect(updates.last == response.text)
     }
 
+    @Test("Classifier-missed meeting search emits only its validated answer")
+    func buffersMissedIntentMeetingAnswerUntilValidated() async throws {
+        let noteID = UUID()
+        let segmentID = UUID()
+        let citation = "burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"
+        let toolCall = AI.ToolCall(
+            id: "call-1",
+            name: MeetingSearchTool.name,
+            arguments: ["query": "main objections concerns"]
+        )
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("An unsupported draft."),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("The main concern was pricing. [source](\(citation))"),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Customer feedback",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 8,
+                    duration: 4,
+                    text: "The main objection was concern about pricing."
+                ),
+            ]
+        )
+
+        let result = await answerer.answer(
+            question: "What were the main objections or concerns?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(response.usedMeetingEvidence)
+        #expect(response.searchedMeetings)
+        #expect(response.text.contains(citation))
+        #expect(updates == [response.text])
+    }
+
     @Test("Meeting search tool returns citable transcript passages")
     func meetingSearchTool() async throws {
         let noteID = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
@@ -1156,6 +1213,42 @@ struct LocalLanguageModelTests {
         #expect(!LocalLanguageModelStore.containsCompleteModel(
             at: directory,
             expectedRevision: "new-revision"
+        ))
+    }
+
+    @Test("Installation checks migrate complete legacy bundles safely")
+    func installationCheckMigratesLegacyModelBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "legacy-revision"
+        #expect(!LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: true
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+
+        #expect(LocalLanguageModelStore.containsInstalledModel(
+            at: directory,
+            expectedRevision: revision,
+            legacyRevision: revision,
+            installationInProgress: false
         ))
     }
 

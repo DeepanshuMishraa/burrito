@@ -4,6 +4,7 @@ import FoundationModels
 import MLXLLM
 import MLXLMCommon
 import Observation
+import Synchronization
 import Tokenizers
 
 actor LocalModelInferenceGate {
@@ -85,7 +86,6 @@ final class LocalLanguageModelStore {
     }
 
     private init() {
-        Self.migrateLegacyInstallations()
         selection = GenerationModelSelection.resolve(
             persistedValue: UserDefaults.standard.string(
                 forKey: GenerationModelSelection.storageKey
@@ -125,6 +125,9 @@ final class LocalLanguageModelStore {
 
     func install(_ variant: LocalLanguageModelVariant) async {
         guard downloads[variant] == nil else { return }
+        Self.activeInstallationDirectories.withLock {
+            _ = $0.insert(variant.modelDirectory)
+        }
         let downloadID = UUID()
         let task = Task { [weak self] in
             guard let self else { return }
@@ -134,6 +137,9 @@ final class LocalLanguageModelStore {
         await task.value
         if downloads[variant]?.id == downloadID {
             downloads[variant] = nil
+        }
+        Self.activeInstallationDirectories.withLock {
+            _ = $0.remove(variant.modelDirectory)
         }
     }
 
@@ -193,10 +199,28 @@ final class LocalLanguageModelStore {
     }
 
     nonisolated static func isInstalled(_ variant: LocalLanguageModelVariant) -> Bool {
-        containsCompleteModel(
-            at: variant.modelDirectory,
-            expectedRevision: variant.revision
-        )
+        activeInstallationDirectories.withLock { activeDirectories in
+            containsInstalledModel(
+                at: variant.modelDirectory,
+                expectedRevision: variant.revision,
+                legacyRevision: variant.markerlessBundleRevision,
+                installationInProgress: activeDirectories.contains(variant.modelDirectory)
+            )
+        }
+    }
+
+    nonisolated static func containsInstalledModel(
+        at directory: URL,
+        expectedRevision: String,
+        legacyRevision: String,
+        installationInProgress: Bool
+    ) -> Bool {
+        if containsCompleteModel(at: directory, expectedRevision: expectedRevision) {
+            return true
+        }
+        guard !installationInProgress else { return false }
+        try? migrateLegacyInstallation(at: directory, revision: legacyRevision)
+        return containsCompleteModel(at: directory, expectedRevision: expectedRevision)
     }
 
     nonisolated static func containsCompleteModel(
@@ -237,15 +261,6 @@ final class LocalLanguageModelStore {
             return
         }
         try markInstallationComplete(at: directory, revision: revision)
-    }
-
-    nonisolated private static func migrateLegacyInstallations() {
-        for variant in LocalLanguageModelVariant.allCases {
-            try? migrateLegacyInstallation(
-                at: variant.modelDirectory,
-                revision: variant.markerlessBundleRevision
-            )
-        }
     }
 
     nonisolated private static func containsRuntimeFiles(at directory: URL) -> Bool {
@@ -341,6 +356,7 @@ final class LocalLanguageModelStore {
     }
 
     private nonisolated static let installationMarkerName = ".burrito-installation.json"
+    private nonisolated static let activeInstallationDirectories = Mutex<Set<URL>>([])
 }
 
 extension LocalLanguageModelVariant {
