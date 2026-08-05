@@ -202,15 +202,27 @@ final class LocalLanguageModelStore {
         at directory: URL,
         expectedRevision: String
     ) -> Bool {
-        guard let markerData = try? Data(
-            contentsOf: directory.appending(path: installationMarkerName)
-        ),
-        let marker = try? JSONDecoder().decode(InstallationMarker.self, from: markerData),
-        marker.revision == expectedRevision
-        else {
+        let markerURL = directory.appending(path: installationMarkerName)
+        if FileManager.default.fileExists(atPath: markerURL.path) {
+            guard let markerData = try? Data(contentsOf: markerURL),
+                  let marker = try? JSONDecoder().decode(
+                      InstallationMarker.self,
+                      from: markerData
+                  ),
+                  marker.revision == expectedRevision
+            else {
+                return false
+            }
+            return containsRuntimeFiles(at: directory)
+        }
+
+        guard containsRuntimeFiles(at: directory) else { return false }
+        do {
+            try markInstallationComplete(at: directory, revision: expectedRevision)
+            return true
+        } catch {
             return false
         }
-        return containsRuntimeFiles(at: directory)
     }
 
     nonisolated static func markInstallationComplete(
@@ -225,19 +237,13 @@ final class LocalLanguageModelStore {
     }
 
     nonisolated private static func containsRuntimeFiles(at directory: URL) -> Bool {
-        guard FileManager.default.fileExists(
-            atPath: directory.appending(path: "config.json").path
-        ),
-        FileManager.default.fileExists(
-            atPath: directory.appending(path: "tokenizer.json").path
-        ),
-        FileManager.default.fileExists(
-            atPath: directory.appending(path: "tokenizer_config.json").path
-        ),
-        let files = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey]
-        )
+        guard isNonEmptyFile(directory.appending(path: "config.json")),
+              isNonEmptyFile(directory.appending(path: "tokenizer.json")),
+              isNonEmptyFile(directory.appending(path: "tokenizer_config.json")),
+              let files = try? FileManager.default.contentsOfDirectory(
+                  at: directory,
+                  includingPropertiesForKeys: [.fileSizeKey]
+              )
         else {
             return false
         }

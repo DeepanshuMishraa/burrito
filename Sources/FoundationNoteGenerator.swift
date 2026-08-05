@@ -621,9 +621,12 @@ actor BurritoChatAnswerer {
                 )
                 await collector.record(prefetchedEvidence)
                 guard !prefetchedEvidence.isEmpty else {
+                    let fallback = "I couldn’t find relevant transcript evidence for that "
+                        + "meeting question."
+                    await onTextUpdate(fallback)
                     return .success(
                         BurritoChatResponse(
-                            text: "I couldn’t find relevant transcript evidence for that meeting question.",
+                            text: fallback,
                             usedMeetingEvidence: false,
                             searchedMeetings: true
                         )
@@ -632,20 +635,21 @@ actor BurritoChatAnswerer {
             } else {
                 prefetchedEvidence = []
             }
-            let shouldBufferInitialAnswer = meetingSearchRequired
+            let validatesMeetingAnswer = meetingSearchRequired
             let initialTextUpdate: @MainActor @Sendable (String) -> Void
-            if shouldBufferInitialAnswer {
+            if validatesMeetingAnswer {
                 initialTextUpdate = { _ in }
             } else {
                 initialTextUpdate = onTextUpdate
             }
+            let tools: [any AIToolProtocol] = meetingSearchRequired ? [tool] : []
             let answer = try await adapter.completeChatStreaming(
                 instructions: BurritoChatPrompt.instructions(
                     scopedToMeeting: scopedDocument != nil
                 ),
                 conversation: conversation,
                 question: question,
-                tools: [tool],
+                tools: tools,
                 meetingEvidence: prefetchedEvidence.isEmpty
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
@@ -661,6 +665,18 @@ actor BurritoChatAnswerer {
             let evidence = await collector.snapshot()
             let searchedMeetings = await collector.searchWasPerformed()
             guard !evidence.isEmpty else {
+                if validatesMeetingAnswer {
+                    let fallback = "I couldn’t find relevant transcript evidence for that "
+                        + "meeting question."
+                    await onTextUpdate(fallback)
+                    return .success(
+                        BurritoChatResponse(
+                            text: fallback,
+                            usedMeetingEvidence: false,
+                            searchedMeetings: true
+                        )
+                    )
+                }
                 return .success(
                     BurritoChatResponse(
                         text: trimmed,
@@ -676,9 +692,12 @@ actor BurritoChatAnswerer {
                     tokenMeasurer: adapter
                 )
                 guard !prepared.evidence.isEmpty else {
+                    let fallback = "I found transcript passages, but they do not fit within "
+                        + "this model’s context window. Try a more specific question."
+                    await onTextUpdate(fallback)
                     return .success(
                         BurritoChatResponse(
-                            text: "I found transcript passages, but they do not fit within this model’s context window. Try a more specific question.",
+                            text: fallback,
                             usedMeetingEvidence: false,
                             searchedMeetings: true
                         )
@@ -688,20 +707,23 @@ actor BurritoChatAnswerer {
                     instructions: MemoryPrompt.instructions,
                     prompt: prepared.prompt,
                     maximumResponseTokens: 768,
-                    onTextUpdate: onTextUpdate
+                    onTextUpdate: { _ in }
                 )
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             }
             guard let supported = MemoryAnswer.recoveredToolAnswer(trimmed, against: evidence) else {
+                let fallback = "I found relevant meeting passages, but couldn’t safely connect "
+                    + "the answer to those sources. Try a more specific question."
+                await onTextUpdate(fallback)
                 return .success(
                     BurritoChatResponse(
-                        text: "I found relevant meeting passages, but couldn’t safely connect the answer to those sources. Try a more specific question.",
+                        text: fallback,
                         usedMeetingEvidence: true,
                         searchedMeetings: true
                     )
                 )
             }
-            if shouldBufferInitialAnswer {
+            if validatesMeetingAnswer {
                 await onTextUpdate(supported)
             }
             return .success(

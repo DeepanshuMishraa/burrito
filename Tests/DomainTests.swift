@@ -421,9 +421,73 @@ struct LocalMemoryTests {
         let response = try result.get()
         let updates = await recorder.updates
 
-        #expect(updates.allSatisfy { !$0.contains("don't have access") })
-        #expect(updates.last == response.text)
+        #expect(updates == [response.text])
         #expect(response.text.contains(corrected))
+    }
+
+    @Test("Meeting validation emits only the safe fallback")
+    func suppressesUnsupportedMeetingAnswer() async throws {
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The launch date is October 12."
+                ),
+            ]
+        )
+        let model = MockLanguageModel(
+            text: "The launch is tomorrow. [source](https://example.com)"
+        )
+        let adapter = FoundationModelAdapter(
+            model: model,
+            tokenMeasurer: CharacterTokenMeasurer(size: 32_768)
+        )
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: "When is the launch?",
+            conversation: [],
+            documents: [document],
+            scopedDocument: document,
+            meetingSearchRequired: true,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let updates = await recorder.updates
+
+        #expect(response.text.contains("couldn’t safely connect"))
+        #expect(updates == [response.text])
+    }
+
+    @Test("General chat streams without exposing the meeting tool")
+    func preservesGeneralChatStreaming() async throws {
+        let model = MockLanguageModel(text: "Here is a concise email draft.")
+        let adapter = FoundationModelAdapter(model: model)
+        let answerer = BurritoChatAnswerer { _ in .success(adapter) }
+        let recorder = StreamedTextRecorder()
+
+        let result = await answerer.answer(
+            question: "Help me write an email",
+            conversation: [],
+            documents: [],
+            scopedDocument: nil,
+            meetingSearchRequired: false,
+            languageIdentifier: "en-US",
+            onTextUpdate: { recorder.record($0) }
+        )
+        let response = try result.get()
+        let request = try #require(model.requests.first)
+        let updates = await recorder.updates
+
+        #expect(request.tools.isEmpty)
+        #expect(updates.last == response.text)
     }
 
     @Test("Meeting search tool returns citable transcript passages")
@@ -1046,6 +1110,68 @@ struct LocalLanguageModelTests {
         #expect(!LocalLanguageModelStore.containsCompleteModel(
             at: directory,
             expectedRevision: "stale-revision"
+        ))
+    }
+
+    @Test("Complete legacy model bundles receive an installation marker")
+    func migratesLegacyModelBundle() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try Data("{}".utf8).write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+
+        let revision = "legacy-revision"
+        #expect(LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: revision
+        ))
+        #expect(FileManager.default.fileExists(
+            atPath: directory.appending(path: ".burrito-installation.json").path
+        ))
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "different-revision"
+        ))
+    }
+
+    @Test(
+        "Empty required model files are rejected",
+        arguments: ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    )
+    func rejectsEmptyRequiredModelFile(_ emptyFilename: String) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for filename in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            let data = filename == emptyFilename ? Data() : Data("{}".utf8)
+            try data.write(to: directory.appending(path: filename))
+        }
+        try Data("weights".utf8).write(
+            to: directory.appending(path: "model.safetensors")
+        )
+        try LocalLanguageModelStore.markInstallationComplete(
+            at: directory,
+            revision: "test-revision"
+        )
+
+        #expect(!LocalLanguageModelStore.containsCompleteModel(
+            at: directory,
+            expectedRevision: "test-revision"
         ))
     }
 
