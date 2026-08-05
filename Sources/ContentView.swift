@@ -5347,59 +5347,63 @@ private struct MemoryChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 14) {
-                Text("@")
-                    .font(.burritoDisplay(size: 28, weight: .semibold))
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 30, alignment: .leading)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.burritoDisplay(size: 24, weight: .medium))
-                    Text(subtitle)
-                        .font(.spline(size: 11, weight: .regular))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-
-                HStack(spacing: 12) {
-                    if !messages.isEmpty {
-                        Button {
-                            BurritoHaptics.trigger(.alignment)
-                            answerTask?.cancel()
-                            answerTask = nil
-                            isAnswering = false
-                            withAnimation(.burritoSpring) {
-                                messages.removeAll()
-                            }
-                        } label: {
-                            BurritoLabel("Clear chat", systemImage: "trash")
-                                .font(.spline(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .frame(height: 28)
-                                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
-                                }
-                        }
-                        .buttonStyle(.plain)
+            if !usesSingleMeetingContext {
+                HStack(alignment: .center, spacing: 14) {
+                    Text("@")
+                        .font(.spline(size: 26, weight: .semibold))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 24, alignment: .leading)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.spline(size: 20, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text(subtitle)
+                            .font(.spline(size: 12, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.secondary)
                     }
+                    Spacer()
 
-                    BurritoLabel("On device", systemImage: "lock.fill")
-                        .font(.spline(size: 11, weight: .semibold))
-                        .foregroundStyle(BurritoTheme.sage)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(BurritoTheme.sage.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    HStack(spacing: 10) {
+                        if !messages.isEmpty {
+                            Button {
+                                BurritoHaptics.trigger(.alignment)
+                                answerTask?.cancel()
+                                answerTask = nil
+                                isAnswering = false
+                                withAnimation(.burritoSpring) {
+                                    messages.removeAll()
+                                }
+                            } label: {
+                                BurritoLabel("Clear chat", systemImage: "trash")
+                                    .font(.spline(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 28)
+                                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        BurritoLabel("On device", systemImage: "lock.fill")
+                            .font(.spline(size: 11, weight: .semibold))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
+                            }
+                    }
                 }
-            }
-            .padding(.horizontal, 38)
-            .frame(height: 78)
+                .padding(.horizontal, 36)
+                .frame(height: 64)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
+                Divider()
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -5654,7 +5658,7 @@ private struct MemoryChatView: View {
     private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
         HStack {
             Spacer(minLength: 60)
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 6) {
                     Text("YOU")
                         .font(.spline(size: 9, weight: .semibold))
@@ -5663,11 +5667,15 @@ private struct MemoryChatView: View {
                         .font(.spline(size: 9, weight: .regular))
                         .foregroundStyle(.tertiary)
                 }
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 6) {
                     if let scopeTitle = msg.scopeTitle {
-                        Text("@\(scopeTitle)")
-                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
-                            .foregroundStyle(BurritoTheme.accent)
+                        HStack(spacing: 4) {
+                            Text("@")
+                                .font(.spline(size: 10, weight: .semibold))
+                            Text(scopeTitle)
+                                .font(.spline(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(BurritoTheme.accent)
                     }
                     Text(msg.text)
                         .font(.spline(size: 13, weight: .regular))
@@ -5676,60 +5684,72 @@ private struct MemoryChatView: View {
                 .padding(14)
                 .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.accent.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.accent.opacity(0.3))
                 }
             }
         }
     }
 
     private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Group {
-                if let error = msg.errorMessage {
-                    BurritoLabel(error, systemImage: "exclamationmark.triangle")
-                        .font(.spline(size: 11, weight: .regular))
-                        .foregroundStyle(.red)
-                } else {
-                    MarkdownNoteContent(
-                        markdown: msg.text,
-                        openMemory: openCitation
-                    )
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(BurritoTheme.accentSoft)
+                        .frame(width: 22, height: 22)
+                    BurritoIcon(name: "sparkles", size: 11)
+                        .foregroundStyle(BurritoTheme.accent)
+                }
+                Text("Burrito AI")
+                    .font(.spline(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if msg.errorMessage == nil {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(msg.text, forType: .string)
+                        BurritoHaptics.trigger(.alignment)
+                        withAnimation(.burritoSpring) {
+                            copiedMessageID = msg.id
+                        }
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if copiedMessageID == msg.id {
+                                copiedMessageID = nil
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            BurritoIcon(name: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc", size: 10)
+                            Text(copiedMessageID == msg.id ? "Copied" : "Copy")
+                                .font(.spline(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            if msg.errorMessage == nil {
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(msg.text, forType: .string)
-                    BurritoHaptics.trigger(.alignment)
-                    withAnimation(.burritoSpring) {
-                        copiedMessageID = msg.id
-                    }
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        if copiedMessageID == msg.id {
-                            copiedMessageID = nil
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        BurritoIcon(name: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc", size: 10)
-                        Text(copiedMessageID == msg.id ? "Copied" : "Copy")
-                            .font(.spline(size: 10, weight: .regular))
-                    }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                }
-                .buttonStyle(.plain)
+            if let error = msg.errorMessage {
+                BurritoLabel(error, systemImage: "exclamationmark.triangle")
+                    .font(.spline(size: 11, weight: .regular))
+                    .foregroundStyle(.red)
+            } else {
+                MarkdownNoteContent(
+                    markdown: msg.text,
+                    openMemory: openCitation
+                )
             }
         }
-        .padding(18)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(16)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 
@@ -6061,6 +6081,7 @@ private struct NoteDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
+            // Unified Top Header Bar (Back button, Left Segmented Tabs, Editable Title, Top Right Actions)
             if !isRecordingThisNote {
                 HStack(spacing: 12) {
                     // Back Button
@@ -6106,121 +6127,126 @@ private struct NoteDetailView: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
                     }
 
-                    // Meeting Title aligned directly on the left after tabs
-                    TextField("Untitled note", text: titleBinding)
-                        .textFieldStyle(.plain)
-                        .font(.spline(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
+                    // In Chat Tab (selectedTab == 2), hide title and action buttons to provide a completely clean space
+                    if selectedTab != 2 {
+                        // Meeting Title aligned directly on the left after tabs
+                        TextField("Untitled note", text: titleBinding)
+                            .textFieldStyle(.plain)
+                            .font(.spline(size: 15, weight: .semibold))
+                            .foregroundStyle(.primary)
 
-                    Spacer()
+                        Spacer()
 
-                    // Right Controller Group
-                    HStack(spacing: 8) {
-                        if selectedTab == 0 {
-                            Button {
-                                BurritoHaptics.trigger(.alignment)
-                                withAnimation(.burritoSpring) {
-                                    isEditingMarkdown.toggle()
-                                }
-                            } label: {
-                                BurritoLabel(
-                                    isEditingMarkdown ? "Done" : "Edit",
-                                    systemImage: isEditingMarkdown ? "checkmark" : "pencil"
-                                )
-                                .font(.spline(size: 12, weight: .medium))
-                            }
-                            .buttonStyle(HomeToolbarButtonStyle())
-                            .help(isEditingMarkdown ? "Finish editing" : "Edit note")
-                        }
-
-                        Button {
-                            copyMarkdown()
-                        } label: {
-                            BurritoIcon(name: didCopyNotes ? "checkmark" : "doc.on.doc")
-                                .contentTransition(.symbolEffect(.replace))
-                                .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
-                        }
-                        .buttonStyle(BurritoIconButtonStyle())
-                        .help(didCopyNotes ? "Copied" : "Copy notes")
-
-                        Button {
-                            exportAction()
-                        } label: {
-                            BurritoIcon(name: "square.and.arrow.up")
-                        }
-                        .buttonStyle(BurritoIconButtonStyle())
-                        .help("Export Markdown")
-
-                        // 3-Dot Options Button
-                        Button {
-                            showingMorePopover.toggle()
-                        } label: {
-                            BurritoIcon(name: "ellipsis")
-                                .rotationEffect(.degrees(90))
-                        }
-                        .buttonStyle(BurritoIconButtonStyle())
-                        .accessibilityLabel("More options")
-                        .popover(
-                            isPresented: $showingMorePopover,
-                            attachmentAnchor: .rect(.bounds),
-                            arrowEdge: .top
-                        ) {
-                            BurritoPopoverPanel {
-                                BurritoPopoverRow(
-                                    title: note.folder.map { "Folder: \($0.name)" } ?? "Add to folder…",
-                                    systemImage: "folder"
-                                ) {
-                                    showingMorePopover = false
-                                    showingFolderPopover = true
-                                }
-
-                                BurritoPopoverRow(
-                                    title: "Generate again",
-                                    systemImage: "arrow.clockwise"
-                                ) {
-                                    showingMorePopover = false
-                                    requestRegeneration()
-                                }
-
-                                BurritoPopoverDivider()
-
-                                ShareLink(item: note.exportedMarkdown) {
-                                    BurritoPopoverRowLabel(
-                                        title: "Share",
-                                        systemImage: "paperplane"
+                        // Right Controller Group
+                        HStack(spacing: 8) {
+                            if selectedTab == 0 {
+                                Button {
+                                    BurritoHaptics.trigger(.alignment)
+                                    withAnimation(.burritoSpring) {
+                                        isEditingMarkdown.toggle()
+                                    }
+                                } label: {
+                                    BurritoLabel(
+                                        isEditingMarkdown ? "Done" : "Edit",
+                                        systemImage: isEditingMarkdown ? "checkmark" : "pencil"
                                     )
+                                    .font(.spline(size: 12, weight: .medium))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(HomeToolbarButtonStyle())
+                                .help(isEditingMarkdown ? "Finish editing" : "Edit note")
+                            }
 
-                                if let path = note.systemAudioRelativePath {
+                            Button {
+                                copyMarkdown()
+                            } label: {
+                                BurritoIcon(name: didCopyNotes ? "checkmark" : "doc.on.doc")
+                                    .contentTransition(.symbolEffect(.replace))
+                                    .foregroundStyle(didCopyNotes ? Color.green : Color.primary)
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .help(didCopyNotes ? "Copied" : "Copy notes")
+
+                            Button {
+                                exportAction()
+                            } label: {
+                                BurritoIcon(name: "square.and.arrow.up")
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .help("Export Markdown")
+
+                            // 3-Dot Options Button
+                            Button {
+                                showingMorePopover.toggle()
+                            } label: {
+                                BurritoIcon(name: "ellipsis")
+                                    .rotationEffect(.degrees(90))
+                            }
+                            .buttonStyle(BurritoIconButtonStyle())
+                            .accessibilityLabel("More options")
+                            .popover(
+                                isPresented: $showingMorePopover,
+                                attachmentAnchor: .rect(.bounds),
+                                arrowEdge: .top
+                            ) {
+                                BurritoPopoverPanel {
                                     BurritoPopoverRow(
-                                        title: "Play system audio",
-                                        systemImage: "play.fill"
+                                        title: note.folder.map { "Folder: \($0.name)" } ?? "Add to folder…",
+                                        systemImage: "folder"
                                     ) {
-                                        play(fileStore.url(forRelativePath: path))
                                         showingMorePopover = false
+                                        showingFolderPopover = true
                                     }
-                                }
-                                if let path = note.microphoneAudioRelativePath {
+
                                     BurritoPopoverRow(
-                                        title: "Play microphone",
-                                        systemImage: "mic.fill"
+                                        title: "Generate again",
+                                        systemImage: "arrow.clockwise"
                                     ) {
-                                        play(fileStore.url(forRelativePath: path))
                                         showingMorePopover = false
+                                        requestRegeneration()
                                     }
-                                }
-                                if player?.isPlaying == true {
-                                    BurritoPopoverRow(
-                                        title: "Stop audio",
-                                        systemImage: "stop.fill"
-                                    ) {
-                                        player?.stop()
-                                        showingMorePopover = false
+
+                                    BurritoPopoverDivider()
+
+                                    ShareLink(item: note.exportedMarkdown) {
+                                        BurritoPopoverRowLabel(
+                                            title: "Share",
+                                            systemImage: "paperplane"
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if let path = note.systemAudioRelativePath {
+                                        BurritoPopoverRow(
+                                            title: "Play system audio",
+                                            systemImage: "play.fill"
+                                        ) {
+                                            play(fileStore.url(forRelativePath: path))
+                                            showingMorePopover = false
+                                        }
+                                    }
+                                    if let path = note.microphoneAudioRelativePath {
+                                        BurritoPopoverRow(
+                                            title: "Play microphone",
+                                            systemImage: "mic.fill"
+                                        ) {
+                                            play(fileStore.url(forRelativePath: path))
+                                            showingMorePopover = false
+                                        }
+                                    }
+                                    if player?.isPlaying == true {
+                                        BurritoPopoverRow(
+                                            title: "Stop audio",
+                                            systemImage: "stop.fill"
+                                        ) {
+                                            player?.stop()
+                                            showingMorePopover = false
+                                        }
                                     }
                                 }
                             }
                         }
+                    } else {
+                        Spacer()
                     }
                 }
                 .padding(.horizontal, 18)
@@ -6228,8 +6254,8 @@ private struct NoteDetailView: View {
                 .background(BurritoTheme.canvas)
             }
 
-            // Sub-Header Metadata Strip (Apple-Grade Clean Inline Typography)
-            if !isRecordingThisNote {
+            // Sub-Header Metadata Strip (Hidden in Chat Tab for 100% clean canvas)
+            if !isRecordingThisNote && selectedTab != 2 {
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         BurritoIcon(name: "calendar", size: 11)
