@@ -69,6 +69,7 @@ struct ContentView: View {
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var languageModelStore = LocalLanguageModelStore.shared
+    @State private var chatSessions = MemoryChatSessionStore()
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
     @State private var selectedNoteID: UUID?
@@ -157,6 +158,7 @@ struct ContentView: View {
             } else if let selectedNote {
                 NoteDetailView(
                     note: selectedNote,
+                    chatSession: chatSessions.session(for: selectedNote.id),
                     externalCitedSegmentID: selectedMemoryCitation?.noteID == selectedNote.id
                         ? selectedMemoryCitation?.segmentID
                         : nil,
@@ -378,6 +380,7 @@ struct ContentView: View {
                 TemplatesView(templates: templates)
             } else if sidebarSelection == .memory {
                 MemoryChatView(
+                    session: chatSessions.askBurrito,
                     title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask Burrito",
                     subtitle: memoryFolder == nil
                         ? "Chat generally or search local transcripts with cited answers."
@@ -5247,7 +5250,7 @@ private struct RecordingSourceLevel: View {
     }
 }
 
-private struct MemoryChatMessage: Identifiable, Equatable {
+struct MemoryChatMessage: Identifiable, Equatable {
     let id: UUID
     let isUser: Bool
     var text: String
@@ -5278,9 +5281,44 @@ private struct MemoryChatMessage: Identifiable, Equatable {
     }
 }
 
+@MainActor
+@Observable
+final class MemoryChatSession {
+    var messages: [MemoryChatMessage] = []
+    var draft = ""
+    var isAnswering = false
+    var copiedMessageID: UUID?
+    var scopedDocumentID: UUID?
+    var mentionSelectionIndex = 0
+    @ObservationIgnored var answerTask: Task<Void, Never>?
+
+    func clear() {
+        answerTask?.cancel()
+        answerTask = nil
+        isAnswering = false
+        messages.removeAll()
+    }
+}
+
+@MainActor
+final class MemoryChatSessionStore {
+    let askBurrito = MemoryChatSession()
+    private var noteSessions: [UUID: MemoryChatSession] = [:]
+
+    func session(for noteID: UUID) -> MemoryChatSession {
+        if let session = noteSessions[noteID] {
+            return session
+        }
+        let session = MemoryChatSession()
+        noteSessions[noteID] = session
+        return session
+    }
+}
+
 private struct MemoryChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @Bindable var session: MemoryChatSession
     let title: String
     let subtitle: String
     let documents: [MemoryDocument]
@@ -5288,24 +5326,22 @@ private struct MemoryChatView: View {
     let languageIdentifier: String
     let openCitation: (MemoryCitation) -> Void
 
-    @State private var messages: [MemoryChatMessage] = []
-    @State private var question = ""
-    @State private var isAnswering = false
-    @State private var answerTask: Task<Void, Never>?
-    @State private var copiedMessageID: UUID?
-    @State private var scopedDocument: MemoryDocument?
-    @State private var mentionSelectionIndex = 0
     @FocusState private var questionFocused: Bool
 
+    private var scopedDocument: MemoryDocument? {
+        guard let scopedDocumentID = session.scopedDocumentID else { return nil }
+        return documents.first { $0.noteID == scopedDocumentID }
+    }
+
     private var canAsk: Bool {
-        !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !isAnswering
+        !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !session.isAnswering
             && highlightedMentionDocument == nil
     }
 
     private var mentionQuery: String? {
         guard scopedDocument == nil else { return nil }
-        return MemoryMention.query(in: question)
+        return MemoryMention.query(in: session.draft)
     }
 
     private var matchingMentionDocuments: [MemoryDocument] {
@@ -5322,10 +5358,10 @@ private struct MemoryChatView: View {
     }
 
     private var highlightedMentionDocument: MemoryDocument? {
-        guard matchingMentionDocuments.indices.contains(mentionSelectionIndex) else {
+        guard matchingMentionDocuments.indices.contains(session.mentionSelectionIndex) else {
             return nil
         }
-        return matchingMentionDocuments[mentionSelectionIndex]
+        return matchingMentionDocuments[session.mentionSelectionIndex]
     }
 
     private var suggestedPrompts: [String] {
@@ -5365,14 +5401,11 @@ private struct MemoryChatView: View {
                     Spacer()
 
                     HStack(spacing: 10) {
-                        if !messages.isEmpty {
+                        if !session.messages.isEmpty {
                             Button {
                                 BurritoHaptics.trigger(.alignment)
-                                answerTask?.cancel()
-                                answerTask = nil
-                                isAnswering = false
                                 withAnimation(.burritoSpring) {
-                                    messages.removeAll()
+                                    session.clear()
                                 }
                             } label: {
                                 BurritoLabel("Clear chat", systemImage: "trash")
@@ -5408,7 +5441,7 @@ private struct MemoryChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        if messages.isEmpty {
+                        if session.messages.isEmpty {
                             VStack(alignment: .leading, spacing: 22) {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(documents.isEmpty
@@ -5461,11 +5494,11 @@ private struct MemoryChatView: View {
                             }
                             .padding(.top, 42)
                         } else {
-                            ForEach(messages) { msg in
+                            ForEach(session.messages) { msg in
                                 if msg.isUser {
                                     userMessageBubble(msg)
                                         .id(msg.id)
-                                } else if msg.text.isEmpty && msg.errorMessage == nil && isAnswering {
+                                } else if msg.text.isEmpty && msg.errorMessage == nil && session.isAnswering {
                                     assistantSkeletonCard
                                         .id(msg.id)
                                 } else {
@@ -5483,10 +5516,10 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)
-                .onChange(of: messages) { _, _ in
+                .onChange(of: session.messages) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: isAnswering) { _, answering in
+                .onChange(of: session.isAnswering) { _, answering in
                     if answering {
                         scrollToBottom(proxy: proxy)
                     }
@@ -5502,7 +5535,7 @@ private struct MemoryChatView: View {
                 HStack(spacing: 10) {
                     if let scopedDocument {
                         Button {
-                            self.scopedDocument = nil
+                            session.scopedDocumentID = nil
                             questionFocused = true
                         } label: {
                             HStack(spacing: 5) {
@@ -5529,7 +5562,7 @@ private struct MemoryChatView: View {
                     TextField(
                         scopedDocument.map { "Ask about \($0.title)…" }
                             ?? "Ask anything — type @ to choose a meeting",
-                        text: $question
+                        text: $session.draft
                     )
                     .textFieldStyle(.plain)
                     .font(.spline(size: 13, weight: .regular))
@@ -5545,11 +5578,11 @@ private struct MemoryChatView: View {
                         moveMentionSelection(by: -1)
                         return .handled
                     }
-                    .onChange(of: question) { _, _ in
-                        mentionSelectionIndex = 0
+                    .onChange(of: session.draft) { _, _ in
+                        session.mentionSelectionIndex = 0
                     }
 
-                    if isAnswering {
+                    if session.isAnswering {
                         ProgressView()
                             .controlSize(.small)
                             .padding(.horizontal, 4)
@@ -5582,11 +5615,6 @@ private struct MemoryChatView: View {
         }
         .background(BurritoTheme.canvas)
         .onAppear { questionFocused = true }
-        .onDisappear {
-            answerTask?.cancel()
-            answerTask = nil
-            isAnswering = false
-        }
     }
 
     private var mentionPicker: some View {
@@ -5639,7 +5667,7 @@ private struct MemoryChatView: View {
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background(
-                            index == mentionSelectionIndex
+                            index == session.mentionSelectionIndex
                                 ? BurritoTheme.accentSoft
                                 : Color.clear,
                             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -5712,18 +5740,18 @@ private struct MemoryChatView: View {
                         NSPasteboard.general.setString(msg.text, forType: .string)
                         BurritoHaptics.trigger(.alignment)
                         withAnimation(.burritoSpring) {
-                            copiedMessageID = msg.id
+                            session.copiedMessageID = msg.id
                         }
                         Task {
                             try? await Task.sleep(nanoseconds: 1_500_000_000)
-                            if copiedMessageID == msg.id {
-                                copiedMessageID = nil
+                            if session.copiedMessageID == msg.id {
+                                session.copiedMessageID = nil
                             }
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            BurritoIcon(name: copiedMessageID == msg.id ? "checkmark" : "doc.on.doc", size: 10)
-                            Text(copiedMessageID == msg.id ? "Copied" : "Copy")
+                            BurritoIcon(name: session.copiedMessageID == msg.id ? "checkmark" : "doc.on.doc", size: 10)
+                            Text(session.copiedMessageID == msg.id ? "Copied" : "Copy")
                                 .font(.spline(size: 10, weight: .medium))
                         }
                         .foregroundStyle(.secondary)
@@ -5782,7 +5810,7 @@ private struct MemoryChatView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if let lastID = messages.last?.id {
+        if let lastID = session.messages.last?.id {
             withAnimation(.burritoSpring) {
                 proxy.scrollTo(lastID, anchor: .bottom)
             }
@@ -5800,27 +5828,27 @@ private struct MemoryChatView: View {
     private func moveMentionSelection(by offset: Int) {
         guard !matchingMentionDocuments.isEmpty else { return }
         let count = matchingMentionDocuments.count
-        mentionSelectionIndex = (mentionSelectionIndex + offset + count) % count
+        session.mentionSelectionIndex = (session.mentionSelectionIndex + offset + count) % count
     }
 
     private func selectMention(_ document: MemoryDocument) {
-        scopedDocument = document
-        question = MemoryMention.questionWithoutQuery(in: question)
-        mentionSelectionIndex = 0
+        session.scopedDocumentID = document.noteID
+        session.draft = MemoryMention.questionWithoutQuery(in: session.draft)
+        session.mentionSelectionIndex = 0
         questionFocused = true
         BurritoHaptics.trigger(.alignment)
     }
 
     private func submitPrompt(_ prompt: String) {
-        question = prompt
+        session.draft = prompt
         ask()
     }
 
     private func ask() {
         guard canAsk else { return }
-        let submittedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedQuestion = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let submittedScope = scopedDocument
-        let conversation = messages
+        let conversation = session.messages
             .filter { $0.errorMessage == nil }
             .map {
                 BurritoChatTurn(
@@ -5828,8 +5856,8 @@ private struct MemoryChatView: View {
                     text: $0.text
                 )
             }
-        question = ""
-        scopedDocument = nil
+        session.draft = ""
+        session.scopedDocumentID = nil
         BurritoHaptics.trigger(.alignment)
 
         let userMsg = MemoryChatMessage(
@@ -5847,8 +5875,8 @@ private struct MemoryChatView: View {
             scopeTitle: submittedScope?.title
         )
         withAnimation(.burritoSpring) {
-            messages.append(userMsg)
-            messages.append(assistantPlaceholder)
+            session.messages.append(userMsg)
+            session.messages.append(assistantPlaceholder)
         }
         let searchScope = submittedScope ?? (usesSingleMeetingContext ? documents.first : nil)
         let meetingSearchRequired = MeetingQueryIntent.requiresSearch(
@@ -5856,9 +5884,9 @@ private struct MemoryChatView: View {
             hasDefaultMeetingScope: usesSingleMeetingContext,
             hasExplicitMeetingScope: submittedScope != nil
         )
-        isAnswering = true
+        session.isAnswering = true
 
-        answerTask = Task {
+        session.answerTask = Task {
             let result = await BurritoChatAnswerer.shared.answer(
                 question: submittedQuestion,
                 conversation: conversation,
@@ -5867,10 +5895,10 @@ private struct MemoryChatView: View {
                 meetingSearchRequired: meetingSearchRequired,
                 languageIdentifier: languageIdentifier,
                 onTextUpdate: { partialText in
-                    guard let index = messages.firstIndex(where: { $0.id == assistantID }) else {
+                    guard let index = session.messages.firstIndex(where: { $0.id == assistantID }) else {
                         return
                     }
-                    messages[index].text = partialText
+                    session.messages[index].text = partialText
                 }
             )
 
@@ -5888,8 +5916,8 @@ private struct MemoryChatView: View {
                         usedMeetingEvidence: response.usedMeetingEvidence,
                         searchedMeetings: response.searchedMeetings
                     )
-                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
-                        messages[index] = botMsg
+                    if let index = session.messages.firstIndex(where: { $0.id == assistantID }) {
+                        session.messages[index] = botMsg
                     }
                 case .failure(let error):
                     let botMsg = MemoryChatMessage(
@@ -5900,12 +5928,12 @@ private struct MemoryChatView: View {
                         errorMessage: error.recoveryMessage,
                         scopeTitle: submittedScope?.title
                     )
-                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
-                        messages[index] = botMsg
+                    if let index = session.messages.firstIndex(where: { $0.id == assistantID }) {
+                        session.messages[index] = botMsg
                     }
                 }
-                isAnswering = false
-                answerTask = nil
+                session.isAnswering = false
+                session.answerTask = nil
             }
             BurritoHaptics.trigger(.levelChange)
         }
@@ -6058,6 +6086,7 @@ private struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.undoManager) private var undoManager
     @Bindable var note: Note
+    @Bindable var chatSession: MemoryChatSession
     let externalCitedSegmentID: UUID?
     let relatedNotes: [Note]
     let coordinator: AppCoordinator
@@ -6371,6 +6400,7 @@ private struct NoteDetailView: View {
                 TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
             } else {
                 MemoryChatView(
+                    session: chatSession,
                     title: "Ask this meeting",
                     subtitle: "Chat generally; meeting questions use this transcript.",
                     documents: [
