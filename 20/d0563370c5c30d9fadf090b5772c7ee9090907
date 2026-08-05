@@ -1,0 +1,36 @@
+burrito.xcodeproj/project.pbxproj
+  s_ed66233db092f9::t_ba0b62e89fa80f 28,110,228,286,657,659,662,673,675-676
+Tests/DomainTests.swift
+  s_ed66233db092f9::t_595ae34abc44ed 173-181
+  s_ed66233db092f9::t_9ff34ad8b05121 1038
+project.yml
+  s_ed66233db092f9::t_7eee0873736bac 27-29,49
+Sources/Settings.swift
+  s_ed66233db092f9::t_d4b2cef21d2458 78,102,277,342,372,437,529
+burrito.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  s_ed66233db092f9::t_d94e4f4fd71abc 2,22-30
+Sources/BurritoIcons.swift
+  s_ed66233db092f9::t_083ee185e80f93 1,6-23,25-33,35-47,49-63,66-67,75,85-86,94,96
+  s_ed66233db092f9::t_d9977041a58f29 24
+Sources/ContentView.swift
+  s_ed66233db092f9::t_d4b2cef21d2458 664,1190,1277,1432,1490,1538,1618,1651,1679,1695,1761,1789,1805,1842,1911,2013,2040,2056,2089,2147,2163,2252,2532,2559,2586,2605,2789,3178,3285,3309,3325,3624,3681,3752,3878,4060,4217,4234,4398,4627,4665,4788,4851,4855,4891,4903,5094,5096,5098,5113,5143,5151,5389,5395,5425,5461,5543,5624,5655,5692,5702,5704,5732,6061,6164,6341,6624,6964
+Sources/BurritoTheme.swift
+  s_ed66233db092f9::t_862d5c02912bbf 85-87
+  s_ed66233db092f9::t_d4b2cef21d2458 160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "20d0563370c5c30d9fadf090b5772c7ee9090907",
+  "prompts": {},
+  "sessions": {
+    "s_ed66233db092f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fcdea-3a9f-7ad3-9cc2-e90fbf0209b0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
