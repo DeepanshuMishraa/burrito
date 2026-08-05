@@ -25,7 +25,7 @@
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
-		7E94552B34DEA490005B6D50 /* PhosphorSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */; };
+		7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */ = {isa = PBXBuildFile; productRef = 1CB1791C5FB74ED703EE3E71 /* Hugeicons */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
@@ -107,7 +107,7 @@
 				BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */,
 				A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */,
 				423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */,
-				7E94552B34DEA490005B6D50 /* PhosphorSwift in Frameworks */,
+				7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -225,7 +225,7 @@
 				BF1585C55A8225C58A754212 /* AI */,
 				1ADC8A04BD0CC461DBBB407C /* MLXLLM */,
 				D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */,
-				1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */,
+				1CB1791C5FB74ED703EE3E71 /* Hugeicons */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -283,7 +283,7 @@
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */,
+				EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
 				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
@@ -654,12 +654,12 @@
 				minimumVersion = 2.9.0;
 			};
 		};
-		EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */ = {
+		EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phosphor-icons/swift.git";
+			repositoryURL = "https://github.com/iSapozhnik/hugeicons-swift.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.1.0;
+				version = 4.1.7;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -670,10 +670,10 @@
 			package = 65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
 		};
-		1CB1791C5FB74ED703EE3E71 /* PhosphorSwift */ = {
+		1CB1791C5FB74ED703EE3E71 /* Hugeicons */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "swift" */;
-			productName = PhosphorSwift;
+			package = EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */;
+			productName = Hugeicons;
 		};
 		299A838A7B8892CA4C7945E3 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

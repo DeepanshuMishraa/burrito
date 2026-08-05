@@ -1,5 +1,5 @@
 {
-  "originHash" : "821ddae48ef2b9dba4aea6bb947b6582baeb2d59f955ddae96202bd2130678a2",
+  "originHash" : "cf95ee30c7fda9d0417e2c8e17d0132a50a360cb6df6d0dbc2de1ab36603ff48",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "19600a485baa4998812e4654b70d2bab8f2c9949",
         "version" : "0.15.5"
+      }
+    },
+    {
+      "identity" : "hugeicons-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iSapozhnik/hugeicons-swift.git",
+      "state" : {
+        "revision" : "81caddf04ce5352652ffaa619562f02477dbf35d",
+        "version" : "4.1.7"
       }
     },
     {
@@ -53,15 +62,6 @@
       "state" : {
         "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
         "version" : "2.9.4"
-      }
-    },
-    {
-      "identity" : "swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/phosphor-icons/swift.git",
-      "state" : {
-        "revision" : "9a9467181782bbe319ad4935d0993c77cd8a5fbc",
-        "version" : "2.1.0"
       }
     },
     {

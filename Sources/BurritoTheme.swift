@@ -82,9 +82,9 @@ enum BurritoAppearance: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .system: "circle.lefthalf.filled"
-        case .light: "sun.max"
-        case .dark: "moon"
+        case .system: "computer"
+        case .light: "sun02"
+        case .dark: "moon02"
         }
     }
 
@@ -157,7 +157,7 @@ struct BurritoSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.spline(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .medium))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }

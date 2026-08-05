@@ -661,7 +661,7 @@ struct ContentView: View {
         } else {
             ForEach(noteDays, id: \.date) { group in
                 Text(noteGroupTitle(for: group.date))
-                    .font(.spline(size: 11, weight: .semibold))
+                    .font(.spline(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .padding(.top, 20)
                     .padding(.leading, 8)
@@ -1187,7 +1187,7 @@ private struct CommandPaletteView: View {
                         }
 
                     Text("ESC")
-                        .font(.spline(size: 9, weight: .semibold))
+                        .font(.spline(size: 9, weight: .medium))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 7)
                         .frame(height: 22)
@@ -1274,7 +1274,7 @@ private struct CommandPaletteView: View {
 
     private func paletteSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.spline(size: 9, weight: .semibold))
+            .font(.spline(size: 9, weight: .medium))
             .tracking(0.8)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 18)
@@ -1429,7 +1429,7 @@ private struct SidebarAccountCard: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("APPEARANCE")
-                    .font(.spline(size: 9, weight: .semibold))
+                    .font(.spline(size: 9, weight: .medium))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
 
@@ -1487,7 +1487,7 @@ private struct SidebarAccountCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
-                            .font(.spline(size: 13, weight: .semibold))
+                            .font(.spline(size: 13, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                         Text("Local account")
@@ -1535,7 +1535,7 @@ private struct AccountPopover: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(profile.name)
-                        .font(.spline(size: 13, weight: .semibold))
+                        .font(.spline(size: 13, weight: .medium))
                     Text("Private on this Mac")
                         .font(.spline(size: 10, weight: .regular))
                         .foregroundStyle(.tertiary)
@@ -1615,7 +1615,7 @@ private struct UpdateAvailableCard: View {
                 BurritoIcon(name: "arrow.down.circle", size: 11)
                     .foregroundStyle(BurritoTheme.accent)
                 Text("UPDATE AVAILABLE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
             }
@@ -1648,7 +1648,7 @@ private struct UpdateAvailableCard: View {
 private struct UpdateActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.spline(size: 10, weight: .semibold))
+            .font(.spline(size: 10, weight: .medium))
             .frame(maxWidth: .infinity)
             .frame(height: 28)
             .foregroundStyle(.primary)
@@ -1676,7 +1676,7 @@ private struct NotificationPermissionCard: View {
                 BurritoIcon(name: "bell", size: 11)
                     .foregroundStyle(BurritoTheme.accent)
                 Text("DON'T MISS A NOTE")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(0.7)
                     .foregroundStyle(.secondary)
             }
@@ -1692,7 +1692,7 @@ private struct NotificationPermissionCard: View {
                 Task { await access.requestAccess() }
             } label: {
                 Text(access.actionTitle)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .medium))
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
                     .foregroundStyle(.primary)
@@ -1758,7 +1758,7 @@ private struct ModelsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 10) {
                         Text("Models")
-                            .font(.spline(size: 26, weight: .semibold))
+                            .font(.spline(size: 26, weight: .medium))
                             .foregroundStyle(.primary)
 
                         Text("On-device AI")
@@ -1786,7 +1786,7 @@ private struct ModelsView: View {
                         withAnimation(.burritoSpring) { selectedTab = 0 }
                     } label: {
                         BurritoLabel("Speech to Text", systemImage: "waveform")
-                            .font(.spline(size: 12, weight: selectedTab == 0 ? .semibold : .regular))
+                            .font(.spline(size: 12, weight: selectedTab == 0 ? .medium : .regular))
                             .foregroundStyle(selectedTab == 0 ? .primary : .secondary)
                             .padding(.horizontal, 14)
                             .frame(height: 32)
@@ -1802,7 +1802,7 @@ private struct ModelsView: View {
                         withAnimation(.burritoSpring) { selectedTab = 1 }
                     } label: {
                         BurritoLabel("Text Models", systemImage: "sparkles")
-                            .font(.spline(size: 12, weight: selectedTab == 1 ? .semibold : .regular))
+                            .font(.spline(size: 12, weight: selectedTab == 1 ? .medium : .regular))
                             .foregroundStyle(selectedTab == 1 ? .primary : .secondary)
                             .padding(.horizontal, 14)
                             .frame(height: 32)
@@ -1839,7 +1839,7 @@ private struct ModelsView: View {
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(hasInstalledModels ? "Downloaded models active" : "Apple Speech active")
-                                        .font(.spline(size: 13, weight: .semibold))
+                                        .font(.spline(size: 13, weight: .medium))
                                         .foregroundStyle(.primary)
                                     Text(
                                         hasInstalledModels
@@ -1908,7 +1908,7 @@ private struct ModelsView: View {
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Active Engine: \(activeEngineTitle)")
-                                        .font(.spline(size: 13, weight: .semibold))
+                                        .font(.spline(size: 13, weight: .medium))
                                         .foregroundStyle(.primary)
                                     Text("Used for prompt synthesis, structure parsing, and note generation.")
                                         .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
@@ -2010,7 +2010,7 @@ private struct GenerationModelCatalogRow: View {
             VStack(alignment: .leading, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.spline(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(summary)
                         .font(.spline(size: 12, weight: .regular))
@@ -2037,7 +2037,7 @@ private struct GenerationModelCatalogRow: View {
     private var modelAction: some View {
         if isSelected {
             BurritoLabel("In use", systemImage: "checkmark")
-                .font(.spline(size: 11, weight: .semibold))
+                .font(.spline(size: 11, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
         } else if let state {
             switch state {
@@ -2053,7 +2053,7 @@ private struct GenerationModelCatalogRow: View {
             case .downloading(let progress):
                 VStack(alignment: .trailing, spacing: 7) {
                     Text("\(Int(progress * 100))%")
-                        .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                        .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                         .foregroundStyle(.secondary)
                     ProgressView(value: progress).frame(width: 82)
                 }
@@ -2086,7 +2086,7 @@ private struct ModelCatalogRow: View {
             VStack(alignment: .leading, spacing: 9) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(variant.displayName)
-                        .font(.spline(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(variant.summary)
                         .font(.spline(size: 12, weight: .regular))
@@ -2144,7 +2144,7 @@ private struct ModelCatalogRow: View {
         case .downloading(let progress):
             VStack(alignment: .trailing, spacing: 7) {
                 Text("\(Int(progress * 100))%")
-                    .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                    .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                     .foregroundStyle(.secondary)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
@@ -2160,7 +2160,7 @@ private struct ModelCatalogRow: View {
             .accessibilityValue("\(Int(progress * 100)) percent")
         case .installed:
             BurritoLabel("Installed", systemImage: "checkmark")
-                .font(.spline(size: 11, weight: .semibold))
+                .font(.spline(size: 11, weight: .medium))
                 .foregroundStyle(BurritoTheme.accent)
         case .failed(let message):
             VStack(alignment: .trailing, spacing: 5) {
@@ -2249,7 +2249,7 @@ private struct ScooterGenerationLoader: View {
 
                 VStack(spacing: 12) {
                     Text(copy.eyebrow)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .tracking(1.35)
                         .foregroundStyle(BurritoTheme.accent.opacity(0.86))
 
@@ -2529,7 +2529,7 @@ private struct BurritoActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(prominent ? Color(nsColor: .textBackgroundColor) : .primary)
             .padding(.horizontal, 18)
             .frame(height: 38)
@@ -2556,7 +2556,7 @@ private struct HomeToolbarButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(destructive ? Color.red.opacity(0.82) : Color.secondary)
             .padding(.horizontal, 10)
             .frame(height: 28)
@@ -2583,7 +2583,7 @@ private struct BurritoDestructiveButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
             .frame(height: 38)
@@ -2602,7 +2602,7 @@ private struct BurritoIconButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(width: 34, height: 34)
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -2786,7 +2786,7 @@ private struct NoteActionsPopoverPanel<Content: View>: View {
                 .frame(height: 1)
 
             Text(sectionTitle.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .tracking(0.8)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 10)
@@ -3175,7 +3175,7 @@ private struct CalendarCard: View {
                 BurritoIcon(name: "calendar", size: 13)
                     .foregroundStyle(BurritoTheme.accent)
                 Text(today.formatted(.dateTime.day().month(.abbreviated).weekday(.wide)))
-                    .font(.spline(size: 12, weight: .semibold))
+                    .font(.spline(size: 12, weight: .medium))
                     .foregroundStyle(.primary)
                 Text("Recent & upcoming meetings")
                     .font(.spline(size: 12, weight: .regular))
@@ -3282,7 +3282,7 @@ private struct CalendarConnectionState: View {
                 .foregroundStyle(BurritoTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.spline(size: 12, weight: .semibold))
+                    .font(.spline(size: 12, weight: .medium))
                 Text(detail)
                     .font(.spline(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
@@ -3306,7 +3306,7 @@ private struct UpcomingEventRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.startDate.formatted(date: .omitted, time: .shortened))
-                    .font(.spline(size: 12, weight: .semibold).monospacedDigit())
+                    .font(.spline(size: 12, weight: .medium).monospacedDigit())
                     .lineLimit(1)
                     .fixedSize()
                 Text(event.startDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
@@ -3322,7 +3322,7 @@ private struct UpcomingEventRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title)
-                    .font(.spline(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .medium))
                     .lineLimit(1)
                 Text(
                     event.endDate < .now
@@ -3621,7 +3621,7 @@ private struct CaptureCapsule: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("New recording")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                     Text("⌘N")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -3678,7 +3678,7 @@ private struct WelcomeWorkspaceView: View {
                 }
                 VStack(spacing: 8) {
                     Text("Capture it. Keep the good parts.")
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.system(size: 28, weight: .medium))
                     Text("Burrito records what you hear, then turns it into notes\nthat stay private on your Mac.")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
@@ -3749,7 +3749,7 @@ private struct ActiveRecordingStage: View {
                 }
 
                 Text("LISTENING · ON THIS MAC")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.35)
                     .foregroundStyle(BurritoTheme.accent.opacity(0.82))
                     .padding(.top, 2)
@@ -3875,7 +3875,7 @@ private struct RecordingControlButton: View {
                 .frame(width: 24, height: 24)
 
                 Text(isRecording ? "Stop" : "Record more")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
 
                 if isRecording {
@@ -4057,7 +4057,7 @@ private struct RecordingSetupView: View {
                                     .hour().minute()
                             )
                         )
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                         Text(calendarEvent.calendarName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -4214,7 +4214,7 @@ private struct RecordingModePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Audio source")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
@@ -4231,7 +4231,7 @@ private struct RecordingModePicker: View {
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(mode.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(.primary)
                                 Text(mode.description)
                                     .font(.system(size: 11))
@@ -4395,7 +4395,7 @@ private struct RecordingDropdownSurface<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .tracking(0.9)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 5)
@@ -4624,7 +4624,7 @@ private struct TemplatesView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 10) {
                         Text("Templates")
-                            .font(.spline(size: 26, weight: .semibold))
+                            .font(.spline(size: 26, weight: .medium))
                             .foregroundStyle(.primary)
 
                         Text("\(templates.count) available")
@@ -4662,7 +4662,7 @@ private struct TemplatesView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("TEMPLATES")
-                            .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                            .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
                             .tracking(0.9)
                             .foregroundStyle(.tertiary)
                         Spacer()
@@ -4785,7 +4785,7 @@ private struct TemplateListRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(.spline(size: 13, weight: isSelected ? .semibold : .medium))
+                        .font(.spline(size: 13, weight: isSelected ? .medium : .medium))
                         .foregroundStyle(isSelected ? .primary : .secondary)
                         .lineLimit(1)
                     Text(template.isBuiltIn ? "Built in" : "Custom")
@@ -4848,11 +4848,11 @@ private struct TemplatePromptDetail: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text(template.name)
-                            .font(.spline(size: 20, weight: .semibold))
+                            .font(.spline(size: 20, weight: .medium))
                             .foregroundStyle(.primary)
 
                         Text(template.isBuiltIn ? "Built-in" : "Custom")
-                            .font(.spline(size: 10, weight: .semibold, relativeTo: .caption2))
+                            .font(.spline(size: 10, weight: .medium, relativeTo: .caption2))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
@@ -4888,7 +4888,7 @@ private struct TemplatePromptDetail: View {
                         withAnimation(.burritoSpring) { activeTab = 0 }
                     } label: {
                         BurritoLabel("Instructions", systemImage: "doc.text")
-                            .font(.spline(size: 12, weight: activeTab == 0 ? .semibold : .regular))
+                            .font(.spline(size: 12, weight: activeTab == 0 ? .medium : .regular))
                             .foregroundStyle(activeTab == 0 ? .primary : .secondary)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
@@ -4900,7 +4900,7 @@ private struct TemplatePromptDetail: View {
                         withAnimation(.burritoSpring) { activeTab = 1 }
                     } label: {
                         BurritoLabel("Full System Prompt", systemImage: "terminal")
-                            .font(.spline(size: 12, weight: activeTab == 1 ? .semibold : .regular))
+                            .font(.spline(size: 12, weight: activeTab == 1 ? .medium : .regular))
                             .foregroundStyle(activeTab == 1 ? .primary : .secondary)
                             .padding(.horizontal, 12)
                             .frame(height: 30)
@@ -5091,11 +5091,11 @@ private struct MarkdownNoteContent: View {
     private func headingFont(level: Int) -> Font {
         switch level {
         case 1:
-            .burritoDisplay(size: 28, weight: .semibold)
+            .burritoDisplay(size: 28, weight: .medium)
         case 2:
-            .burritoDisplay(size: 21, weight: .semibold)
+            .burritoDisplay(size: 21, weight: .medium)
         default:
-            .burritoDisplay(size: 16, weight: .semibold)
+            .burritoDisplay(size: 16, weight: .medium)
         }
     }
 }
@@ -5110,7 +5110,7 @@ private struct NoteSourceLabel: View {
         HStack(spacing: 8) {
             BurritoIcon(name: systemImage)
             Text(title.uppercased())
-                .fontWeight(.semibold)
+                .fontWeight(.medium)
             Text(detail)
                 .foregroundStyle(.tertiary)
             Spacer()
@@ -5140,7 +5140,7 @@ private struct RecordingNotepadView: View {
                         .fill(BurritoTheme.accent)
                         .frame(width: 7, height: 7)
                     Text("RECORDING")
-                        .fontWeight(.semibold)
+                        .fontWeight(.medium)
                 }
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
                     .monospacedDigit()
@@ -5148,7 +5148,7 @@ private struct RecordingNotepadView: View {
                     recordingMode == .meeting ? "CALL + MIC · ON DEVICE" : "MAC AUDIO · ON DEVICE",
                     systemImage: "lock.fill"
                 )
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(BurritoTheme.sage)
                 Spacer()
                 RecordingSourceLevel(
@@ -5386,13 +5386,13 @@ private struct MemoryChatView: View {
             if !usesSingleMeetingContext {
                 HStack(alignment: .center, spacing: 14) {
                     Text("@")
-                        .font(.spline(size: 26, weight: .semibold))
+                        .font(.spline(size: 26, weight: .medium))
                         .foregroundStyle(BurritoTheme.accent)
                         .frame(width: 24, alignment: .leading)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(.spline(size: 20, weight: .semibold))
+                            .font(.spline(size: 20, weight: .medium))
                             .foregroundStyle(.primary)
                         Text(subtitle)
                             .font(.spline(size: 12, weight: .regular, relativeTo: .caption))
@@ -5422,7 +5422,7 @@ private struct MemoryChatView: View {
                         }
 
                         BurritoLabel("On device", systemImage: "lock.fill")
-                            .font(.spline(size: 11, weight: .semibold))
+                            .font(.spline(size: 11, weight: .medium))
                             .foregroundStyle(BurritoTheme.accent)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -5458,7 +5458,7 @@ private struct MemoryChatView: View {
 
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("SUGGESTED QUESTIONS")
-                                        .font(.spline(size: 9, weight: .semibold))
+                                        .font(.spline(size: 9, weight: .medium))
                                         .tracking(0.7)
                                         .foregroundStyle(.tertiary)
 
@@ -5540,7 +5540,7 @@ private struct MemoryChatView: View {
                         } label: {
                             HStack(spacing: 5) {
                                 Text("@")
-                                    .fontWeight(.semibold)
+                                    .fontWeight(.medium)
                                 Text(scopedDocument.title)
                                     .lineLimit(1)
                                 BurritoIcon(name: "xmark", size: 8)
@@ -5621,7 +5621,7 @@ private struct MemoryChatView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("CHOOSE A MEETING")
-                    .font(.spline(size: 9, weight: .semibold, relativeTo: .caption2))
+                    .font(.spline(size: 9, weight: .medium, relativeTo: .caption2))
                     .tracking(0.7)
                     .foregroundStyle(.tertiary)
                 Spacer()
@@ -5652,7 +5652,7 @@ private struct MemoryChatView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Text("@")
-                                .font(.spline(size: 13, weight: .semibold))
+                                .font(.spline(size: 13, weight: .medium))
                                 .foregroundStyle(BurritoTheme.accent)
                                 .frame(width: 18)
                             Text(document.title)
@@ -5689,7 +5689,7 @@ private struct MemoryChatView: View {
             VStack(alignment: .trailing, spacing: 5) {
                 HStack(spacing: 6) {
                     Text("YOU")
-                        .font(.spline(size: 9, weight: .semibold))
+                        .font(.spline(size: 9, weight: .medium))
                         .foregroundStyle(BurritoTheme.accent)
                     Text(msg.timestamp, format: .dateTime.hour().minute())
                         .font(.spline(size: 9, weight: .regular))
@@ -5699,9 +5699,9 @@ private struct MemoryChatView: View {
                     if let scopeTitle = msg.scopeTitle {
                         HStack(spacing: 4) {
                             Text("@")
-                                .font(.spline(size: 10, weight: .semibold))
+                                .font(.spline(size: 10, weight: .medium))
                             Text(scopeTitle)
-                                .font(.spline(size: 10, weight: .semibold))
+                                .font(.spline(size: 10, weight: .medium))
                         }
                         .foregroundStyle(BurritoTheme.accent)
                     }
@@ -5729,7 +5729,7 @@ private struct MemoryChatView: View {
                         .foregroundStyle(BurritoTheme.accent)
                 }
                 Text("Burrito AI")
-                    .font(.spline(size: 11, weight: .semibold))
+                    .font(.spline(size: 11, weight: .medium))
                     .foregroundStyle(.primary)
 
                 Spacer()
@@ -6058,7 +6058,7 @@ private struct MeetingContextPanel: View {
             BurritoIcon(name: "calendar.badge.checkmark", size: 11)
                 .foregroundStyle(BurritoTheme.accent)
             Text(event.startDate, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                .font(.spline(size: 11, weight: .semibold, relativeTo: .caption))
+                .font(.spline(size: 11, weight: .medium, relativeTo: .caption))
                 .foregroundStyle(.primary)
             Text("· \(event.startDate.formatted(.dateTime.hour().minute()))–\(event.endDate.formatted(.dateTime.hour().minute())) · \(event.calendarName)")
                 .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
@@ -6161,7 +6161,7 @@ private struct NoteDetailView: View {
                         // Meeting Title aligned directly on the left after tabs
                         TextField("Untitled note", text: titleBinding)
                             .textFieldStyle(.plain)
-                            .font(.spline(size: 15, weight: .semibold))
+                            .font(.spline(size: 15, weight: .medium))
                             .foregroundStyle(.primary)
 
                         Spacer()
@@ -6338,7 +6338,7 @@ private struct NoteDetailView: View {
                                 HStack(spacing: 4) {
                                     BurritoIcon(name: "video.fill", size: 9)
                                     Text("Join")
-                                        .font(.spline(size: 10, weight: .semibold))
+                                        .font(.spline(size: 10, weight: .medium))
                                 }
                                 .foregroundStyle(BurritoTheme.accent)
                                 .padding(.horizontal, 8)
@@ -6621,7 +6621,7 @@ private struct EditorTabButton: View {
         } label: {
             VStack(spacing: 7) {
                 Text(title)
-                    .font(.spline(size: 13, weight: isSelected ? .semibold : .regular))
+                    .font(.spline(size: 13, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? .primary : (isHovered ? .primary : .secondary))
                 ZStack {
                     Rectangle()
@@ -6961,7 +6961,7 @@ private struct TranscriptEditor: View {
                                     )
                                         .textFieldStyle(.plain)
                                         .frame(maxWidth: 120)
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10, weight: .medium))
                                         .tracking(0.5)
                                         .foregroundStyle(sourceTint(for: segment.source))
                                         .help("Edit this passage’s speaker name")

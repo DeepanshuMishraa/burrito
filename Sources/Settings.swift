@@ -75,7 +75,7 @@ struct BurritoSettingsView: View {
                 HStack(alignment: .center, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Settings")
-                            .font(.spline(size: 26, weight: .semibold))
+                            .font(.spline(size: 26, weight: .medium))
                             .foregroundStyle(.primary)
 
                         Text("Preferences and data ownership on this Mac")
@@ -99,7 +99,7 @@ struct BurritoSettingsView: View {
                                 }
                             } label: {
                                 BurritoLabel(tab.title, systemImage: tab.symbol)
-                                    .font(.spline(size: 12, weight: selected == tab ? .semibold : .regular))
+                                    .font(.spline(size: 12, weight: selected == tab ? .medium : .regular))
                                     .foregroundStyle(selected == tab ? .primary : .secondary)
                                     .lineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
@@ -274,7 +274,7 @@ private struct OwnershipSettingsCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
-                        .font(.spline(size: 14, weight: .semibold))
+                        .font(.spline(size: 14, weight: .medium))
                     Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
                         .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.secondary)
@@ -339,7 +339,7 @@ private struct LanguageCoverageCard: View {
                 .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
-                    .font(.spline(size: 13, weight: .semibold))
+                    .font(.spline(size: 13, weight: .medium))
                 Text(language.engineCoverage.detail)
                     .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
@@ -369,7 +369,7 @@ private struct CalendarConnectionSettingsRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
-                    .font(.spline(size: 14, weight: .semibold))
+                    .font(.spline(size: 14, weight: .medium))
                 Text(detail)
                     .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
@@ -434,7 +434,7 @@ private struct SettingsActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.spline(size: 12, weight: .semibold))
+            .font(.spline(size: 12, weight: .medium))
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -526,7 +526,7 @@ private struct SettingsFormToggleRow: View {
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.spline(size: 13, weight: .semibold))
+                        .font(.spline(size: 13, weight: .medium))
                         .foregroundStyle(.primary)
                     Text(detail)
                         .font(.spline(size: 11, weight: .regular, relativeTo: .caption))

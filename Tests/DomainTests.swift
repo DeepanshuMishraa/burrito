@@ -170,6 +170,15 @@ struct AppearanceTests {
         #expect(BurritoAppearance.light.colorScheme == .light)
         #expect(BurritoAppearance.dark.colorScheme == .dark)
     }
+
+    @Test("Appearance choices use distinct Hugeicons glyphs")
+    func appearanceIconsAreDistinctAndSupported() {
+        let icons = BurritoAppearance.allCases.map(\.systemImage)
+
+        #expect(icons == ["computer", "sun02", "moon02"])
+        #expect(Set(icons).count == BurritoAppearance.allCases.count)
+        #expect(icons.allSatisfy(BurritoIconCatalog.supports))
+    }
 }
 
 @Suite("Notification access")
@@ -1026,7 +1035,7 @@ struct TemplateTests {
         #expect(TemplateSymbolOption.matching("  ").count == TemplateSymbolOption.all.count)
     }
 
-    @Test("Every app icon resolves to a Phosphor icon")
+    @Test("Every app icon resolves to a Hugeicons asset")
     func resolvesEveryAppIcon() {
         #expect(BurritoIconCatalog.allAliasesAreValid)
         #expect(TemplateSymbolOption.all.allSatisfy {
