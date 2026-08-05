@@ -361,6 +361,9 @@ struct LocalMemoryTests {
         #expect(!MeetingQueryIntent.isClearlyGeneral(
             "What were the main objections or concerns?"
         ))
+        #expect(!MeetingQueryIntent.isClearlyGeneral(
+            "Explain the main objections or concerns."
+        ))
         #expect(!MeetingQueryIntent.requiresSearch(
             "Help me write a transcriptome research summary",
             hasDefaultMeetingScope: false,
@@ -500,9 +503,14 @@ struct LocalMemoryTests {
         #expect(updates == [response.text])
     }
 
-    @Test("Classifier misses objections but chat keeps meeting search available")
-    func keepsMeetingSearchAvailableForMissedIntent() async throws {
-        let question = "What were the main objections or concerns?"
+    @Test(
+        "Classifier misses objections but chat keeps meeting search available",
+        arguments: [
+            "What were the main objections or concerns?",
+            "Explain the main objections or concerns.",
+        ]
+    )
+    func keepsMeetingSearchAvailableForMissedIntent(_ question: String) async throws {
         #expect(!MeetingQueryIntent.requiresSearch(
             question,
             hasDefaultMeetingScope: false,

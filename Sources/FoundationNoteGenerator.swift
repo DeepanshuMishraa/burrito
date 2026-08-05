@@ -210,7 +210,7 @@ enum MeetingQueryIntent {
         let generalPrefixes = [
             "hello", "hi", "hey", "thanks", "thank you",
             "help me write", "write me", "draft", "rewrite", "proofread",
-            "brainstorm", "explain",
+            "brainstorm",
         ]
         return generalPrefixes.contains(where: { containsWholeTerm($0, atStartOf: normalized) })
     }
