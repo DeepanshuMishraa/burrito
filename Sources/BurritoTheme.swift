@@ -1,6 +1,203 @@
 import AppKit
 import SwiftUI
 
+enum BurritoFontCategory: String, CaseIterable, Identifiable {
+    case mono = "MONO"
+    case sans = "SANS"
+    case serif = "SERIF"
+
+    var id: Self { self }
+}
+
+enum BurritoFontChoice: String, CaseIterable, Identifiable {
+    case burritoDefault = "burrito-default"
+    case geistMono = "geist-mono"
+    case jetBrainsMono = "jetbrains-mono"
+    case ibmPlexMono = "ibm-plex-mono"
+    case systemSans = "system-sans"
+    case geistSans = "geist-sans"
+    case inter
+    case ibmPlexSans = "ibm-plex-sans"
+    case systemSerif = "system-serif"
+    case sourceSerif = "source-serif-4"
+
+    static let storageKey = "appFont"
+
+    var id: Self { self }
+
+    static var selected: BurritoFontChoice {
+        let rawValue = UserDefaults.standard.string(forKey: storageKey)
+            ?? BurritoFontChoice.burritoDefault.rawValue
+        return resolve(rawValue)
+    }
+
+    static func resolve(_ rawValue: String) -> BurritoFontChoice {
+        BurritoFontChoice(rawValue: rawValue) ?? .burritoDefault
+    }
+
+    var title: String {
+        switch self {
+        case .burritoDefault: "Default"
+        case .geistMono: "Geist Mono"
+        case .jetBrainsMono: "JetBrains Mono"
+        case .ibmPlexMono: "IBM Plex Mono"
+        case .systemSans: "System Sans"
+        case .geistSans: "Geist Sans"
+        case .inter: "Inter"
+        case .ibmPlexSans: "IBM Plex Sans"
+        case .systemSerif: "System Serif"
+        case .sourceSerif: "Source Serif 4"
+        }
+    }
+
+    var category: BurritoFontCategory {
+        switch self {
+        case .burritoDefault, .geistMono, .jetBrainsMono, .ibmPlexMono: .mono
+        case .systemSans, .geistSans, .inter, .ibmPlexSans: .sans
+        case .systemSerif, .sourceSerif: .serif
+        }
+    }
+
+    var resourceFileNames: [String] {
+        switch self {
+        case .burritoDefault:
+            ["SplineSansMono-Variable.ttf", "SplineSansMono-Italic-Variable.ttf"]
+        case .geistMono:
+            ["GeistMono-Variable.ttf"]
+        case .jetBrainsMono:
+            ["JetBrainsMono-Variable.ttf"]
+        case .ibmPlexMono:
+            [
+                "IBMPlexMono-Regular.ttf",
+                "IBMPlexMono-Medium.ttf",
+                "IBMPlexMono-SemiBold.ttf",
+                "IBMPlexMono-Bold.ttf",
+            ]
+        case .systemSans, .systemSerif:
+            []
+        case .geistSans:
+            ["Geist-Variable.ttf"]
+        case .inter:
+            ["Inter-Variable.ttf"]
+        case .ibmPlexSans:
+            ["IBMPlexSans-Variable.ttf"]
+        case .sourceSerif:
+            ["SourceSerif4-Variable.ttf"]
+        }
+    }
+
+    var registeredPostScriptNames: [String] {
+        switch self {
+        case .burritoDefault: ["SplineSansMono-Regular", "SplineSansMono-Italic"]
+        case .geistMono: ["GeistMono-Regular"]
+        case .jetBrainsMono: ["JetBrainsMono-Regular"]
+        case .ibmPlexMono:
+            ["IBMPlexMono-Regular", "IBMPlexMono-Medium", "IBMPlexMono-SemiBold", "IBMPlexMono-Bold"]
+        case .systemSans, .systemSerif: []
+        case .geistSans: ["Geist-Regular"]
+        case .inter: ["Inter-Regular"]
+        case .ibmPlexSans: ["IBMPlexSans-Regular"]
+        case .sourceSerif: ["SourceSerif4Roman-Regular"]
+        }
+    }
+
+    func font(
+        size: CGFloat,
+        weight: Font.Weight,
+        relativeTo textStyle: Font.TextStyle? = nil
+    ) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        if let design = systemDesign {
+            let resolvedSize = textStyle.map {
+                BurritoFontMetrics.scaledSize(size, relativeTo: $0)
+            } ?? size
+            return .system(size: resolvedSize, weight: weight, design: design)
+        }
+
+        let base = if let textStyle {
+            Font.custom(familyName, size: size, relativeTo: textStyle)
+        } else {
+            Font.custom(familyName, fixedSize: size)
+        }
+        return base.weight(weight)
+    }
+
+    func font(size: CGFloat, weight: CGFloat) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        if let design = systemDesign {
+            return Font(BurritoFontMetrics.systemFont(
+                size: size,
+                weight: BurritoFontMetrics.platformWeight(for: weight),
+                design: design
+            ))
+        }
+
+        let postScriptName = postScriptName(for: weight)
+        let descriptor = CTFontDescriptorCreateWithNameAndSize(postScriptName as CFString, size)
+        let resolvedDescriptor = supportsVariableWeight
+            ? CTFontDescriptorCreateCopyWithVariation(
+                descriptor,
+                NSNumber(value: 0x7767_6874),
+                weight
+            )
+            : descriptor
+        let font = CTFontCreateWithFontDescriptor(resolvedDescriptor, size, nil)
+        return Font(font as NSFont)
+    }
+
+    private var familyName: String {
+        switch self {
+        case .burritoDefault: "Spline Sans Mono"
+        case .geistMono: "Geist Mono"
+        case .jetBrainsMono: "JetBrains Mono"
+        case .ibmPlexMono: "IBM Plex Mono"
+        case .geistSans: "Geist"
+        case .inter: "Inter"
+        case .ibmPlexSans: "IBM Plex Sans"
+        case .sourceSerif: "Source Serif 4"
+        case .systemSans, .systemSerif: ""
+        }
+    }
+
+    private var systemDesign: Font.Design? {
+        switch self {
+        case .systemSans: .default
+        case .systemSerif: .serif
+        default: nil
+        }
+    }
+
+    private var supportsVariableWeight: Bool {
+        self != .ibmPlexMono
+    }
+
+    private func postScriptName(for weight: CGFloat) -> String {
+        switch self {
+        case .burritoDefault:
+            return "SplineSansMono-Regular"
+        case .geistMono:
+            return "GeistMono-Regular"
+        case .jetBrainsMono:
+            return "JetBrainsMono-Regular"
+        case .geistSans:
+            return "Geist-Regular"
+        case .inter:
+            return "Inter-Regular"
+        case .ibmPlexSans:
+            return "IBMPlexSans-Regular"
+        case .sourceSerif:
+            return "SourceSerif4Roman-Regular"
+        case .systemSans, .systemSerif:
+            return ""
+        case .ibmPlexMono:
+            if weight >= 650 { return "IBMPlexMono-Bold" }
+            if weight >= 550 { return "IBMPlexMono-SemiBold" }
+            if weight >= 450 { return "IBMPlexMono-Medium" }
+            return "IBMPlexMono-Regular"
+        }
+    }
+}
+
 enum BurritoFontRegistrar {
     private static let registrationLock = NSLock()
     private nonisolated(unsafe) static var hasRegistered = false
@@ -12,7 +209,7 @@ enum BurritoFontRegistrar {
         guard !hasRegistered else { return }
         hasRegistered = true
 
-        let fontNames = ["SplineSansMono-Variable.ttf", "SplineSansMono-Italic-Variable.ttf"]
+        let fontNames = BurritoFontChoice.allCases.flatMap(\.resourceFileNames)
         
         for fontName in fontNames {
             if let fontURL = Bundle.main.url(forResource: fontName, withExtension: nil) ??
@@ -24,14 +221,11 @@ enum BurritoFontRegistrar {
 }
 
 extension Font {
-    private static let splineWeightAxis = NSNumber(value: 0x7767_6874)
-
     static func burritoDisplay(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
-        BurritoFontRegistrar.registerFontsIfNeeded()
-        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+        BurritoFontChoice.selected.font(size: size, weight: weight)
     }
 
     static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
@@ -42,23 +236,11 @@ extension Font {
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
-        BurritoFontRegistrar.registerFontsIfNeeded()
-        return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+        BurritoFontChoice.selected.font(size: size, weight: weight)
     }
 
     static func spline(size: CGFloat, weight: CGFloat) -> Font {
-        BurritoFontRegistrar.registerFontsIfNeeded()
-        let descriptor = CTFontDescriptorCreateWithNameAndSize(
-            "Spline Sans Mono" as CFString,
-            size
-        )
-        let variedDescriptor = CTFontDescriptorCreateCopyWithVariation(
-            descriptor,
-            splineWeightAxis,
-            weight
-        )
-        let font = CTFontCreateWithFontDescriptor(variedDescriptor, size, nil)
-        return Font(font as NSFont)
+        BurritoFontChoice.selected.font(size: size, weight: weight)
     }
 
     static func spline(
@@ -66,8 +248,7 @@ extension Font {
         weight: Font.Weight = .regular,
         relativeTo textStyle: Font.TextStyle
     ) -> Font {
-        BurritoFontRegistrar.registerFontsIfNeeded()
-        return .custom("Spline Sans Mono", size: size, relativeTo: textStyle).weight(weight)
+        BurritoFontChoice.selected.font(size: size, weight: weight, relativeTo: textStyle)
     }
 
     static func spline(
@@ -75,7 +256,7 @@ extension Font {
         weight: CGFloat,
         relativeTo textStyle: Font.TextStyle
     ) -> Font {
-        spline(
+        BurritoFontChoice.selected.font(
             size: BurritoFontMetrics.scaledSize(size, relativeTo: textStyle),
             weight: weight
         )
@@ -86,21 +267,42 @@ extension Font {
         weight: CGFloat,
         design: Font.Design = .default
     ) -> Font {
-        let regular = NSFont.Weight.regular.rawValue
-        let medium = NSFont.Weight.medium.rawValue
-        let fraction = min(1, max(0, (weight - 400) / 100))
-        let platformWeight = NSFont.Weight(
-            rawValue: regular + ((medium - regular) * fraction)
-        )
         return Font(BurritoFontMetrics.systemFont(
             size: size,
-            weight: platformWeight,
+            weight: BurritoFontMetrics.platformWeight(for: weight),
             design: design
         ))
     }
 }
 
 enum BurritoFontMetrics {
+    static func platformWeight(for value: CGFloat) -> NSFont.Weight {
+        let stops: [(value: CGFloat, weight: NSFont.Weight)] = [
+            (100, .ultraLight),
+            (200, .thin),
+            (300, .light),
+            (400, .regular),
+            (500, .medium),
+            (600, .semibold),
+            (700, .bold),
+            (800, .heavy),
+            (900, .black),
+        ]
+        let clamped = min(900, max(100, value))
+        guard let upperIndex = stops.firstIndex(where: { $0.value >= clamped }) else {
+            return .black
+        }
+        guard upperIndex > 0 else { return stops[upperIndex].weight }
+
+        let lower = stops[upperIndex - 1]
+        let upper = stops[upperIndex]
+        let fraction = (clamped - lower.value) / (upper.value - lower.value)
+        return NSFont.Weight(
+            rawValue: lower.weight.rawValue
+                + ((upper.weight.rawValue - lower.weight.rawValue) * fraction)
+        )
+    }
+
     static func scaledSize(
         _ size: CGFloat,
         relativeTo textStyle: Font.TextStyle,

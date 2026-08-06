@@ -6,6 +6,31 @@ import Testing
 
 @Suite("App surfaces")
 struct AppSurfaceTests {
+    @Test("App fonts include ten categorized choices with safe persistence")
+    func appFontsIncludeTenCategorizedChoices() {
+        #expect(BurritoFontChoice.allCases.count == 10)
+        #expect(BurritoFontChoice.resolve("geist-mono") == .geistMono)
+        #expect(BurritoFontChoice.resolve("unknown-font") == .burritoDefault)
+        #expect(Set(BurritoFontChoice.allCases.map(\.title)).count == 10)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .mono }.count == 4)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .sans }.count == 4)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .serif }.count == 2)
+    }
+
+    @Test("Bundled app fonts register every declared face")
+    func bundledAppFontsRegisterEveryDeclaredFace() {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+
+        for font in BurritoFontChoice.allCases {
+            for postScriptName in font.registeredPostScriptNames {
+                #expect(
+                    NSFont(name: postScriptName, size: 13) != nil,
+                    Comment(rawValue: postScriptName)
+                )
+            }
+        }
+    }
+
     @Test("Color themes resolve persisted values safely")
     func colorThemesResolvePersistedValuesSafely() {
         #expect(BurritoColorTheme.resolve("ocean-breeze") == .oceanBreeze)

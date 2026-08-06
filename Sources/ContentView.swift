@@ -90,6 +90,8 @@ struct ContentView: View {
         BurritoAppearance.system.rawValue
     @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
         BurritoColorTheme.burrito.rawValue
+    @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
+        BurritoFontChoice.burritoDefault.rawValue
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
@@ -146,6 +148,7 @@ struct ContentView: View {
 
     var body: some View {
         let _ = colorThemeRawValue
+        let _ = fontChoiceRawValue
 
         Group {
             if !permissionOnboardingCompleted || !permissions.allGranted {
@@ -192,6 +195,7 @@ struct ContentView: View {
                 home
             }
         }
+        .id(fontChoiceRawValue)
         .frame(minWidth: 1_020, minHeight: 640)
         .foregroundStyle(BurritoTheme.foreground)
         .tint(BurritoTheme.accent)

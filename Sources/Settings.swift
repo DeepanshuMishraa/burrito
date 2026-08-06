@@ -162,6 +162,8 @@ private struct SettingsPane: View {
     @AppStorage("retainAudioDefault") private var retainAudioDefault = false
     @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
         BurritoColorTheme.burrito.rawValue
+    @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
+        BurritoFontChoice.burritoDefault.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -174,6 +176,14 @@ private struct SettingsPane: View {
                         BurritoThemePicker(selection: $colorThemeRawValue)
 
                         SettingsFootnote("Themes apply throughout Burrito and follow your light or dark appearance.")
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "FONT")
+
+                        BurritoFontPicker(selection: $fontChoiceRawValue)
+
+                        SettingsFootnote("Choose one typeface for Burrito's interface and notes.")
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -318,6 +328,61 @@ private struct BurritoThemePicker: View {
         }
         .onAppear {
             selection = selectedTheme.rawValue
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct BurritoFontPicker: View {
+    @Binding var selection: String
+
+    private var selectedFont: BurritoFontChoice {
+        BurritoFontChoice.resolve(selection)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("Ag")
+                .font(selectedFont.font(size: 22, weight: .medium))
+                .foregroundStyle(BurritoTheme.accent)
+                .frame(width: 54)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(selectedFont.title)
+                    .font(selectedFont.font(size: 13, weight: .medium))
+                Text(selectedFont.category.rawValue.capitalized)
+                    .font(selectedFont.font(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Picker("App font", selection: $selection) {
+                ForEach(BurritoFontCategory.allCases) { category in
+                    Section(category.rawValue) {
+                        ForEach(BurritoFontChoice.allCases.filter { $0.category == category }) { font in
+                            Text(font.title).tag(font.rawValue)
+                        }
+                    }
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 170)
+            .onChange(of: selection) { _, _ in
+                BurritoHaptics.trigger(.alignment)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 64)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(BurritoTheme.softBorder)
+        }
+        .onAppear {
+            selection = selectedFont.rawValue
         }
         .accessibilityElement(children: .contain)
     }
