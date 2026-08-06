@@ -145,7 +145,8 @@ struct BurritoSettingsView: View {
             .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible)
+        .burritoThinScrollers()
         .background(BurritoTheme.canvas)
     }
 }
@@ -160,12 +161,50 @@ private struct SettingsPane: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "en-US"
     @AppStorage("microphoneDefault") private var microphoneDefault = false
     @AppStorage("retainAudioDefault") private var retainAudioDefault = false
+    @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
+        BurritoColorTheme.burrito.rawValue
+    @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
+        BurritoFontChoice.burritoDefault.rawValue
+    @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
+        BurritoInterfaceFontSize.standard
+    @AppStorage(BurritoFontSmoothing.storageKey) private var fontSmoothing = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             switch tab {
             case .general:
                 VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "APPEARANCE & TYPOGRAPHY")
+
+                        VStack(spacing: 0) {
+                            BurritoThemePicker(selection: $colorThemeRawValue)
+
+                            Divider().padding(.leading, 16)
+
+                            BurritoFontPicker(
+                                selection: $fontChoiceRawValue,
+                                sizeSelection: $interfaceFontSizeRawValue
+                            )
+
+                            Divider().padding(.leading, 16)
+
+                            BurritoToggleRow(
+                                title: "Font smoothing",
+                                subtitle: "Use thinner grayscale anti-aliasing. Restart Burrito after changing this setting.",
+                                isOn: $fontSmoothing,
+                                style: .settingsForm
+                            )
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .burritoElevation(.surface)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                        }
+
+                        SettingsFootnote("Themes and typography apply across all windows and adapt to light or dark appearance.")
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         BurritoSectionLabel(title: "RECORDING & AUDIO")
 
@@ -262,6 +301,406 @@ private struct SettingsPane: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onChange(of: colorThemeRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectTheme(rawValue)
+        }
+        .onChange(of: fontChoiceRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectFont(rawValue)
+        }
+        .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectInterfaceFontSize(rawValue)
+        }
+        .onChange(of: fontSmoothing, initial: true) { _, isEnabled in
+            BurritoFontSmoothing.apply(isEnabled)
+        }
+    }
+}
+
+private struct BurritoThemePicker: View {
+    @Binding var selection: String
+    @State private var isPresented = false
+    @State private var query = ""
+
+    private var selectedTheme: BurritoColorTheme {
+        BurritoColorTheme.resolve(selection)
+    }
+
+    private var filteredThemes: [BurritoColorTheme] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return BurritoColorTheme.allCases }
+        return BurritoColorTheme.allCases.filter {
+            $0.title.localizedStandardContains(trimmed)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ThemeSwatches(colors: selectedTheme.previewColors)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Color theme")
+                    .font(.spline(size: 13, weight: 450))
+                    .foregroundStyle(.primary)
+                Text("Choose a color palette for Burrito.")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedTheme.title)
+                        .font(.spline(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                    BurritoIcon(name: "chevron.down", size: 8)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Color theme")
+            .accessibilityValue(selectedTheme.title)
+            .popover(
+                isPresented: $isPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                SearchablePickerPopup(
+                    query: $query,
+                    prompt: "Find a theme…"
+                ) {
+                    ForEach(filteredThemes) { theme in
+                        SearchablePickerRow(
+                            isSelected: selection == theme.rawValue,
+                            height: 36
+                        ) {
+                            selection = theme.rawValue
+                            isPresented = false
+                        } leading: {
+                            ThemeSwatches(colors: theme.previewColors)
+                            Text(theme.title)
+                                .font(.spline(size: 12, weight: 450))
+                                .foregroundStyle(.primary)
+                        }
+                        .accessibilityLabel(theme.title)
+                        .accessibilityAddTraits(
+                            selection == theme.rawValue ? .isSelected : []
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 54)
+        .onAppear {
+            selection = selectedTheme.rawValue
+        }
+    }
+}
+
+private struct BurritoFontPicker: View {
+    @Binding var selection: String
+    @Binding var sizeSelection: Int
+    @State private var isPresented = false
+    @State private var query = ""
+
+    private var selectedFont: BurritoFontChoice {
+        BurritoFontChoice.resolve(selection)
+    }
+
+    private var selectedSize: Int {
+        BurritoInterfaceFontSize.resolve(sizeSelection)
+    }
+
+    private var sizeBinding: Binding<Int> {
+        Binding(
+            get: { selectedSize },
+            set: { sizeSelection = BurritoInterfaceFontSize.resolve($0) }
+        )
+    }
+
+    private var filteredFonts: [BurritoFontChoice] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return BurritoFontChoice.allCases }
+        return BurritoFontChoice.allCases.filter {
+            $0.title.localizedStandardContains(trimmed) ||
+            $0.category.rawValue.localizedStandardContains(trimmed)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("Ag")
+                .font(selectedFont.font(size: 17, weight: 450))
+                .foregroundStyle(BurritoTheme.accent)
+                .frame(width: 32, height: 32)
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("App font")
+                    .font(.spline(size: 13, weight: 450))
+                    .foregroundStyle(.primary)
+                Text("Choose a typeface for interface and notes.")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button {
+                    isPresented.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(selectedFont.title)
+                            .font(.spline(size: 12, weight: 450))
+                            .foregroundStyle(BurritoTheme.accent)
+                        BurritoIcon(name: "chevron.down", size: 8)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("App font")
+                .accessibilityValue(selectedFont.title)
+                .popover(
+                    isPresented: $isPresented,
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
+                    SearchablePickerPopup(
+                        query: $query,
+                        prompt: "Find a font…",
+                        listAlignment: .leading,
+                        listSpacing: 10
+                    ) {
+                        ForEach(BurritoFontCategory.allCases) { category in
+                            let categoryFonts = filteredFonts.filter { $0.category == category }
+                            if !categoryFonts.isEmpty {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(category.title)
+                                        .font(.spline(size: 9, weight: 600))
+                                        .tracking(0.8)
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 10)
+                                        .padding(.top, 4)
+
+                                    ForEach(categoryFonts) { font in
+                                        SearchablePickerRow(
+                                            isSelected: selection == font.rawValue,
+                                            height: 34
+                                        ) {
+                                            selection = font.rawValue
+                                            isPresented = false
+                                        } leading: {
+                                            Text("Ag")
+                                                .font(font.font(size: 15, weight: 450))
+                                                .foregroundStyle(BurritoTheme.accent)
+                                                .frame(width: 24)
+
+                                            Text(font.title)
+                                                .font(font.font(size: 12, weight: 450))
+                                                .foregroundStyle(.primary)
+                                        }
+                                        .accessibilityLabel(font.title)
+                                        .accessibilityAddTraits(
+                                            selection == font.rawValue ? .isSelected : []
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: 0) {
+                    Button {
+                        sizeSelection = BurritoInterfaceFontSize.resolve(selectedSize - 1)
+                    } label: {
+                        BurritoIcon(name: "minus", size: 9, accessibilityLabel: "Decrease interface font size")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedSize == BurritoInterfaceFontSize.minimum)
+
+                    Divider().frame(height: 16)
+
+                    TextField("", value: sizeBinding, format: .number.grouping(.never))
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.center)
+                        .font(.spline(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 34)
+                        .accessibilityLabel("Interface font size in pixels")
+
+                    Text("px")
+                        .font(.spline(size: 10, weight: 450))
+                        .foregroundStyle(.tertiary)
+                        .padding(.trailing, 6)
+
+                    Divider().frame(height: 16)
+
+                    Button {
+                        sizeSelection = BurritoInterfaceFontSize.resolve(selectedSize + 1)
+                    } label: {
+                        BurritoIcon(name: "plus", size: 9, accessibilityLabel: "Increase interface font size")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedSize == BurritoInterfaceFontSize.maximum)
+                }
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 54)
+        .onChange(of: sizeSelection, initial: true) { _, value in
+            let resolved = BurritoInterfaceFontSize.resolve(value)
+            if resolved != value {
+                sizeSelection = resolved
+            }
+        }
+        .onAppear {
+            selection = selectedFont.rawValue
+        }
+    }
+}
+
+private struct SearchablePickerPopup<Content: View>: View {
+    @Binding private var query: String
+    private let prompt: String
+    private let listAlignment: HorizontalAlignment
+    private let listSpacing: CGFloat
+    private let content: () -> Content
+
+    init(
+        query: Binding<String>,
+        prompt: String,
+        listAlignment: HorizontalAlignment = .center,
+        listSpacing: CGFloat = 2,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        _query = query
+        self.prompt = prompt
+        self.listAlignment = listAlignment
+        self.listSpacing = listSpacing
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                BurritoIcon(name: "magnifyingglass", size: 11)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                TextField(prompt, text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.spline(size: 12, weight: 400))
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        BurritoIcon(name: "xmark.circle.fill", size: 10)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(
+                BurritoTheme.controlFill,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .burritoElevation(.control)
+
+            ScrollView {
+                LazyVStack(alignment: listAlignment, spacing: listSpacing) {
+                    content()
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(10)
+        .frame(width: 250, height: 320)
+        .background(BurritoTheme.raised)
+        .presentationBackground(BurritoTheme.raised)
+        .onDisappear {
+            query = ""
+        }
+    }
+}
+
+private struct SearchablePickerRow<Leading: View>: View {
+    let isSelected: Bool
+    let height: CGFloat
+    let action: () -> Void
+    @ViewBuilder let leading: () -> Leading
+
+    var body: some View {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                leading()
+                Spacer()
+                if isSelected {
+                    BurritoIcon(name: "checkmark", size: 10)
+                        .foregroundStyle(BurritoTheme.accent)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: height)
+            .background(
+                isSelected ? BurritoTheme.controlFill : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ThemeSwatches: View {
+    let colors: [Color]
+
+    var body: some View {
+        HStack(spacing: -5) {
+            ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                Circle()
+                    .fill(color)
+                    .frame(width: 22, height: 22)
+                    .overlay {
+                        Circle().stroke(BurritoTheme.softBorder)
+                    }
+                    .zIndex(Double(colors.count - index))
+            }
+        }
+        .frame(width: 54)
+        .accessibilityHidden(true)
     }
 }
 
@@ -503,7 +942,7 @@ private struct SettingsChoice: View {
                     .overlay {
                         if isSelected {
                             BurritoIcon(name: "checkmark", size: 9)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(BurritoTheme.accentForeground)
                         }
                     }
             }

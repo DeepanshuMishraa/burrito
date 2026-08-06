@@ -7,6 +7,9 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     private let updater = BurritoUpdateManager.shared
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        let defaults = UserDefaults.standard
+        let fontSmoothing = defaults.object(forKey: BurritoFontSmoothing.storageKey) as? Bool ?? true
+        BurritoFontSmoothing.apply(fontSmoothing, defaults: defaults)
         BurritoFontRegistrar.registerFontsIfNeeded()
         _ = BurritoAppFeedback.shared
     }

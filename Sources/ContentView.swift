@@ -69,6 +69,7 @@ struct ContentView: View {
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var languageModelStore = LocalLanguageModelStore.shared
+    @State private var styleStore = BurritoStyleStore.shared
     @State private var chatSessions = MemoryChatSessionStore()
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
@@ -88,10 +89,20 @@ struct ContentView: View {
     @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
+    @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
+        BurritoColorTheme.burrito.rawValue
+    @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
+        BurritoFontChoice.burritoDefault.rawValue
+    @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
+        BurritoInterfaceFontSize.standard
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
         BurritoAppearance.resolve(appearanceRawValue)
+    }
+
+    private var colorTheme: BurritoColorTheme {
+        BurritoColorTheme.resolve(colorThemeRawValue)
     }
 
     private var selectedNote: Note? {
@@ -184,10 +195,21 @@ struct ContentView: View {
                 home
             }
         }
+        .environment(styleStore)
         .frame(minWidth: 1_020, minHeight: 640)
+        .foregroundStyle(BurritoTheme.foreground)
         .tint(BurritoTheme.accent)
         .preferredColorScheme(appearance.colorScheme)
         .font(.spline(size: 13, weight: .regular))
+        .onChange(of: colorThemeRawValue, initial: true) { _, rawValue in
+            styleStore.selectTheme(rawValue)
+        }
+        .onChange(of: fontChoiceRawValue, initial: true) { _, rawValue in
+            styleStore.selectFont(rawValue)
+        }
+        .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
+            styleStore.selectInterfaceFontSize(rawValue)
+        }
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -557,12 +579,14 @@ struct ContentView: View {
                 SidebarAccountCard(
                     profile: userProfile,
                     appearanceRawValue: $appearanceRawValue,
-                    updater: updater
+                    updater: updater,
+                    theme: colorTheme
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
         }
+        .foregroundStyle(BurritoTheme.sidebarForeground)
         .background(BurritoTheme.sidebar)
     }
 
@@ -1489,10 +1513,15 @@ private struct SidebarAccountCard: View {
     let profile: MacUserProfile
     @Binding var appearanceRawValue: String
     @Bindable var updater: BurritoUpdateManager
+    let theme: BurritoColorTheme
     @State private var isProfilePresented = false
 
     private var appearance: BurritoAppearance {
         BurritoAppearance.resolve(appearanceRawValue)
+    }
+
+    private var palette: BurritoThemePalette {
+        theme.palette
     }
 
     var body: some View {
@@ -1501,7 +1530,7 @@ private struct SidebarAccountCard: View {
                 Text("APPEARANCE")
                     .font(.spline(size: 9, weight: 450))
                     .tracking(0.7)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(palette.foreground.color.opacity(0.72))
 
                 HStack(spacing: 2) {
                     ForEach(BurritoAppearance.allCases) { option in
@@ -1517,14 +1546,16 @@ private struct SidebarAccountCard: View {
                         } label: {
                             BurritoIcon(name: option.systemImage, size: 11)
                                 .foregroundStyle(
-                                    appearance == option ? BurritoTheme.accent : .secondary
+                                    appearance == option
+                                        ? palette.accent.color
+                                        : palette.foreground.color.opacity(0.72)
                                 )
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 28)
                                 .background(
                                     appearance == option
-                                        ? BurritoTheme.accentSoft
-                                        : BurritoTheme.controlFill,
+                                        ? palette.accentSoft.color
+                                        : palette.controlFill.color,
                                     in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                                 .burritoElevation(.control)
@@ -1540,7 +1571,7 @@ private struct SidebarAccountCard: View {
             .padding(11)
 
             Rectangle()
-                .fill(BurritoTheme.softBorder)
+                .fill(palette.softBorder.color)
                 .frame(height: 1)
 
             Button {
@@ -1553,17 +1584,17 @@ private struct SidebarAccountCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(BurritoTheme.softBorder)
+                                .stroke(palette.softBorder.color)
                         }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
                             .font(.spline(size: 13, weight: 450))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(palette.foreground.color)
                             .lineLimit(1)
                         Text("Local account")
                             .font(.spline(size: 10, weight: .regular))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(palette.foreground.color.opacity(0.72))
                     }
 
                     Spacer()
@@ -1573,7 +1604,7 @@ private struct SidebarAccountCard: View {
                         size: 10,
                         accessibilityLabel: "Account and updates"
                     )
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(palette.foreground.color.opacity(0.72))
                 }
                 .padding(11)
                 .contentShape(Rectangle())
@@ -1587,11 +1618,11 @@ private struct SidebarAccountCard: View {
                 AccountPopover(profile: profile, updater: updater)
             }
         }
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(palette.raised.color, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .burritoElevation(.surface)
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(BurritoTheme.softBorder)
+                .stroke(palette.softBorder.color)
         }
     }
 }
@@ -2551,7 +2582,7 @@ private struct CalendarPermissionRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                     BurritoIcon(name: "checkmark", size: 9)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BurritoTheme.accentForeground)
                 }
                 .frame(width: 18, height: 18)
                 Text("Connected")
@@ -2619,7 +2650,7 @@ private struct PermissionRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                         BurritoIcon(name: "checkmark", size: 9)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(BurritoTheme.accentForeground)
                     }
                     .frame(width: 18, height: 18)
                     Text("Allowed")
@@ -3812,7 +3843,7 @@ private struct CaptureCapsule: View {
                         .fill(BurritoTheme.accent)
                         .frame(width: 30, height: 30)
                     BurritoIcon(name: "waveform", size: 13)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BurritoTheme.accentForeground)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("New recording")
@@ -4061,7 +4092,7 @@ private struct RecordingControlButton: View {
 
                     if isRecording {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(.white)
+                            .fill(BurritoTheme.accentForeground)
                             .frame(width: 8, height: 8)
                     } else {
                         BurritoIcon(name: "waveform", size: 10)
@@ -4710,7 +4741,7 @@ private struct TemplateChoiceCard: View {
                     ZStack {
                         Rectangle().fill(BurritoTheme.accent)
                         BurritoIcon(name: "checkmark", size: 8)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(BurritoTheme.accentForeground)
                     }
                     .frame(width: 17, height: 17)
                 }
@@ -4953,7 +4984,9 @@ private struct TemplateListRow: View {
                         .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
                         .frame(width: 32, height: 32)
                     BurritoIcon(name: template.symbol, size: 13)
-                        .foregroundStyle(isSelected ? .white : BurritoTheme.accent)
+                        .foregroundStyle(
+                            isSelected ? BurritoTheme.accentForeground : BurritoTheme.accent
+                        )
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -5408,6 +5441,7 @@ private struct RecordingNotepadView: View {
                         .font(.system(size: 15, design: .monospaced))
                         .lineSpacing(5)
                         .scrollContentBackground(.hidden)
+                        .burritoThinScrollers()
                         .focused($notesFocused)
                         .accessibilityLabel("Your Markdown meeting notes")
                         .accessibilityHint(
@@ -5695,7 +5729,7 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.visible)
-                .background(ThinScrollerConfigurator())
+                .burritoThinScrollers()
                 .onChange(of: session.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
@@ -5773,7 +5807,9 @@ private struct MemoryChatView: View {
                     } else {
                         Button(action: ask) {
                             BurritoIcon(name: "arrow.up", size: 12)
-                                .foregroundStyle(canAsk ? .white : Color.secondary)
+                                .foregroundStyle(
+                                    canAsk ? BurritoTheme.accentForeground : Color.secondary
+                                )
                                 .frame(width: 28, height: 28)
                                 .background(
                                     canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,
@@ -6150,59 +6186,6 @@ private struct MemoryChatView: View {
     }
 }
 
-private final class BurritoThinScroller: NSScroller {
-    override class func scrollerWidth(
-        for controlSize: NSControl.ControlSize,
-        scrollerStyle: NSScroller.Style
-    ) -> CGFloat {
-        4
-    }
-}
-
-private struct ThinScrollerConfigurator: NSViewRepresentable {
-    final class View: NSView {
-        private var didConfigureScrollView = false
-        private var isConfigurationScheduled = false
-
-        override func viewDidMoveToSuperview() {
-            super.viewDidMoveToSuperview()
-            configureScrollView()
-        }
-
-        func configureScrollView() {
-            guard !didConfigureScrollView, !isConfigurationScheduled else { return }
-            isConfigurationScheduled = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                isConfigurationScheduled = false
-                var ancestor = superview
-                while let current = ancestor {
-                    if let scrollView = current as? NSScrollView {
-                        scrollView.scrollerStyle = .overlay
-                        scrollView.autohidesScrollers = true
-                        if !(scrollView.verticalScroller is BurritoThinScroller) {
-                            let scroller = BurritoThinScroller(frame: .zero)
-                            scroller.controlSize = .mini
-                            scrollView.verticalScroller = scroller
-                        }
-                        didConfigureScrollView = true
-                        break
-                    }
-                    ancestor = current.superview
-                }
-            }
-        }
-    }
-
-    func makeNSView(context: Context) -> View {
-        View()
-    }
-
-    func updateNSView(_ nsView: View, context: Context) {
-        nsView.configureScrollView()
-    }
-}
-
 private struct BurritoChatGenerationStatus: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -6354,6 +6337,7 @@ private struct NoteEditingView: View {
                 .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
+                .burritoThinScrollers()
                 .frame(minHeight: 110, maxHeight: 190)
                 .padding(12)
                 .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -6371,6 +6355,7 @@ private struct NoteEditingView: View {
                 .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
+                .burritoThinScrollers()
                 .frame(maxHeight: .infinity)
                 .padding(12)
                 .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -7089,6 +7074,7 @@ private struct TemplateEditorView: View {
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .scrollContentBackground(.hidden)
+                    .burritoThinScrollers()
                     .padding(12)
                     .frame(minHeight: 190)
                     .background(BurritoTheme.controlFill, in: Rectangle())

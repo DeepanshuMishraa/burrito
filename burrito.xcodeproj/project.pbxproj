@@ -9,10 +9,13 @@
 /* Begin PBXBuildFile section */
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
+		0E3BA93FE49F26DAF814181C /* SourceSerif4-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
+		186739FF47CA52B9784FE4EA /* Licenses in Resources */ = {isa = PBXBuildFile; fileRef = FA3D7EBB074D620282F9FD1A /* Licenses */; };
 		1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
+		2169822823AD17A5D5D02865 /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */; };
 		2C7993E84252BAF80DD73906 /* AITesting in Frameworks */ = {isa = PBXBuildFile; productRef = 95676C287AC51B2EA5887B1D /* AITesting */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
@@ -25,22 +28,31 @@
 		73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */; };
 		77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */; };
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
-		7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */ = {isa = PBXBuildFile; productRef = 1CB1791C5FB74ED703EE3E71 /* Hugeicons */; };
+		7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */ = {isa = PBXBuildFile; productRef = 1BDF818AE23F9D8D1DD1D5EA /* Hugeicons */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
+		876EBC0A154DE03197E09713 /* JetBrainsMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */; };
+		8BE602A56D651B0C195847C7 /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A012C13A161767957F1B4B7A /* Inter-Variable.ttf */; };
+		8DD90EB3E57A4A884DDC5D19 /* IBMPlexSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
+		93EF08AAF07D7A665D252B64 /* IBMPlexMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 1ADC8A04BD0CC461DBBB407C /* MLXLLM */; };
+		B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */; };
+		B8A7182040DBB156AABEE199 /* IBMPlexMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */; };
 		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
 		C6EDDEC5266C8138C5F53C4C /* LocalLanguageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */; };
 		CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB467C2185ABF4B927D300BC /* AppCoordinator.swift */; };
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
+		CDF42D894BAF990DDE61C554 /* GeistMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CD8A5C41E428A301A9252A76 /* GeistMono-Variable.ttf */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
 		D712EE334DC9C9D6F1D94AA5 /* MarkdownDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */; };
 		D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */; };
 		E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */; };
 		EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */; };
+		EE09F05A5364BA09E154CB94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */; };
+		EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DACDC881191EC0950114922B /* Geist-Variable.ttf */; };
 		F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */; };
 		F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B76BDAAD1105FDBF200FA0E /* ContentView.swift */; };
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
@@ -62,10 +74,12 @@
 /* Begin PBXFileReference section */
 		00A639102CCFABB8A22A07D3 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
 		0A2216874DB0B52B8350E522 /* DomainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainTests.swift; sourceTree = "<group>"; };
+		0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-SemiBold.ttf"; sourceTree = "<group>"; };
 		0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManager.swift; sourceTree = "<group>"; };
 		0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetTranscriber.swift; sourceTree = "<group>"; };
 		0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceAndStorageTests.swift; sourceTree = "<group>"; };
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
+		2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SourceSerif4-Variable.ttf"; sourceTree = "<group>"; };
 		274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Variable.ttf"; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
 		315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Italic-Variable.ttf"; sourceTree = "<group>"; };
@@ -80,19 +94,29 @@
 		7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAccess.swift; sourceTree = "<group>"; };
 		728318FB3CB86222B61B8235 /* RecordingFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFileStore.swift; sourceTree = "<group>"; };
 		765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocumentTests.swift; sourceTree = "<group>"; };
+		76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Variable.ttf"; sourceTree = "<group>"; };
 		76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoTheme.swift; sourceTree = "<group>"; };
 		78A20AF8BC980AFBBC930B6C /* burrito.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = burrito.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Scooter-loader.json"; sourceTree = "<group>"; };
 		80312D2153FF4924DF498F98 /* CoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorTests.swift; sourceTree = "<group>"; };
+		82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Regular.ttf"; sourceTree = "<group>"; };
+		8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSans-Variable.ttf"; sourceTree = "<group>"; };
 		8932061A0CA5A58DCC622228 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
 		9F27CD15A054415C3F40F273 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
+		A012C13A161767957F1B4B7A /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Variable.ttf"; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Bold.ttf"; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
+		BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoThemeRegistry.swift; sourceTree = "<group>"; };
 		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
+		CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
+		CD8A5C41E428A301A9252A76 /* GeistMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "GeistMono-Variable.ttf"; sourceTree = "<group>"; };
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
+		DACDC881191EC0950114922B /* Geist-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Variable.ttf"; sourceTree = "<group>"; };
+		FA3D7EBB074D620282F9FD1A /* Licenses */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Licenses; path = Resources/Fonts/Licenses; sourceTree = SOURCE_ROOT; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -163,6 +187,7 @@
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
 				C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
+				BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */,
 				0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */,
 				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
 				3B76BDAAD1105FDBF200FA0E /* ContentView.swift */,
@@ -196,6 +221,17 @@
 		E3123D2A1EAB3921FFA71726 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
+				DACDC881191EC0950114922B /* Geist-Variable.ttf */,
+				CD8A5C41E428A301A9252A76 /* GeistMono-Variable.ttf */,
+				A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */,
+				CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */,
+				82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */,
+				0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */,
+				8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */,
+				A012C13A161767957F1B4B7A /* Inter-Variable.ttf */,
+				76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */,
+				FA3D7EBB074D620282F9FD1A /* Licenses */,
+				2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */,
 				315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */,
 				274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */,
 			);
@@ -225,7 +261,7 @@
 				BF1585C55A8225C58A754212 /* AI */,
 				1ADC8A04BD0CC461DBBB407C /* MLXLLM */,
 				D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */,
-				1CB1791C5FB74ED703EE3E71 /* Hugeicons */,
+				1BDF818AE23F9D8D1DD1D5EA /* Hugeicons */,
 			);
 			productName = burrito;
 			productReference = 78A20AF8BC980AFBBC930B6C /* burrito.app */;
@@ -281,9 +317,9 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7069A27640BB64613126C832 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				26A7813D49F712E10723C070 /* XCRemoteSwiftPackageReference "hugeicons-swift" */,
 				08AE6E036381483D27CB8B48 /* XCRemoteSwiftPackageReference "lottie-spm" */,
 				65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */,
 				E1E4CD401A704EDFA19E3C1A /* XCRemoteSwiftPackageReference "Sparkle" */,
 				50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */,
 			);
@@ -304,7 +340,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
+				EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */,
+				CDF42D894BAF990DDE61C554 /* GeistMono-Variable.ttf in Resources */,
+				B8A7182040DBB156AABEE199 /* IBMPlexMono-Bold.ttf in Resources */,
+				EE09F05A5364BA09E154CB94 /* IBMPlexMono-Medium.ttf in Resources */,
+				2169822823AD17A5D5D02865 /* IBMPlexMono-Regular.ttf in Resources */,
+				93EF08AAF07D7A665D252B64 /* IBMPlexMono-SemiBold.ttf in Resources */,
+				8DD90EB3E57A4A884DDC5D19 /* IBMPlexSans-Variable.ttf in Resources */,
+				8BE602A56D651B0C195847C7 /* Inter-Variable.ttf in Resources */,
+				876EBC0A154DE03197E09713 /* JetBrainsMono-Variable.ttf in Resources */,
+				186739FF47CA52B9784FE4EA /* Licenses in Resources */,
 				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
+				0E3BA93FE49F26DAF814181C /* SourceSerif4-Variable.ttf in Resources */,
 				1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */,
 				D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */,
 			);
@@ -322,6 +369,7 @@
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
 				FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
+				B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */,
 				63D6B5E998CF954795A8BBB2 /* BurritoUpdateManager.swift in Sources */,
 				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
 				F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */,
@@ -622,6 +670,14 @@
 				minimumVersion = 4.6.1;
 			};
 		};
+		26A7813D49F712E10723C070 /* XCRemoteSwiftPackageReference "hugeicons-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/iSapozhnik/hugeicons-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 4.1.7;
+			};
+		};
 		50DCB5B9080F071C8BD65F80 /* XCRemoteSwiftPackageReference "swift-ai-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/zaidmukaddam/swift-ai-sdk.git";
@@ -654,14 +710,6 @@
 				minimumVersion = 2.9.0;
 			};
 		};
-		EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/iSapozhnik/hugeicons-swift.git";
-			requirement = {
-				kind = exactVersion;
-				version = 4.1.7;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -670,9 +718,9 @@
 			package = 65721B7D494203F33622ADC9 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
 		};
-		1CB1791C5FB74ED703EE3E71 /* Hugeicons */ = {
+		1BDF818AE23F9D8D1DD1D5EA /* Hugeicons */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = EDC47D1E57A6C614D421513C /* XCRemoteSwiftPackageReference "hugeicons-swift" */;
+			package = 26A7813D49F712E10723C070 /* XCRemoteSwiftPackageReference "hugeicons-swift" */;
 			productName = Hugeicons;
 		};
 		299A838A7B8892CA4C7945E3 /* Sparkle */ = {
