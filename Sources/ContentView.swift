@@ -3377,20 +3377,66 @@ private struct UpcomingEventRow: View {
     }
 }
 
+private struct NoteIconBadge: View {
+    let note: Note
+    let isHovered: Bool
+
+    private var iconName: String {
+        if note.processingStage != nil {
+            return "waveform"
+        }
+        if note.calendarEvent != nil {
+            return "calendar"
+        }
+        return note.templateSnapshot.symbol
+    }
+
+    private var badgeBackground: Color {
+        if note.processingStage != nil || note.isFavorite {
+            return BurritoTheme.accentSoft
+        }
+        return isHovered ? BurritoTheme.controlFill : BurritoTheme.raised
+    }
+
+    private var iconColor: Color {
+        if note.processingStage != nil || note.isFavorite {
+            return BurritoTheme.accent
+        }
+        return isHovered ? .primary : .secondary
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(badgeBackground)
+                .frame(width: 32, height: 32)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(
+                            note.processingStage != nil || note.isFavorite
+                                ? BurritoTheme.accent.opacity(0.3)
+                                : BurritoTheme.softBorder
+                        )
+                }
+
+            BurritoIcon(name: iconName, size: 14)
+                .foregroundStyle(iconColor)
+        }
+    }
+}
+
 private struct TimelineNoteRow: View {
     let note: Note
     var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
-            BurritoIcon(name: note.processingStage == nil ? "doc.text" : "ellipsis", size: 13)
-                .foregroundStyle(isHovered ? BurritoTheme.accent : Color.secondary)
-                .frame(width: 24, height: 24)
+            NoteIconBadge(note: note, isHovered: isHovered)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(note.title)
-                        .font(.spline(size: 14, weight: 450))
+                        .font(.spline(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     if note.isFavorite {
@@ -3414,7 +3460,7 @@ private struct TimelineNoteRow: View {
                 .frame(minWidth: 54, alignment: .trailing)
         }
         .padding(.horizontal, 10)
-        .frame(height: 48)
+        .frame(height: 52)
         .contentShape(Rectangle())
     }
 }
@@ -3521,11 +3567,18 @@ private struct TimelineNoteItem: View {
                 noteActionsPopover
             }
         }
-        .padding(.trailing, 4)
+        .padding(.trailing, 6)
+        .padding(.vertical, 2)
         .background(
-            isHovered || showingActions ? BurritoTheme.paper.opacity(0.5) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            isHovered || showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
+        .overlay {
+            if isHovered || showingActions {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(BurritoTheme.softBorder)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hover in
             withAnimation(.easeOut(duration: 0.12)) {
