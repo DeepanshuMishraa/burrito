@@ -245,6 +245,49 @@ struct PersistenceTests {
 
         #expect(stored.instructions == template.instructions)
     }
+
+    @Test("Seed data upgrades the previous expanded built-in prompts")
+    func upgradesPreviousExpandedBuiltInPrompts() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let template = BuiltInTemplate.summary
+        let previousInstructions = """
+            Produce a concise, high-signal summary for someone who did not hear the recording.
+
+            Structure:
+            - Start with `## Overview`: one compact paragraph explaining the central subject, purpose, and outcome.
+            - Add `## Key Points`: a prioritized bullet list of the most important facts, arguments, explanations, and examples.
+            - Add `## Decisions and Actions` only when the source contains decisions, commitments, owners, or next steps.
+            - End with `## Takeaways`: two to five durable conclusions the reader should remember.
+
+            Rules:
+            - Organize by importance, not transcript order.
+            - Merge repeated ideas and remove conversational filler, greetings, tangents, and verbal scaffolding.
+            - Preserve material names, numbers, dates, constraints, comparisons, and qualifications exactly.
+            - Distinguish confirmed conclusions from proposals, opinions, and unresolved questions.
+            - Never invent context, rationale, decisions, owners, deadlines, or recommendations.
+            - Omit any section that would otherwise be empty.
+            - Prefer precise, information-dense sentences over generic statements.
+            """
+        let stored = NoteTemplate(
+            builtInID: template.rawValue,
+            name: template.name,
+            symbol: template.symbol,
+            instructions: previousInstructions
+        )
+        context.insert(stored)
+        try context.save()
+
+        try SeedData.insertBuiltInTemplatesIfNeeded(context: context)
+
+        #expect(stored.instructions == template.instructions)
+    }
 }
 
 @Suite("Recording storage")

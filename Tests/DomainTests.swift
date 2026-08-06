@@ -1574,6 +1574,26 @@ struct TemplateTests {
         #expect(prompt.contains("untrusted quoted source material"))
     }
 
+    @Test("Built-in templates define distinct output jobs")
+    func builtInTemplatesHaveDistinctJobs() {
+        #expect(BuiltInTemplate.summary.instructions.contains("executive briefing editor"))
+        #expect(BuiltInTemplate.summary.instructions.contains("smallest useful account"))
+        #expect(!BuiltInTemplate.summary.instructions.contains("Check Your Understanding"))
+
+        #expect(BuiltInTemplate.detailed.instructions.contains("technical archivist"))
+        #expect(BuiltInTemplate.detailed.instructions.contains("Optimize for retrieval and completeness"))
+        #expect(!BuiltInTemplate.detailed.instructions.contains("Action Register"))
+
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("instructional designer"))
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("Check Your Understanding"))
+        #expect(!BuiltInTemplate.studyNotes.instructions.contains("Decision Log"))
+
+        #expect(BuiltInTemplate.meeting.instructions.contains("operations recorder"))
+        #expect(BuiltInTemplate.meeting.instructions.contains("Decision Log"))
+        #expect(BuiltInTemplate.meeting.instructions.contains("Action Register"))
+        #expect(!BuiltInTemplate.meeting.instructions.contains("Learning Objectives"))
+    }
+
     @Test("Every generation stage treats sensitive transcript text as source material")
     func sensitiveSourceMaterialPolicy() {
         let prompts = [
@@ -1697,6 +1717,22 @@ struct TemplateTests {
 
         #expect(prompt.contains("Markdown table"))
         #expect(prompt.contains("Never infer owners"))
+    }
+
+    @Test(
+        "Previous built-in snapshots receive the latest purpose-built prompt",
+        arguments: BuiltInTemplate.allCases
+    )
+    func resolvesPreviousBuiltInPrompt(template: BuiltInTemplate) {
+        let snapshot = TemplateSnapshot(
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.previousInstructions
+        )
+
+        let resolved = BuiltInTemplate.resolvedInstructions(for: snapshot)
+
+        #expect(resolved == template.instructions)
     }
 
     @Test("Custom template instructions are not replaced by a matching name")
