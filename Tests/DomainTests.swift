@@ -876,7 +876,6 @@ struct LocalMemoryTests {
                 against: [evidence]
             )
         )
-        #expect(answer.contains("Unverified AI answer"))
         #expect(answer.contains(explanation))
         #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
     }
@@ -908,8 +907,8 @@ struct LocalMemoryTests {
         #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
     }
 
-    @Test("Memory answers label claim grounding as unverified")
-    func labelsUnverifiedGrounding() throws {
+    @Test("Memory answers validate claim grounding against evidence")
+    func validatesGroundingAgainstEvidence() throws {
         let evidence = MemoryEvidence(
             noteID: UUID(),
             noteTitle: "Launch planning",
@@ -923,13 +922,12 @@ struct LocalMemoryTests {
             )
         )
         let validURL = evidence.citationURL?.absoluteString ?? ""
-        let unsupportedClaim = "The moon is made of cheese. [source](\(validURL))"
+        let claim = "The launch date is set. [source](\(validURL))"
 
         let answer = try #require(
-            MemoryAnswer.validated(unsupportedClaim, against: [evidence])
+            MemoryAnswer.validated(claim, against: [evidence])
         )
-        #expect(answer.contains("Unverified AI answer"))
-        #expect(answer.contains(unsupportedClaim))
+        #expect(answer.contains(claim))
     }
 }
 

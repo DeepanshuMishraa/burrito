@@ -5807,16 +5807,19 @@ private struct MemoryChatView: View {
     }
 
     private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                BurritoAppIcon(size: 18)
-                Text("Burrito AI")
-                    .font(.spline(size: 11, weight: 450))
-                    .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 8) {
+            if let error = msg.errorMessage {
+                BurritoLabel(error, systemImage: "exclamationmark.triangle")
+                    .font(.spline(size: 11, weight: 400))
+                    .foregroundStyle(.red)
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    MarkdownNoteContent(
+                        markdown: msg.text,
+                        openMemory: openCitation
+                    )
+                    Spacer(minLength: 0)
 
-                Spacer()
-
-                if msg.errorMessage == nil {
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(msg.text, forType: .string)
@@ -5843,17 +5846,6 @@ private struct MemoryChatView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            }
-
-            if let error = msg.errorMessage {
-                BurritoLabel(error, systemImage: "exclamationmark.triangle")
-                    .font(.spline(size: 11, weight: 400))
-                    .foregroundStyle(.red)
-            } else {
-                MarkdownNoteContent(
-                    markdown: msg.text,
-                    openMemory: openCitation
-                )
             }
         }
         .padding(16)

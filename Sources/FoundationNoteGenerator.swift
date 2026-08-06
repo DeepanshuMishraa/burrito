@@ -511,10 +511,6 @@ enum MemoryPrompt {
 
 enum MemoryAnswer {
     private static let insufficientEvidencePrefix = "INSUFFICIENT_EVIDENCE:"
-    private static let groundingNotice = """
-        > **Unverified AI answer:** Citation destinations are valid, but Burrito has not independently verified every claim against the linked passages.
-
-        """
 
     static func validated(
         _ answer: String,
@@ -544,7 +540,7 @@ enum MemoryAnswer {
         if destinations.isEmpty {
             guard isInsufficientEvidence else { return nil }
         }
-        return groundingNotice + normalizedAnswer
+        return normalizedAnswer
     }
 
     static func recoveredToolAnswer(
@@ -569,7 +565,7 @@ enum MemoryAnswer {
             return "[\(item.noteTitle)](\(citation))"
         }
         guard !sources.isEmpty else { return nil }
-        return groundingNotice + trimmed + "\n\n**Meeting sources:** "
+        return trimmed + "\n\n**Meeting sources:** "
             + sources.joined(separator: " · ")
     }
 
