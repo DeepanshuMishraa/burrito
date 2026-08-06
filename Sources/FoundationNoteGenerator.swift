@@ -980,9 +980,11 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         contentFilterMessage: String,
         onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
     ) async throws -> String {
+        let updateInterval = Duration.milliseconds(33)
         var accumulatedText = ""
         var currentStepText = ""
         var finishReason: FinishReason?
+        var lastUpdate: ContinuousClock.Instant?
 
         for try await part in result.fullStream {
             switch part {
@@ -990,7 +992,11 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
                 currentStepText = ""
             case .textDelta(let delta):
                 currentStepText += delta
-                await onTextUpdate(accumulatedText + currentStepText)
+                let now = ContinuousClock.now
+                if lastUpdate.map({ $0.duration(to: now) >= updateInterval }) ?? true {
+                    await onTextUpdate(accumulatedText + currentStepText)
+                    lastUpdate = now
+                }
             case .finishStep(let step):
                 let completedStepText = step.text.isEmpty ? currentStepText : step.text
                 accumulatedText += completedStepText
@@ -1005,7 +1011,9 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         guard finishReason != .contentFilter else {
             throw BurritoError.generationFailed(details: contentFilterMessage)
         }
-        return accumulatedText + currentStepText
+        let finalText = accumulatedText + currentStepText
+        await onTextUpdate(finalText)
+        return finalText
     }
 
     private func response(

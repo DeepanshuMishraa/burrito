@@ -159,8 +159,8 @@ enum LocalMemory {
         guard limit > 0 else { return [] }
         let queryTerms = terms(in: question)
         let candidates = documents.flatMap { document in
-            document.segments.map { segment in
-                let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+            let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+            return document.segments.map { segment in
                 let passageMatches = queryTerms.intersection(terms(in: segment.text)).count
                 return (
                     evidence: MemoryEvidence(

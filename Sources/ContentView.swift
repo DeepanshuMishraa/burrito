@@ -381,7 +381,7 @@ struct ContentView: View {
             } else if sidebarSelection == .memory {
                 MemoryChatView(
                     session: chatSessions.askBurrito,
-                    documents: memoryNotes.map(memoryDocument),
+                    documents: memoryDocuments,
                     languageIdentifier: defaultLanguage
                 ) { citation in
                     selectedMemoryCitation = citation
@@ -720,27 +720,26 @@ struct ContentView: View {
         }
     }
 
-    private func memoryDocument(_ note: Note) -> MemoryDocument {
-        MemoryDocument(
-            noteID: note.id,
-            title: note.title,
-            updatedAt: note.updatedAt,
-            segments: note.transcriptSegments
-        )
-    }
-
     private var memoryFolder: Folder? {
         guard let memoryFolderID else { return nil }
         return folders.first { $0.id == memoryFolderID }
     }
 
-    private var memoryNotes: [Note] {
-        notes.filter { note in
-            guard note.deletedAt == nil, !note.transcriptSegments.isEmpty else {
-                return false
+    private var memoryDocuments: [MemoryDocument] {
+        notes.compactMap { note in
+            guard note.deletedAt == nil,
+                  memoryFolderID == nil || note.folder?.id == memoryFolderID
+            else {
+                return nil
             }
-            guard let memoryFolderID else { return true }
-            return note.folder?.id == memoryFolderID
+            let segments = note.transcriptSegments
+            guard !segments.isEmpty else { return nil }
+            return MemoryDocument(
+                noteID: note.id,
+                title: note.title,
+                updatedAt: note.updatedAt,
+                segments: segments
+            )
         }
     }
 
@@ -1102,6 +1101,65 @@ private struct CommandPalettePresentationModifier: ViewModifier {
     }
 }
 
+private struct CommandPaletteNote: Identifiable, Sendable {
+    struct Source: Sendable {
+        let id: UUID
+        let title: String
+        let templateName: String
+        let templateSymbol: String
+        let updatedAt: Date
+        let markdownBody: String
+        let userNotes: String
+        let calendarEventData: Data?
+        let transcriptData: Data
+
+        init(note: Note) {
+            id = note.id
+            title = note.title
+            templateName = note.templateName
+            templateSymbol = note.templateSymbol
+            updatedAt = note.updatedAt
+            markdownBody = note.markdownBody
+            userNotes = note.userNotes
+            calendarEventData = note.calendarEventData
+            transcriptData = note.transcriptData
+        }
+    }
+
+    let id: UUID
+    let title: String
+    let templateName: String
+    let templateSymbol: String
+    let updatedAt: Date
+    private let searchableText: String
+
+    init(source: Source) {
+        id = source.id
+        title = source.title
+        templateName = source.templateName
+        templateSymbol = source.templateSymbol
+        updatedAt = source.updatedAt
+        let calendarContext = source.calendarEventData.flatMap {
+            try? JSONDecoder().decode(CalendarEventSnapshot.self, from: $0)
+        }?.generationContext ?? ""
+        let segments = (try? JSONDecoder().decode(
+            [TranscriptSegment].self,
+            from: source.transcriptData
+        )) ?? []
+        searchableText = [
+            source.title,
+            source.markdownBody,
+            source.userNotes,
+            calendarContext,
+            Transcript.rendered(segments),
+        ].joined(separator: "\n")
+    }
+
+    func matches(_ query: String) -> Bool {
+        searchableText.localizedStandardContains(query)
+    }
+}
+
 private struct CommandPaletteView: View {
     private enum ResultID: Hashable {
         case command(BurritoPaletteCommand)
@@ -1117,6 +1175,7 @@ private struct CommandPaletteView: View {
 
     @FocusState private var queryFocused: Bool
     @State private var selectedResult: ResultID?
+    @State private var indexedNotes: [CommandPaletteNote] = []
     @Namespace private var selectionAnimation
 
     private var normalizedQuery: String {
@@ -1130,22 +1189,12 @@ private struct CommandPaletteView: View {
         return BurritoPaletteCommand.allCases.filter { $0.matches(normalizedQuery) }
     }
 
-    private var matchingNotes: [Note] {
-        let candidates = notes.sorted { $0.updatedAt > $1.updatedAt }
+    private var matchingNotes: [CommandPaletteNote] {
         guard !normalizedQuery.isEmpty else {
-            return Array(candidates.prefix(4))
+            return Array(indexedNotes.prefix(4))
         }
         return Array(
-            candidates.filter {
-                $0.title.localizedStandardContains(normalizedQuery)
-                    || $0.markdownBody.localizedStandardContains(normalizedQuery)
-                    || $0.userNotes.localizedStandardContains(normalizedQuery)
-                    || ($0.calendarEvent?.generationContext
-                        .localizedStandardContains(normalizedQuery) ?? false)
-                    || Transcript.rendered($0.transcriptSegments)
-                        .localizedStandardContains(normalizedQuery)
-            }
-            .prefix(8)
+            indexedNotes.filter { $0.matches(normalizedQuery) }.prefix(8)
         )
     }
 
@@ -1258,6 +1307,14 @@ private struct CommandPaletteView: View {
             .shadow(color: .black.opacity(0.28), radius: 28, y: 16)
         }
         .task {
+            let sources = notes.map(CommandPaletteNote.Source.init)
+            let index = await Task.detached(priority: .userInitiated) {
+                sources
+                    .map(CommandPaletteNote.init)
+                    .sorted { $0.updatedAt > $1.updatedAt }
+            }.value
+            guard !Task.isCancelled else { return }
+            indexedNotes = index
             selectedResult = resultIDs.first
             await Task.yield()
             queryFocused = true
@@ -1318,7 +1375,7 @@ private struct CommandPaletteView: View {
         .padding(.horizontal, 6)
     }
 
-    private func noteRow(_ note: Note) -> some View {
+    private func noteRow(_ note: CommandPaletteNote) -> some View {
         Button {
             selectNote(note.id)
         } label: {
@@ -5576,7 +5633,7 @@ private struct MemoryChatView: View {
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: session.messages.last?.text) { _, _ in
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, animated: false)
                 }
                 .onChange(of: session.isAnswering) { _, answering in
                     if answering {
@@ -5814,10 +5871,18 @@ private struct MemoryChatView: View {
                     .foregroundStyle(.red)
             } else {
                 HStack(alignment: .top, spacing: 12) {
-                    MarkdownNoteContent(
-                        markdown: msg.text,
-                        openMemory: openCitation
-                    )
+                    if isStreaming(msg) {
+                        Text(msg.text)
+                            .font(.spline(size: 13, weight: 400))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        MarkdownNoteContent(
+                            markdown: msg.text,
+                            openMemory: openCitation
+                        )
+                    }
                     Spacer(minLength: 0)
 
                     Button {
@@ -5859,8 +5924,16 @@ private struct MemoryChatView: View {
         BurritoChatGenerationStatus()
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        withAnimation(reduceMotion ? nil : .burritoSpring) {
+    private func isStreaming(_ message: MemoryChatMessage) -> Bool {
+        session.isAnswering && session.messages.last?.id == message.id
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+        if animated && !reduceMotion {
+            withAnimation(.burritoSpring) {
+                proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
+            }
+        } else {
             proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
         }
     }
@@ -6578,6 +6651,7 @@ private struct NoteDetailView: View {
                 }
             } else if selectedTab == .transcript {
                 TranscriptEditor(note: note, focusedSegmentID: citedSegmentID)
+                    .id(note.id)
             } else {
                 MemoryChatView(
                     session: chatSession,
@@ -7040,11 +7114,18 @@ private struct TranscriptEditor: View {
     @Bindable var note: Note
     let focusedSegmentID: UUID?
     @State private var hoveredSegmentID: UUID?
+    @State private var segments: [TranscriptSegment]
+
+    init(note: Note, focusedSegmentID: UUID?) {
+        self.note = note
+        self.focusedSegmentID = focusedSegmentID
+        _segments = State(initialValue: note.transcriptSegments)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                if note.transcriptSegments.isEmpty {
+                if segments.isEmpty {
                 VStack(spacing: 14) {
                     TranscriptSignalMark(tint: BurritoTheme.accent)
                         .frame(width: 34, height: 28)
@@ -7078,7 +7159,7 @@ private struct TranscriptEditor: View {
                                 tint: BurritoTheme.sage
                             )
                         }
-                        Text("\(note.transcriptSegments.count) passages")
+                        Text("\(segments.count) passages")
                             .font(.system(size: 10, weight: 450))
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
@@ -7089,7 +7170,7 @@ private struct TranscriptEditor: View {
 
                     ForEach(
                         Array(
-                            Transcript.latestFirst(note.transcriptSegments)
+                            Transcript.latestFirst(segments)
                                 .enumerated()
                         ),
                         id: \.element.id
@@ -7110,7 +7191,7 @@ private struct TranscriptEditor: View {
                             VStack(spacing: 8) {
                                 TranscriptSignalMark(tint: sourceTint(for: segment.source))
                                     .frame(width: 30, height: 22)
-                                if index < note.transcriptSegments.count - 1 {
+                                if index < segments.count - 1 {
                                     Rectangle()
                                         .fill(
                                             LinearGradient(
@@ -7231,10 +7312,9 @@ private struct TranscriptEditor: View {
     private func binding(for id: UUID) -> Binding<String> {
         Binding(
             get: {
-                note.transcriptSegments.first(where: { $0.id == id })?.text ?? ""
+                segments.first(where: { $0.id == id })?.text ?? ""
             },
             set: { newValue in
-                var segments = note.transcriptSegments
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 segments[index].text = newValue
                 note.replaceTranscript(with: segments, marksEdited: true)
@@ -7245,10 +7325,9 @@ private struct TranscriptEditor: View {
     private func speakerBinding(for id: UUID) -> Binding<String> {
         Binding(
             get: {
-                note.transcriptSegments.first(where: { $0.id == id })?.speakerName ?? ""
+                segments.first(where: { $0.id == id })?.speakerName ?? ""
             },
             set: { newValue in
-                var segments = note.transcriptSegments
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 segments[index].speakerName = trimmed.isEmpty ? nil : trimmed
