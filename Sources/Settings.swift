@@ -145,7 +145,8 @@ struct BurritoSettingsView: View {
             .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible)
+        .burritoThinScrollers()
         .background(BurritoTheme.canvas)
     }
 }
@@ -164,6 +165,9 @@ private struct SettingsPane: View {
         BurritoColorTheme.burrito.rawValue
     @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
         BurritoFontChoice.burritoDefault.rawValue
+    @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
+        BurritoInterfaceFontSize.standard
+    @AppStorage(BurritoFontSmoothing.storageKey) private var fontSmoothing = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -178,7 +182,19 @@ private struct SettingsPane: View {
 
                             Divider().padding(.leading, 16)
 
-                            BurritoFontPicker(selection: $fontChoiceRawValue)
+                            BurritoFontPicker(
+                                selection: $fontChoiceRawValue,
+                                sizeSelection: $interfaceFontSizeRawValue
+                            )
+
+                            Divider().padding(.leading, 16)
+
+                            BurritoToggleRow(
+                                title: "Font smoothing",
+                                subtitle: "Use thinner grayscale anti-aliasing. Restart Burrito after changing this setting.",
+                                isOn: $fontSmoothing,
+                                style: .settingsForm
+                            )
                         }
                         .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .burritoElevation(.surface)
@@ -285,6 +301,18 @@ private struct SettingsPane: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onChange(of: colorThemeRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectTheme(rawValue)
+        }
+        .onChange(of: fontChoiceRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectFont(rawValue)
+        }
+        .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
+            BurritoStyleStore.shared.selectInterfaceFontSize(rawValue)
+        }
+        .onChange(of: fontSmoothing, initial: true) { _, isEnabled in
+            BurritoFontSmoothing.apply(isEnabled)
+        }
     }
 }
 
@@ -419,11 +447,23 @@ private struct BurritoThemePicker: View {
 
 private struct BurritoFontPicker: View {
     @Binding var selection: String
+    @Binding var sizeSelection: Int
     @State private var isPresented = false
     @State private var query = ""
 
     private var selectedFont: BurritoFontChoice {
         BurritoFontChoice.resolve(selection)
+    }
+
+    private var selectedSize: Int {
+        BurritoInterfaceFontSize.resolve(sizeSelection)
+    }
+
+    private var sizeBinding: Binding<Int> {
+        Binding(
+            get: { selectedSize },
+            set: { sizeSelection = BurritoInterfaceFontSize.resolve($0) }
+        )
     }
 
     private var filteredFonts: [BurritoFontChoice] {
@@ -454,30 +494,31 @@ private struct BurritoFontPicker: View {
 
             Spacer()
 
-            Button {
-                isPresented.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Text(selectedFont.title)
-                        .font(.spline(size: 12, weight: 450))
-                        .foregroundStyle(BurritoTheme.accent)
-                    BurritoIcon(name: "chevron.down", size: 8)
-                        .foregroundStyle(.tertiary)
+            HStack(spacing: 8) {
+                Button {
+                    isPresented.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(selectedFont.title)
+                            .font(.spline(size: 12, weight: 450))
+                            .foregroundStyle(BurritoTheme.accent)
+                        BurritoIcon(name: "chevron.down", size: 8)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
+                    }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
-                }
-            }
-            .buttonStyle(.plain)
-            .popover(
-                isPresented: $isPresented,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .top
-            ) {
+                .buttonStyle(.plain)
+                .popover(
+                    isPresented: $isPresented,
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
                         BurritoIcon(name: "magnifyingglass", size: 11)
@@ -506,7 +547,7 @@ private struct BurritoFontPicker: View {
                                 let categoryFonts = filteredFonts.filter { $0.category == category }
                                 if !categoryFonts.isEmpty {
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(category.rawValue)
+                                        Text(category.title)
                                             .font(.spline(size: 9, weight: 600))
                                             .tracking(0.8)
                                             .foregroundStyle(.tertiary)
@@ -558,12 +599,63 @@ private struct BurritoFontPicker: View {
                 .frame(width: 250, height: 320)
                 .background(BurritoTheme.raised)
                 .presentationBackground(BurritoTheme.raised)
+                }
+
+                HStack(spacing: 0) {
+                    Button {
+                        sizeSelection = BurritoInterfaceFontSize.resolve(selectedSize - 1)
+                    } label: {
+                        BurritoIcon(name: "minus", size: 9, accessibilityLabel: "Decrease interface font size")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedSize == BurritoInterfaceFontSize.minimum)
+
+                    Divider().frame(height: 16)
+
+                    TextField("", value: sizeBinding, format: .number.grouping(.never))
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.center)
+                        .font(.spline(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 34)
+                        .accessibilityLabel("Interface font size in pixels")
+
+                    Text("px")
+                        .font(.spline(size: 10, weight: 450))
+                        .foregroundStyle(.tertiary)
+                        .padding(.trailing, 6)
+
+                    Divider().frame(height: 16)
+
+                    Button {
+                        sizeSelection = BurritoInterfaceFontSize.resolve(selectedSize + 1)
+                    } label: {
+                        BurritoIcon(name: "plus", size: 9, accessibilityLabel: "Increase interface font size")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedSize == BurritoInterfaceFontSize.maximum)
+                }
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 54)
         .onChange(of: isPresented) { _, presented in
             if !presented { query = "" }
+        }
+        .onChange(of: sizeSelection, initial: true) { _, value in
+            let resolved = BurritoInterfaceFontSize.resolve(value)
+            if resolved != value {
+                sizeSelection = resolved
+            }
         }
         .onAppear {
             selection = selectedFont.rawValue

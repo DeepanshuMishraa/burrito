@@ -69,6 +69,7 @@ struct ContentView: View {
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var languageModelStore = LocalLanguageModelStore.shared
+    @State private var styleStore = BurritoStyleStore.shared
     @State private var chatSessions = MemoryChatSessionStore()
     @State private var isSidebarVisible = true
     @State private var sidebarSelection: SidebarSelection? = .all
@@ -92,6 +93,8 @@ struct ContentView: View {
         BurritoColorTheme.burrito.rawValue
     @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
         BurritoFontChoice.burritoDefault.rawValue
+    @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
+        BurritoInterfaceFontSize.standard
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
@@ -147,9 +150,6 @@ struct ContentView: View {
     }
 
     var body: some View {
-        let _ = colorThemeRawValue
-        let _ = fontChoiceRawValue
-
         Group {
             if !permissionOnboardingCompleted || !permissions.allGranted {
                 PermissionGateView(
@@ -195,12 +195,21 @@ struct ContentView: View {
                 home
             }
         }
-        .id(fontChoiceRawValue)
+        .environment(styleStore)
         .frame(minWidth: 1_020, minHeight: 640)
         .foregroundStyle(BurritoTheme.foreground)
         .tint(BurritoTheme.accent)
         .preferredColorScheme(appearance.colorScheme)
         .font(.spline(size: 13, weight: .regular))
+        .onChange(of: colorThemeRawValue, initial: true) { _, rawValue in
+            styleStore.selectTheme(rawValue)
+        }
+        .onChange(of: fontChoiceRawValue, initial: true) { _, rawValue in
+            styleStore.selectFont(rawValue)
+        }
+        .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
+            styleStore.selectInterfaceFontSize(rawValue)
+        }
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -5432,6 +5441,7 @@ private struct RecordingNotepadView: View {
                         .font(.system(size: 15, design: .monospaced))
                         .lineSpacing(5)
                         .scrollContentBackground(.hidden)
+                        .burritoThinScrollers()
                         .focused($notesFocused)
                         .accessibilityLabel("Your Markdown meeting notes")
                         .accessibilityHint(
@@ -5719,7 +5729,7 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.visible)
-                .background(ThinScrollerConfigurator())
+                .burritoThinScrollers()
                 .onChange(of: session.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
@@ -6176,59 +6186,6 @@ private struct MemoryChatView: View {
     }
 }
 
-private final class BurritoThinScroller: NSScroller {
-    override class func scrollerWidth(
-        for controlSize: NSControl.ControlSize,
-        scrollerStyle: NSScroller.Style
-    ) -> CGFloat {
-        4
-    }
-}
-
-private struct ThinScrollerConfigurator: NSViewRepresentable {
-    final class View: NSView {
-        private var didConfigureScrollView = false
-        private var isConfigurationScheduled = false
-
-        override func viewDidMoveToSuperview() {
-            super.viewDidMoveToSuperview()
-            configureScrollView()
-        }
-
-        func configureScrollView() {
-            guard !didConfigureScrollView, !isConfigurationScheduled else { return }
-            isConfigurationScheduled = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                isConfigurationScheduled = false
-                var ancestor = superview
-                while let current = ancestor {
-                    if let scrollView = current as? NSScrollView {
-                        scrollView.scrollerStyle = .overlay
-                        scrollView.autohidesScrollers = true
-                        if !(scrollView.verticalScroller is BurritoThinScroller) {
-                            let scroller = BurritoThinScroller(frame: .zero)
-                            scroller.controlSize = .mini
-                            scrollView.verticalScroller = scroller
-                        }
-                        didConfigureScrollView = true
-                        break
-                    }
-                    ancestor = current.superview
-                }
-            }
-        }
-    }
-
-    func makeNSView(context: Context) -> View {
-        View()
-    }
-
-    func updateNSView(_ nsView: View, context: Context) {
-        nsView.configureScrollView()
-    }
-}
-
 private struct BurritoChatGenerationStatus: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -6380,6 +6337,7 @@ private struct NoteEditingView: View {
                 .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
+                .burritoThinScrollers()
                 .frame(minHeight: 110, maxHeight: 190)
                 .padding(12)
                 .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -6397,6 +6355,7 @@ private struct NoteEditingView: View {
                 .font(.spline(size: 14, weight: .regular))
                 .lineSpacing(5)
                 .scrollContentBackground(.hidden)
+                .burritoThinScrollers()
                 .frame(maxHeight: .infinity)
                 .padding(12)
                 .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -7115,6 +7074,7 @@ private struct TemplateEditorView: View {
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .scrollContentBackground(.hidden)
+                    .burritoThinScrollers()
                     .padding(12)
                     .frame(minHeight: 190)
                     .background(BurritoTheme.controlFill, in: Rectangle())

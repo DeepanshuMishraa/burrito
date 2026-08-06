@@ -1,4 +1,6 @@
 import AppKit
+import Observation
+import OSLog
 import SwiftUI
 
 enum BurritoFontCategory: String, CaseIterable, Identifiable {
@@ -7,6 +9,44 @@ enum BurritoFontCategory: String, CaseIterable, Identifiable {
     case serif = "SERIF"
 
     var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .mono: "Mono"
+        case .sans: "Sans"
+        case .serif: "Serif"
+        }
+    }
+}
+
+enum BurritoInterfaceFontSize {
+    static let storageKey = "interfaceFontSize"
+    static let minimum = 8
+    static let standard = 13
+    static let maximum = 18
+
+    static func resolve(_ value: Int) -> Int {
+        min(maximum, max(minimum, value))
+    }
+
+    static func scale(for value: Int) -> CGFloat {
+        CGFloat(resolve(value)) / CGFloat(standard)
+    }
+}
+
+@MainActor
+enum BurritoFontSmoothing {
+    static let storageKey = "fontSmoothing"
+    private static let renderingPreferenceKey = "CGFontRenderingFontSmoothingDisabled"
+
+    static func apply(_ usesThinGrayscaleRendering: Bool, defaults: UserDefaults = .standard) {
+        if usesThinGrayscaleRendering {
+            defaults.set(true, forKey: renderingPreferenceKey)
+        } else {
+            defaults.removeObject(forKey: renderingPreferenceKey)
+        }
+
+    }
 }
 
 enum BurritoFontChoice: String, CaseIterable, Identifiable {
@@ -25,11 +65,7 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    static var selected: BurritoFontChoice {
-        let rawValue = UserDefaults.standard.string(forKey: storageKey)
-            ?? BurritoFontChoice.burritoDefault.rawValue
-        return resolve(rawValue)
-    }
+    @MainActor static var selected: BurritoFontChoice { BurritoStyleStore.shared.font }
 
     static func resolve(_ rawValue: String) -> BurritoFontChoice {
         BurritoFontChoice(rawValue: rawValue) ?? .burritoDefault
@@ -201,6 +237,7 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
 enum BurritoFontRegistrar {
     private static let registrationLock = NSLock()
     private nonisolated(unsafe) static var hasRegistered = false
+    private static let logger = Logger(subsystem: "com.local.burrito", category: "Fonts")
 
     nonisolated static func registerFontsIfNeeded() {
         registrationLock.lock()
@@ -210,54 +247,89 @@ enum BurritoFontRegistrar {
         hasRegistered = true
 
         let fontNames = BurritoFontChoice.allCases.flatMap(\.resourceFileNames)
-        
+
         for fontName in fontNames {
-            if let fontURL = Bundle.main.url(forResource: fontName, withExtension: nil) ??
-                             Bundle.main.url(forResource: fontName, withExtension: nil, subdirectory: "Fonts") {
-                CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+            guard let fontURL = Bundle.main.url(forResource: fontName, withExtension: nil) ??
+                    Bundle.main.url(forResource: fontName, withExtension: nil, subdirectory: "Fonts")
+            else {
+                logger.error("Unable to register font \(fontName, privacy: .public): resource was not found in the app bundle.")
+                continue
+            }
+
+            var registrationError: Unmanaged<CFError>?
+            guard CTFontManagerRegisterFontsForURL(
+                fontURL as CFURL,
+                .process,
+                &registrationError
+            ) else {
+                let errorDescription = registrationError?
+                    .takeRetainedValue()
+                    .localizedDescription ?? "Core Text did not provide an error."
+                logger.error("Unable to register font \(fontName, privacy: .public): \(errorDescription, privacy: .public)")
+                continue
             }
         }
     }
 }
 
 extension Font {
+    @MainActor
     static func burritoDisplay(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
-        BurritoFontChoice.selected.font(size: size, weight: weight)
+        BurritoFontChoice.selected.font(
+            size: BurritoStyleStore.shared.scaledFontSize(size),
+            weight: weight
+        )
     }
 
-    static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
+    @MainActor static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
         spline(size: size, weight: weight)
     }
 
+    @MainActor
     static func spline(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
-        BurritoFontChoice.selected.font(size: size, weight: weight)
+        BurritoFontChoice.selected.font(
+            size: BurritoStyleStore.shared.scaledFontSize(size),
+            weight: weight
+        )
     }
 
-    static func spline(size: CGFloat, weight: CGFloat) -> Font {
-        BurritoFontChoice.selected.font(size: size, weight: weight)
+    @MainActor static func spline(size: CGFloat, weight: CGFloat) -> Font {
+        BurritoFontChoice.selected.font(
+            size: BurritoStyleStore.shared.scaledFontSize(size),
+            weight: weight
+        )
     }
 
+    @MainActor
     static func spline(
         size: CGFloat,
         weight: Font.Weight = .regular,
         relativeTo textStyle: Font.TextStyle
     ) -> Font {
-        BurritoFontChoice.selected.font(size: size, weight: weight, relativeTo: textStyle)
+        BurritoFontChoice.selected.font(
+            size: BurritoStyleStore.shared.scaledFontSize(size),
+            weight: weight,
+            relativeTo: textStyle
+        )
     }
 
+    @MainActor
     static func spline(
         size: CGFloat,
         weight: CGFloat,
         relativeTo textStyle: Font.TextStyle
     ) -> Font {
         BurritoFontChoice.selected.font(
-            size: BurritoFontMetrics.scaledSize(size, relativeTo: textStyle),
+            size: BurritoFontMetrics.scaledSize(
+                BurritoStyleStore.shared.scaledFontSize(size),
+                relativeTo: textStyle
+            ),
             weight: weight
         )
     }
@@ -407,7 +479,7 @@ enum BurritoAppearance: String, CaseIterable, Identifiable {
 
 }
 
-struct BurritoThemeColor: Hashable {
+struct BurritoThemeColor: Hashable, Sendable {
     let red: Double
     let green: Double
     let blue: Double
@@ -424,7 +496,7 @@ struct BurritoThemeColor: Hashable {
 
     fileprivate var nsColor: NSColor {
         NSColor(
-            calibratedRed: red,
+            srgbRed: red,
             green: green,
             blue: blue,
             alpha: alpha
@@ -447,6 +519,18 @@ struct BurritoThemeColor: Hashable {
         let lighter = max(relativeLuminance, other.relativeLuminance)
         let darker = min(relativeLuminance, other.relativeLuminance)
         return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    func composited(over background: BurritoThemeColor) -> BurritoThemeColor {
+        let outputAlpha = alpha + (background.alpha * (1 - alpha))
+        guard outputAlpha > 0 else { return .rgb(0x000000, alpha: 0) }
+
+        return BurritoThemeColor(
+            red: ((red * alpha) + (background.red * background.alpha * (1 - alpha))) / outputAlpha,
+            green: ((green * alpha) + (background.green * background.alpha * (1 - alpha))) / outputAlpha,
+            blue: ((blue * alpha) + (background.blue * background.alpha * (1 - alpha))) / outputAlpha,
+            alpha: outputAlpha
+        )
     }
 
     func ensuringContrast(
@@ -489,7 +573,7 @@ struct BurritoThemeColor: Hashable {
     }
 }
 
-struct BurritoAdaptiveThemeColor {
+struct BurritoAdaptiveThemeColor: Sendable {
     let light: BurritoThemeColor
     let dark: BurritoThemeColor
 
@@ -504,7 +588,7 @@ struct BurritoAdaptiveThemeColor {
     }
 }
 
-struct BurritoThemePalette {
+struct BurritoThemePalette: Sendable {
     let foreground: BurritoAdaptiveThemeColor
     let sidebarForeground: BurritoAdaptiveThemeColor
     let accent: BurritoAdaptiveThemeColor
@@ -515,11 +599,12 @@ struct BurritoThemePalette {
     let paper: BurritoAdaptiveThemeColor
     let raised: BurritoAdaptiveThemeColor
     let controlFill: BurritoAdaptiveThemeColor
+    let controlForeground: BurritoAdaptiveThemeColor
     let softBorder: BurritoAdaptiveThemeColor
     let sage: BurritoAdaptiveThemeColor
 }
 
-enum BurritoColorTheme: String, CaseIterable, Identifiable {
+enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
     case burrito
     case modernMinimal = "modern-minimal"
     case t3Chat = "t3-chat"
@@ -567,12 +652,60 @@ enum BurritoColorTheme: String, CaseIterable, Identifiable {
     }
 }
 
-enum BurritoTheme {
-    private static var palette: BurritoThemePalette {
-        let rawValue = UserDefaults.standard.string(forKey: BurritoColorTheme.storageKey)
-            ?? BurritoColorTheme.burrito.rawValue
-        return BurritoColorTheme.resolve(rawValue).palette
+@MainActor
+@Observable
+final class BurritoStyleStore {
+    static let shared = BurritoStyleStore()
+
+    private(set) var theme: BurritoColorTheme
+    private(set) var font: BurritoFontChoice
+    private(set) var interfaceFontSize: Int
+    private(set) var palette: BurritoThemePalette
+
+    private init(defaults: UserDefaults = .standard) {
+        let theme = BurritoColorTheme.resolve(
+            defaults.string(forKey: BurritoColorTheme.storageKey)
+                ?? BurritoColorTheme.burrito.rawValue
+        )
+        self.theme = theme
+        font = BurritoFontChoice.resolve(
+            defaults.string(forKey: BurritoFontChoice.storageKey)
+                ?? BurritoFontChoice.burritoDefault.rawValue
+        )
+        let storedInterfaceFontSize = defaults.object(
+            forKey: BurritoInterfaceFontSize.storageKey
+        ) as? Int ?? BurritoInterfaceFontSize.standard
+        interfaceFontSize = BurritoInterfaceFontSize.resolve(storedInterfaceFontSize)
+        palette = theme.palette
     }
+
+    func selectTheme(_ rawValue: String) {
+        let resolved = BurritoColorTheme.resolve(rawValue)
+        guard resolved != theme else { return }
+        theme = resolved
+        palette = resolved.palette
+    }
+
+    func selectFont(_ rawValue: String) {
+        let resolved = BurritoFontChoice.resolve(rawValue)
+        guard resolved != font else { return }
+        font = resolved
+    }
+
+    func selectInterfaceFontSize(_ rawValue: Int) {
+        let resolved = BurritoInterfaceFontSize.resolve(rawValue)
+        guard resolved != interfaceFontSize else { return }
+        interfaceFontSize = resolved
+    }
+
+    func scaledFontSize(_ size: CGFloat) -> CGFloat {
+        size * BurritoInterfaceFontSize.scale(for: interfaceFontSize)
+    }
+}
+
+@MainActor
+enum BurritoTheme {
+    private static var palette: BurritoThemePalette { BurritoStyleStore.shared.palette }
 
     static var foreground: Color { palette.foreground.color }
     static var sidebarForeground: Color { palette.sidebarForeground.color }
@@ -584,6 +717,7 @@ enum BurritoTheme {
     static var paper: Color { palette.paper.color }
     static var raised: Color { palette.raised.color }
     static var controlFill: Color { palette.controlFill.color }
+    static var controlForeground: Color { palette.controlForeground.color }
     static var softBorder: Color { palette.softBorder.color }
     static var sage: Color { palette.sage.color }
 
@@ -748,7 +882,7 @@ struct BurritoToggleRow: View {
                 .frame(width: 40, height: 22)
                 .overlay(alignment: isOn ? .trailing : .leading) {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(BurritoTheme.accentForeground)
+                        .fill(isOn ? BurritoTheme.accentForeground : BurritoTheme.controlForeground)
                         .frame(width: 16, height: 16)
                         .burritoElevation(.control)
                         .padding(3)
@@ -759,10 +893,125 @@ struct BurritoToggleRow: View {
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 38, height: 22)
                 Rectangle()
-                    .fill(BurritoTheme.accentForeground)
+                    .fill(isOn ? BurritoTheme.accentForeground : BurritoTheme.controlForeground)
                     .frame(width: 16, height: 16)
                     .padding(3)
             }
+        }
+    }
+}
+
+final class BurritoThinScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool {
+        self == BurritoThinScroller.self
+    }
+
+    override class func scrollerWidth(
+        for controlSize: NSControl.ControlSize,
+        scrollerStyle: NSScroller.Style
+    ) -> CGFloat {
+        4
+    }
+}
+
+private struct BurritoThinScrollerConfigurator: NSViewRepresentable {
+    final class ProbeView: NSView {
+        private var isConfigurationScheduled = false
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            scheduleConfiguration()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            scheduleConfiguration()
+        }
+
+        override func layout() {
+            super.layout()
+            configureScrollViews()
+        }
+
+        func scheduleConfiguration() {
+            guard !isConfigurationScheduled else { return }
+            isConfigurationScheduled = true
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                self?.configureScrollViews()
+                try? await Task.sleep(for: .milliseconds(100))
+                self?.configureScrollViews()
+                try? await Task.sleep(for: .milliseconds(400))
+                self?.configureScrollViews()
+                self?.isConfigurationScheduled = false
+            }
+        }
+
+        func configureScrollViews() {
+            if let contentView = window?.contentView {
+                configureScrollViews(in: contentView)
+                return
+            }
+
+            var ancestor = superview
+            while let view = ancestor {
+                if let scrollView = view as? NSScrollView {
+                    configure(scrollView)
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
+
+        private func configureScrollViews(in view: NSView) {
+            if let scrollView = view as? NSScrollView {
+                configure(scrollView)
+            }
+            for subview in view.subviews {
+                configureScrollViews(in: subview)
+            }
+        }
+
+        private func configure(_ scrollView: NSScrollView) {
+            scrollView.scrollerStyle = .overlay
+            scrollView.autohidesScrollers = true
+
+            if scrollView.hasVerticalScroller,
+               !(scrollView.verticalScroller is BurritoThinScroller) {
+                let existingScroller = scrollView.verticalScroller
+                let scroller = BurritoThinScroller(frame: .zero)
+                scroller.controlSize = .mini
+                scroller.isHidden = existingScroller?.isHidden ?? false
+                scroller.alphaValue = existingScroller?.alphaValue ?? 1
+                scrollView.verticalScroller = scroller
+            }
+
+            if scrollView.hasHorizontalScroller,
+               !(scrollView.horizontalScroller is BurritoThinScroller) {
+                let existingScroller = scrollView.horizontalScroller
+                let scroller = BurritoThinScroller(frame: .zero)
+                scroller.controlSize = .mini
+                scroller.isHidden = existingScroller?.isHidden ?? false
+                scroller.alphaValue = existingScroller?.alphaValue ?? 1
+                scrollView.horizontalScroller = scroller
+            }
+        }
+    }
+
+    func makeNSView(context: Context) -> ProbeView {
+        ProbeView()
+    }
+
+    func updateNSView(_ nsView: ProbeView, context: Context) {
+        nsView.scheduleConfiguration()
+    }
+}
+
+extension View {
+    func burritoThinScrollers() -> some View {
+        background {
+            BurritoThinScrollerConfigurator()
+                .frame(width: 0, height: 0)
         }
     }
 }

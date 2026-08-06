@@ -15,6 +15,10 @@ struct AppSurfaceTests {
         #expect(BurritoFontChoice.allCases.filter { $0.category == .mono }.count == 4)
         #expect(BurritoFontChoice.allCases.filter { $0.category == .sans }.count == 4)
         #expect(BurritoFontChoice.allCases.filter { $0.category == .serif }.count == 2)
+        #expect(BurritoInterfaceFontSize.resolve(16) == 16)
+        #expect(BurritoInterfaceFontSize.resolve(99) == BurritoInterfaceFontSize.maximum)
+        #expect(BurritoInterfaceFontSize.resolve(1) == BurritoInterfaceFontSize.minimum)
+        #expect(BurritoInterfaceFontSize.scale(for: BurritoInterfaceFontSize.standard) == 1)
     }
 
     @Test("Bundled app fonts register every declared face")
@@ -40,9 +44,19 @@ struct AppSurfaceTests {
 
     @Test("Color themes include Burrito and every tweakcn registry preset")
     func colorThemesIncludeRegistryPresets() {
-        #expect(BurritoColorTheme.allCases.count == 37)
+        let expected: Set<String> = [
+            "burrito", "modern-minimal", "t3-chat", "twitter", "mocha-mousse",
+            "bubblegum", "doom-64", "catppuccin", "graphite", "perpetuity",
+            "kodama-grove", "cosmic-night", "tangerine", "quantum-rose", "nature",
+            "bold-tech", "elegant-luxury", "amber-minimal", "supabase", "neo-brutalism",
+            "solar-dusk", "claymorphism", "cyberpunk", "pastel-dreams", "clean-slate",
+            "caffeine", "ocean-breeze", "retro-arcade", "midnight-bloom", "candyland",
+            "northern-lights", "vintage-paper", "sunset-horizon", "starry-night", "claude",
+            "vercel", "mono",
+        ]
+
+        #expect(Set(BurritoColorTheme.allCases.map(\.rawValue)) == expected)
         #expect(BurritoColorTheme.allCases.first == .burrito)
-        #expect(BurritoColorTheme.allCases.last == .mono)
     }
 
     @Test("Every color theme preserves readable semantic contrast")
@@ -53,6 +67,26 @@ struct AppSurfaceTests {
             verifyContrast(in: palette, theme: theme, mode: "light", color: \.light)
             verifyContrast(in: palette, theme: theme, mode: "dark", color: \.dark)
         }
+    }
+
+    @Test("App scrollbars use the compact overlay metrics")
+    @MainActor
+    func scrollbarsUseCompactOverlayMetrics() {
+        #expect(BurritoThinScroller.isCompatibleWithOverlayScrollers)
+        #expect(
+            BurritoThinScroller.scrollerWidth(for: .mini, scrollerStyle: .overlay) == 4
+        )
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        scrollView.documentView = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 400))
+        scrollView.scrollerStyle = .overlay
+        scrollView.hasVerticalScroller = true
+        let scroller = BurritoThinScroller(frame: .zero)
+        scroller.controlSize = .mini
+        scrollView.verticalScroller = scroller
+        scrollView.tile()
+
+        #expect(scrollView.verticalScroller?.frame.width == 4)
     }
 
     private func verifyContrast(
@@ -70,20 +104,32 @@ struct AppSurfaceTests {
         let sidebar = palette.sidebar[keyPath: color]
         let paper = palette.paper[keyPath: color]
         let raised = palette.raised[keyPath: color]
+        let controlFill = palette.controlFill[keyPath: color]
+        let controlForeground = palette.controlForeground[keyPath: color]
+        let softBorder = palette.softBorder[keyPath: color]
         let accentSoft = palette.accentSoft[keyPath: color]
         let surfaces = [canvas, paper, raised]
         let context = "\(theme.rawValue) \(mode)"
 
+        #expect(
+            softBorder.alpha == (mode == "dark" ? 0.38 : 0.32),
+            Comment(rawValue: context)
+        )
+
         for surface in surfaces {
-            #expect(foreground.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
-            #expect(accent.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
-            #expect(sage.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
+            #expect(foreground.contrastRatio(with: surface) >= 7.05, Comment(rawValue: context))
+            #expect(accent.contrastRatio(with: surface) >= 4.55, Comment(rawValue: context))
+            #expect(sage.contrastRatio(with: surface) >= 4.55, Comment(rawValue: context))
+            #expect(
+                controlForeground.contrastRatio(with: controlFill.composited(over: surface)) >= 4.55,
+                Comment(rawValue: context)
+            )
         }
 
-        #expect(sidebarForeground.contrastRatio(with: sidebar) >= 4.5, Comment(rawValue: context))
-        #expect(accent.contrastRatio(with: sidebar) >= 4.5, Comment(rawValue: context))
-        #expect(accent.contrastRatio(with: accentSoft) >= 4.5, Comment(rawValue: context))
-        #expect(accentForeground.contrastRatio(with: accent) >= 4.5, Comment(rawValue: context))
+        #expect(sidebarForeground.contrastRatio(with: sidebar) >= 7.05, Comment(rawValue: context))
+        #expect(accent.contrastRatio(with: sidebar) >= 4.55, Comment(rawValue: context))
+        #expect(accent.contrastRatio(with: accentSoft) >= 4.55, Comment(rawValue: context))
+        #expect(accentForeground.contrastRatio(with: accent) >= 4.55, Comment(rawValue: context))
     }
 
     @Test("Numeric Spline fonts scale relative to their text style")

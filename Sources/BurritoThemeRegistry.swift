@@ -4,6 +4,10 @@ import SwiftUI
 // Display accents are contrast-corrected for Burrito's text-and-icon usage.
 // https://github.com/jnsahaj/tweakcn/blob/main/public/r/registry.json
 extension BurritoColorTheme {
+    private static let palettes = Dictionary(
+        uniqueKeysWithValues: allCases.map { ($0, $0.makePalette()) }
+    )
+
     var title: String {
         switch self {
         case .burrito: "Burrito"
@@ -47,6 +51,10 @@ extension BurritoColorTheme {
     }
 
     var palette: BurritoThemePalette {
+        Self.palettes[self] ?? Self.burrito.makePalette()
+    }
+
+    private func makePalette() -> BurritoThemePalette {
         switch self {
         case .burrito:
             BurritoThemePalette.make(
@@ -570,8 +578,25 @@ extension BurritoColorTheme {
     }
 
     var previewColors: [Color] {
-        [palette.accent.color, palette.canvas.color, palette.paper.color]
+        let palette = palette
+        return [palette.accent.color, palette.canvas.color, palette.paper.color]
     }
+}
+
+private struct BurritoResolvedPalette {
+    let foreground: BurritoThemeColor
+    let sidebarForeground: BurritoThemeColor
+    let accent: BurritoThemeColor
+    let accentForeground: BurritoThemeColor
+    let accentSoft: BurritoThemeColor
+    let canvas: BurritoThemeColor
+    let sidebar: BurritoThemeColor
+    let paper: BurritoThemeColor
+    let raised: BurritoThemeColor
+    let controlFill: BurritoThemeColor
+    let controlForeground: BurritoThemeColor
+    let softBorder: BurritoThemeColor
+    let sage: BurritoThemeColor
 }
 
 extension BurritoThemePalette {
@@ -588,20 +613,7 @@ extension BurritoThemePalette {
         softBorder: (light: UInt32, dark: UInt32),
         sage: (light: UInt32, dark: UInt32)
     ) -> BurritoThemePalette {
-        func resolve(isDark: Bool) -> (
-            foreground: BurritoThemeColor,
-            sidebarForeground: BurritoThemeColor,
-            accent: BurritoThemeColor,
-            accentForeground: BurritoThemeColor,
-            accentSoft: BurritoThemeColor,
-            canvas: BurritoThemeColor,
-            sidebar: BurritoThemeColor,
-            paper: BurritoThemeColor,
-            raised: BurritoThemeColor,
-            controlFill: BurritoThemeColor,
-            softBorder: BurritoThemeColor,
-            sage: BurritoThemeColor
-        ) {
+        func resolve(isDark: Bool) -> BurritoResolvedPalette {
             func color(_ values: (light: UInt32, dark: UInt32)) -> BurritoThemeColor {
                 .rgb(isDark ? values.dark : values.light)
             }
@@ -615,13 +627,31 @@ extension BurritoThemePalette {
                 against: contentSurfaces,
                 minimum: 7.05
             )
+            let controlFillColor = BurritoThemeColor(
+                red: foregroundColor.red,
+                green: foregroundColor.green,
+                blue: foregroundColor.blue,
+                alpha: isDark ? 0.075 : 0.055
+            )
+            let controlSurfaces = contentSurfaces.map { controlFillColor.composited(over: $0) }
             let accentSoftColor = color(accentSoft)
             let accentColor = color(accent).ensuringContrast(
                 against: contentSurfaces + [sidebarColor, accentSoftColor],
                 minimum: 4.55
             )
+            let registryBorderColor = color(softBorder)
+            let borderTintWeight = 0.2
+            let softBorderColor = BurritoThemeColor(
+                red: foregroundColor.red * (1 - borderTintWeight)
+                    + registryBorderColor.red * borderTintWeight,
+                green: foregroundColor.green * (1 - borderTintWeight)
+                    + registryBorderColor.green * borderTintWeight,
+                blue: foregroundColor.blue * (1 - borderTintWeight)
+                    + registryBorderColor.blue * borderTintWeight,
+                alpha: isDark ? 0.38 : 0.32
+            )
 
-            return (
+            return BurritoResolvedPalette(
                 foreground: foregroundColor,
                 sidebarForeground: color(sidebarForeground).ensuringContrast(
                     against: [sidebarColor],
@@ -637,13 +667,12 @@ extension BurritoThemePalette {
                 sidebar: sidebarColor,
                 paper: paperColor,
                 raised: raisedColor,
-                controlFill: BurritoThemeColor(
-                    red: foregroundColor.red,
-                    green: foregroundColor.green,
-                    blue: foregroundColor.blue,
-                    alpha: isDark ? 0.075 : 0.055
+                controlFill: controlFillColor,
+                controlForeground: foregroundColor.ensuringContrast(
+                    against: controlSurfaces,
+                    minimum: 4.55
                 ),
-                softBorder: color(softBorder),
+                softBorder: softBorderColor,
                 sage: color(sage).ensuringContrast(
                     against: contentSurfaces,
                     minimum: 4.55
@@ -665,6 +694,7 @@ extension BurritoThemePalette {
             paper: adaptive(light.paper, dark.paper),
             raised: adaptive(light.raised, dark.raised),
             controlFill: adaptive(light.controlFill, dark.controlFill),
+            controlForeground: adaptive(light.controlForeground, dark.controlForeground),
             softBorder: adaptive(light.softBorder, dark.softBorder),
             sage: adaptive(light.sage, dark.sage)
         )

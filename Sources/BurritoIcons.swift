@@ -39,7 +39,7 @@ enum BurritoIconCatalog {
         "macbook.and.iphone": "laptopPhoneSync", "macwindow": "appWindow",
         "magnifyingglass": "search01", "map": "maps", "megaphone": "megaphone01",
         "message": "bubbleChat", "mic": "mic01", "mic.fill": "mic01",
-        "moon": "moon", "music.note": "musicNote01", "network": "neuralNetwork",
+        "minus": "minusSign", "moon": "moon", "music.note": "musicNote01", "network": "neuralNetwork",
         "note.text": "note", "number": "hashtag", "paintpalette": "colors",
         "paperclip": "attachment01", "paperplane": "sent", "pencil": "pencilEdit01",
         "person.2": "userMultiple", "person.2.wave.2": "userGroup03", "person.3": "userGroup03",

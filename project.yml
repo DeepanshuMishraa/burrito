@@ -35,6 +35,11 @@ targets:
     sources:
       - Sources
       - path: Resources
+        excludes:
+          - Fonts/Licenses
+        buildPhase: resources
+      - path: Resources/Fonts/Licenses
+        type: folder
         buildPhase: resources
     dependencies:
       - package: Sparkle

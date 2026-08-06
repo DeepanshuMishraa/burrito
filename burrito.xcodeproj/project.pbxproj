@@ -12,6 +12,7 @@
 		0E3BA93FE49F26DAF814181C /* SourceSerif4-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
+		186739FF47CA52B9784FE4EA /* Licenses in Resources */ = {isa = PBXBuildFile; fileRef = FA3D7EBB074D620282F9FD1A /* Licenses */; };
 		1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
 		2169822823AD17A5D5D02865 /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */; };
@@ -19,7 +20,6 @@
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */; };
-		486C862A5BBAEA7D3ED99413 /* jetbrainsmono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = E70AC754F64606AA8171CD3E /* jetbrainsmono-OFL.txt */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
 		5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */; };
 		5EE81FD4567D9697A350137B /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = ECFA337F1032D11A4CC3842E /* Lottie */; };
@@ -30,14 +30,11 @@
 		7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */; };
 		7E94552B34DEA490005B6D50 /* Hugeicons in Frameworks */ = {isa = PBXBuildFile; productRef = 1BDF818AE23F9D8D1DD1D5EA /* Hugeicons */; };
 		7F8F1BDB5A6B60E69DFFB9D1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 64DA2926F2A0EF333C410B58 /* FluidAudio */; };
-		859F01500778D0AC3158B07A /* ibmplexmono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = ACB26B50D6831EB0FC053024 /* ibmplexmono-OFL.txt */; };
 		876EBC0A154DE03197E09713 /* JetBrainsMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */; };
-		8BC7817FEB364FBB73E3F929 /* geist-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = BD08FA64D5F69E3CCE7E37D5 /* geist-OFL.txt */; };
 		8BE602A56D651B0C195847C7 /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A012C13A161767957F1B4B7A /* Inter-Variable.ttf */; };
 		8DD90EB3E57A4A884DDC5D19 /* IBMPlexSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		93EF08AAF07D7A665D252B64 /* IBMPlexMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */; };
-		9C1C46BF21CBCB1F2D954F93 /* ibmplexsans-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = BBD49FE96BC117F532128F36 /* ibmplexsans-OFL.txt */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 1ADC8A04BD0CC461DBBB407C /* MLXLLM */; };
 		B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */; };
@@ -50,15 +47,12 @@
 		CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728318FB3CB86222B61B8235 /* RecordingFileStore.swift */; };
 		CDF42D894BAF990DDE61C554 /* GeistMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CD8A5C41E428A301A9252A76 /* GeistMono-Variable.ttf */; };
 		D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */; };
-		D4F768346F1E45313C36D34D /* geistmono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 279B912F77E950F05312122C /* geistmono-OFL.txt */; };
-		D613A68A9CCD6A98FE7C7FA4 /* inter-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 652CD554C042E2E1CE8545A0 /* inter-OFL.txt */; };
 		D712EE334DC9C9D6F1D94AA5 /* MarkdownDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */; };
 		D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */; };
 		E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */; };
 		EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */; };
 		EE09F05A5364BA09E154CB94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */; };
 		EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DACDC881191EC0950114922B /* Geist-Variable.ttf */; };
-		F1124A2613662782E2B9332B /* sourceserif4-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 5C50B5C0B722A04643259037 /* sourceserif4-OFL.txt */; };
 		F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */; };
 		F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B76BDAAD1105FDBF200FA0E /* ContentView.swift */; };
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
@@ -87,7 +81,6 @@
 		25328314F1FFC002350B88B8 /* burritoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = burritoApp.swift; sourceTree = "<group>"; };
 		2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SourceSerif4-Variable.ttf"; sourceTree = "<group>"; };
 		274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Variable.ttf"; sourceTree = "<group>"; };
-		279B912F77E950F05312122C /* geistmono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "geistmono-OFL.txt"; sourceTree = "<group>"; };
 		288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriber.swift; sourceTree = "<group>"; };
 		315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SplineSansMono-Italic-Variable.ttf"; sourceTree = "<group>"; };
 		38EC4CD89C9CC805FF666CE0 /* Ownership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ownership.swift; sourceTree = "<group>"; };
@@ -96,8 +89,6 @@
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
 		45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLanguageModels.swift; sourceTree = "<group>"; };
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
-		5C50B5C0B722A04643259037 /* sourceserif4-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "sourceserif4-OFL.txt"; sourceTree = "<group>"; };
-		652CD554C042E2E1CE8545A0 /* inter-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "inter-OFL.txt"; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
 		7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAccess.swift; sourceTree = "<group>"; };
@@ -116,11 +107,8 @@
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Bold.ttf"; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
-		ACB26B50D6831EB0FC053024 /* ibmplexmono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ibmplexmono-OFL.txt"; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BBD49FE96BC117F532128F36 /* ibmplexsans-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ibmplexsans-OFL.txt"; sourceTree = "<group>"; };
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
-		BD08FA64D5F69E3CCE7E37D5 /* geist-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "geist-OFL.txt"; sourceTree = "<group>"; };
 		BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoThemeRegistry.swift; sourceTree = "<group>"; };
 		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
 		CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
@@ -128,7 +116,7 @@
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
 		DACDC881191EC0950114922B /* Geist-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Variable.ttf"; sourceTree = "<group>"; };
-		E70AC754F64606AA8171CD3E /* jetbrainsmono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "jetbrainsmono-OFL.txt"; sourceTree = "<group>"; };
+		FA3D7EBB074D620282F9FD1A /* Licenses */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Licenses; path = Resources/Fonts/Licenses; sourceTree = SOURCE_ROOT; };
 		FB467C2185ABF4B927D300BC /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -242,26 +230,12 @@
 				8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */,
 				A012C13A161767957F1B4B7A /* Inter-Variable.ttf */,
 				76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */,
+				FA3D7EBB074D620282F9FD1A /* Licenses */,
 				2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */,
 				315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */,
 				274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */,
-				E510F0C26E6D5BFC3F2E8793 /* Licenses */,
 			);
 			path = Fonts;
-			sourceTree = "<group>";
-		};
-		E510F0C26E6D5BFC3F2E8793 /* Licenses */ = {
-			isa = PBXGroup;
-			children = (
-				BD08FA64D5F69E3CCE7E37D5 /* geist-OFL.txt */,
-				279B912F77E950F05312122C /* geistmono-OFL.txt */,
-				ACB26B50D6831EB0FC053024 /* ibmplexmono-OFL.txt */,
-				BBD49FE96BC117F532128F36 /* ibmplexsans-OFL.txt */,
-				652CD554C042E2E1CE8545A0 /* inter-OFL.txt */,
-				E70AC754F64606AA8171CD3E /* jetbrainsmono-OFL.txt */,
-				5C50B5C0B722A04643259037 /* sourceserif4-OFL.txt */,
-			);
-			path = Licenses;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -375,17 +349,11 @@
 				8DD90EB3E57A4A884DDC5D19 /* IBMPlexSans-Variable.ttf in Resources */,
 				8BE602A56D651B0C195847C7 /* Inter-Variable.ttf in Resources */,
 				876EBC0A154DE03197E09713 /* JetBrainsMono-Variable.ttf in Resources */,
+				186739FF47CA52B9784FE4EA /* Licenses in Resources */,
 				BDC61112693353B564687C7D /* Scooter-loader.json in Resources */,
 				0E3BA93FE49F26DAF814181C /* SourceSerif4-Variable.ttf in Resources */,
 				1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */,
 				D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */,
-				8BC7817FEB364FBB73E3F929 /* geist-OFL.txt in Resources */,
-				D4F768346F1E45313C36D34D /* geistmono-OFL.txt in Resources */,
-				859F01500778D0AC3158B07A /* ibmplexmono-OFL.txt in Resources */,
-				9C1C46BF21CBCB1F2D954F93 /* ibmplexsans-OFL.txt in Resources */,
-				D613A68A9CCD6A98FE7C7FA4 /* inter-OFL.txt in Resources */,
-				486C862A5BBAEA7D3ED99413 /* jetbrainsmono-OFL.txt in Resources */,
-				F1124A2613662782E2B9332B /* sourceserif4-OFL.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
