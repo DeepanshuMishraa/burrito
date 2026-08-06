@@ -917,19 +917,23 @@ final class BurritoThinScroller: NSScroller {
 private struct BurritoThinScrollerConfigurator: NSViewRepresentable {
     final class ProbeView: NSView {
         private var isConfigurationScheduled = false
+        private var hasConfiguredScrollViews = false
 
         override func viewDidMoveToSuperview() {
             super.viewDidMoveToSuperview()
+            hasConfiguredScrollViews = false
             scheduleConfiguration()
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            hasConfiguredScrollViews = false
             scheduleConfiguration()
         }
 
         override func layout() {
             super.layout()
+            guard !hasConfiguredScrollViews else { return }
             configureScrollViews()
         }
 
@@ -949,7 +953,7 @@ private struct BurritoThinScrollerConfigurator: NSViewRepresentable {
 
         func configureScrollViews() {
             if let contentView = window?.contentView {
-                configureScrollViews(in: contentView)
+                hasConfiguredScrollViews = configureScrollViews(in: contentView)
                 return
             }
 
@@ -957,19 +961,23 @@ private struct BurritoThinScrollerConfigurator: NSViewRepresentable {
             while let view = ancestor {
                 if let scrollView = view as? NSScrollView {
                     configure(scrollView)
+                    hasConfiguredScrollViews = true
                     return
                 }
                 ancestor = view.superview
             }
         }
 
-        private func configureScrollViews(in view: NSView) {
+        private func configureScrollViews(in view: NSView) -> Bool {
+            var foundScrollView = false
             if let scrollView = view as? NSScrollView {
                 configure(scrollView)
+                foundScrollView = true
             }
             for subview in view.subviews {
-                configureScrollViews(in: subview)
+                foundScrollView = configureScrollViews(in: subview) || foundScrollView
             }
+            return foundScrollView
         }
 
         private func configure(_ scrollView: NSScrollView) {

@@ -35,6 +35,17 @@ struct AppSurfaceTests {
         }
     }
 
+    @Test("Bundled Spline Sans Mono includes its OFL notice")
+    func bundledSplineSansMonoIncludesLicense() {
+        #expect(
+            Bundle.main.url(
+                forResource: "splinesansmono-OFL",
+                withExtension: "txt",
+                subdirectory: "Licenses"
+            ) != nil
+        )
+    }
+
     @Test("Color themes resolve persisted values safely")
     func colorThemesResolvePersistedValuesSafely() {
         #expect(BurritoColorTheme.resolve("ocean-breeze") == .oceanBreeze)
