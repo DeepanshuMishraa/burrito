@@ -24,6 +24,8 @@ enum BurritoFontRegistrar {
 }
 
 extension Font {
+    private static let splineWeightAxis = NSNumber(value: 0x7767_6874)
+
     static func burritoDisplay(
         size: CGFloat,
         weight: Font.Weight = .regular
@@ -32,12 +34,31 @@ extension Font {
         return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
     }
 
+    static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
+        spline(size: size, weight: weight)
+    }
+
     static func spline(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
         BurritoFontRegistrar.registerFontsIfNeeded()
         return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+    }
+
+    static func spline(size: CGFloat, weight: CGFloat) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        let descriptor = CTFontDescriptorCreateWithNameAndSize(
+            "Spline Sans Mono" as CFString,
+            size
+        )
+        let variedDescriptor = CTFontDescriptorCreateCopyWithVariation(
+            descriptor,
+            splineWeightAxis,
+            weight
+        )
+        let font = CTFontCreateWithFontDescriptor(variedDescriptor, size, nil)
+        return Font(font as NSFont)
     }
 
     static func spline(
@@ -47,6 +68,31 @@ extension Font {
     ) -> Font {
         BurritoFontRegistrar.registerFontsIfNeeded()
         return .custom("Spline Sans Mono", size: size, relativeTo: textStyle).weight(weight)
+    }
+
+    static func spline(
+        size: CGFloat,
+        weight: CGFloat,
+        relativeTo _: Font.TextStyle
+    ) -> Font {
+        spline(size: size, weight: weight)
+    }
+
+    static func system(
+        size: CGFloat,
+        weight: CGFloat,
+        design: Font.Design = .default
+    ) -> Font {
+        let regular = NSFont.Weight.regular.rawValue
+        let medium = NSFont.Weight.medium.rawValue
+        let fraction = min(1, max(0, (weight - 400) / 100))
+        let platformWeight = NSFont.Weight(
+            rawValue: regular + ((medium - regular) * fraction)
+        )
+        let font = design == .monospaced
+            ? NSFont.monospacedSystemFont(ofSize: size, weight: platformWeight)
+            : NSFont.systemFont(ofSize: size, weight: platformWeight)
+        return Font(font)
     }
 }
 
@@ -157,7 +203,7 @@ struct BurritoSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.spline(size: 10, weight: .medium))
+            .font(.spline(size: 10, weight: 450))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }
@@ -232,8 +278,8 @@ struct BurritoToggleRow: View {
 
     private var titleFont: Font {
         style == .settingsForm
-            ? .spline(size: 13, weight: .medium)
-            : .system(size: 13, weight: .medium)
+            ? .spline(size: 13, weight: 450)
+            : .system(size: 13, weight: 450)
     }
 
     private var subtitleFont: Font {
@@ -296,7 +342,7 @@ struct BurritoLanguagePicker: View {
             HStack(spacing: 12) {
                 if showsLabel {
                     Text("Language")
-                        .font(.spline(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: 450))
                         .foregroundStyle(.primary)
                 }
 
