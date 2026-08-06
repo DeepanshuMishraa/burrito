@@ -4,16 +4,16 @@
 
 Use a **language-aware, two-pass local pipeline**:
 
-1. Keep Apple's `SpeechAnalyzer` progressive preset for immediate live text.
-2. On stop, produce the final transcript with:
+1. On stop, produce the final transcript with:
    - **English:** Parakeet TDT 0.6B v2 through FluidAudio/Core ML.
    - **Parakeet v3 languages:** Parakeet TDT 0.6B v3 through FluidAudio/Core ML.
    - **Hindi and every unsupported locale:** Apple's `SpeechAnalyzer` accurate final preset.
-3. Before final ASR, normalize known accelerated system audio back toward natural speech tempo with pitch-preserving offline time-stretch. Do not modify the microphone track.
-4. When playback speed is unknown, offer `Auto` as a measured rescue path: test a small set of inverse-rate candidates on an early speech window, choose the best only if confidence and stability clear a benchmarked threshold, then lock that rate until a long silence.
-5. Keep lossless PCM from capture through normalization and ASR. Encode AAC only for retained playback audio.
+2. Before final ASR, normalize known accelerated system audio back toward natural speech tempo with pitch-preserving offline time-stretch. Do not modify the microphone track.
+3. Ask for an explicit playback rate from 1× through 10×. Consider `Auto` only after confidence and stability thresholds pass a representative benchmark.
+4. Keep lossless PCM from capture through normalization and ASR. Encode AAC only for retained playback audio.
+5. Prefer direct import of original audio or video whenever it is available; this avoids information already discarded by accelerated playback.
 
-This architecture is the best practical fit for Burrito because it preserves the existing native live experience while giving final transcription a fast, controllable ASR backend. It also addresses the actual 2x/3x problem at the signal boundary. Swapping ASR models alone cannot guarantee accuracy on heavily time-compressed speech.
+This architecture is the best practical fit for Burrito because it gives final transcription a fast, controllable ASR backend and addresses the actual accelerated-playback problem at the signal boundary. Swapping ASR models alone cannot guarantee accuracy on heavily time-compressed speech.
 
 ## The important distinction
 
@@ -26,11 +26,13 @@ High RTFx does not imply robustness to accelerated speech. None of the primary m
 
 At 3x, the player’s time-stretching algorithm may already have discarded or smeared short acoustic events. Expanding that signal later gives the recognizer durations closer to training speech, but cannot recreate information that is no longer present.
 
-## Current Burrito pipeline
+## Implemented Burrito pipeline
 
-Burrito captures 48 kHz stereo system audio with ScreenCaptureKit and transcribes live with `timeIndexedProgressiveTranscription` ([`SystemAudioCapture.swift`](../../Sources/SystemAudioCapture.swift)). Final transcription rereads the saved file with `timeIndexedTranscriptionWithAlternatives` ([`LocalTranscriber.swift`](../../Sources/LocalTranscriber.swift)).
+Burrito captures system and optional microphone audio with ScreenCaptureKit. It writes temporary lossless PCM alongside optional AAC, then transcribes after recording ([`SystemAudioCapture.swift`](../../Sources/SystemAudioCapture.swift)). For system capture above 1×, it performs pitch-preserving inverse-tempo rendering to 16 kHz mono before local ASR and maps timestamps back to the capture clock ([`AudioPreparation.swift`](../../Sources/AudioPreparation.swift), [`LocalTranscriber.swift`](../../Sources/LocalTranscriber.swift)).
 
-The retained system recording is currently AAC in M4A at 160 kbps. That is sensible for storage, but accelerated speech is already a hard signal. The final ASR path should consume captured PCM before AAC encoding, or save a temporary lossless/PCM transcription asset and delete it after finalization. AAC should remain the retained user-facing audio format.
+The recording sheet exposes an explicit 1×–10× source rate. Burrito never applies that rate to the microphone track. The temporary PCM files are deleted after transcription; AAC remains the retained user-facing format when requested.
+
+Direct media import extracts the original local audio track to PCM and bypasses capture-rate normalization ([`MediaAudioExtractor.swift`](../../Sources/MediaAudioExtractor.swift)). This makes transcription independent of player speed, although no ASR system can promise perfect recognition for every source.
 
 ScreenCaptureKit exposes captured audio samples and lets Burrito choose sample rate and channel count; it does not document source-player playback-rate metadata. It is therefore safest to treat playback speed as unavailable for arbitrary system audio unless Burrito gets an explicit hint from the user or controls the player itself. This is an inference from the documented API surface, not an Apple guarantee. [Apple ScreenCaptureKit audio output](https://developer.apple.com/documentation/screencapturekit/scstreamoutputtype/audio), [SCStreamConfiguration](https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration)
 
@@ -38,7 +40,7 @@ ScreenCaptureKit exposes captured audio samples and lets Burrito choose sample r
 
 | Option | Accuracy evidence | Apple-silicon speed | Integration and license | 2x/3x conclusion |
 | --- | --- | --- | --- | --- |
-| Apple `SpeechAnalyzer` / `SpeechTranscriber` | Apple describes the model as on-device, fast, accurate, and designed for live, long-form, conversational, and distant audio. Apple publishes no WER or accelerated-speech result. | System-managed model; no app model download or app-process memory footprint. | Already integrated; assets are installed and updated by the OS. Native Swift API. | Keep for live preview and unsupported-language fallback. No evidence of 3x robustness. |
+| Apple `SpeechAnalyzer` / `SpeechTranscriber` | Apple describes the model as on-device, fast, accurate, and designed for live, long-form, conversational, and distant audio. Apple publishes no WER or accelerated-speech result. | System-managed model; no app model download or app-process memory footprint. | Already integrated; assets are installed and updated by the OS. Native Swift API. | Keep for unsupported-language fallback. No evidence of 3x robustness. |
 | Parakeet TDT 0.6B v2 | NVIDIA reports 6.05% average WER across its eight English Open-ASR sets and 1.69% on LibriSpeech test-clean. Its required input is 16 kHz mono. | FluidAudio reports 2.1% LibriSpeech test-clean WER and 145.8x overall RTFx for its Core ML conversion on an M4 Pro. This is the runtime author's benchmark, not an independent result. | FluidAudio is native Swift/SPM and Apache-2.0. Parakeet weights are CC BY 4.0, so attribution must ship with the app. | Best first production candidate for Burrito's English final pass. Still requires speed-perturbed testing. |
 | Parakeet TDT 0.6B v3 | NVIDIA reports 6.34% average English-leaderboard WER and supports 25 European languages with punctuation and timestamps. | FluidAudio reports about 156x overall RTFx and 2.5% LibriSpeech test-clean WER on M4 Pro for its Core ML conversion. | Same native Swift path and licenses as v2. NVIDIA's supported deployment is Linux/NVIDIA hardware; FluidAudio's Core ML conversion is the macOS-enabling layer. | Use for supported non-English locales. It does **not** support Hindi, so it cannot replace Apple Speech globally. |
 | Parakeet TDT-CTC 110M | FluidAudio reports 3.01% LibriSpeech test-clean WER and 96.5x RTFx on M2. | Smaller and iOS-compatible according to FluidAudio. | Native FluidAudio/Core ML. | Interesting low-footprint tier, but the published evidence is too narrow to prefer it over v2 for Burrito's quality-first final pass. |
@@ -92,7 +94,7 @@ For example, a word located at 20 seconds in system audio expanded with `n = 0.5
 
 ### Unknown playback rate
 
-The most reliable UX is an explicit `1x / 1.5x / 2x / 2.5x / 3x / Auto` recording setting. Persist the last value per captured application if that identity is available.
+The implemented UX accepts an explicit rate from 1× through 10× and persists the last selection. There is no unverified `Auto` mode.
 
 `Auto` should be a rescue mode, not an unverified promise:
 
@@ -110,10 +112,9 @@ For a fast first implementation, skip `Auto`: ask for playback speed and prove t
 ## Proposed production flow
 
 ```text
-ScreenCaptureKit PCM
+ScreenCaptureKit PCM or imported original media
   ├─ microphone PCM ───────────────┐
   └─ system PCM                    │
-       ├─ live SpeechAnalyzer      │  immediate, provisional UI
        └─ on stop                  │
             ├─ VAD / silence gate │
             ├─ inverse time-stretch when rate > 1
@@ -138,7 +139,7 @@ Build a checked-in evaluation manifest, while keeping licensed audio outside Git
 
 - At least 2–3 hours representative of lectures, YouTube, meetings, accents, jargon, music beds, compression, and quiet speech.
 - Exact human reference transcripts.
-- Generate pitch-preserving versions at 1x, 1.25x, 1.5x, 2x, 2.5x, and 3x using the same class of playback processing users actually hear.
+- Generate pitch-preserving versions at every rate in the checked-in manifest, from 1× through 10×, using the same class of playback processing users actually hear.
 - Test both raw accelerated capture and inverse-time-stretched recovery.
 - Evaluate Apple final SpeechTranscriber, Parakeet v2/v3 Core ML, and WhisperKit large-v3-turbo.
 - Report WER by speed and domain, silence hallucination rate, timestamp error, cold/warm load latency, RTFx, peak memory, energy impact, and model download size on the oldest supported Apple Silicon Mac.
@@ -149,9 +150,9 @@ The benchmark—not a leaderboard measured on normal-speed speech—should decid
 
 ## Delivery order
 
-1. Preserve a temporary PCM path for final ASR; retain AAC only after processing.
-2. Add explicit playback-speed metadata and pitch-preserving offline normalization.
-3. Add the speed-perturbed benchmark harness and baseline the existing Apple pipeline.
+1. Preserve a temporary PCM path for final ASR; retain AAC only after processing. **Implemented.**
+2. Add explicit 1×–10× playback-speed metadata, pitch-preserving offline normalization, and direct original-media import. **Implemented.**
+3. Add the speed-perturbed benchmark corpus and baseline the existing Apple pipeline.
 4. Integrate FluidAudio behind the existing `Transcribing` protocol and route English to Parakeet v2.
 5. Add v3 for its supported languages; keep Apple for Hindi and other gaps.
 6. Compare WhisperKit large-v3-turbo before deciding whether a second downloadable backend is worth its product complexity.
@@ -159,4 +160,4 @@ The benchmark—not a leaderboard measured on normal-speed speech—should decid
 
 ## Bottom line
 
-For this app, **Parakeet through FluidAudio is the strongest fast native final-ASR candidate, but input tempo normalization is the actual fix for 2x/3x playback**. Keep Apple Speech for live provisional text and language coverage, especially Hindi. Do not promise speed-independent reliability until the same models and normalization pipeline pass a speed-perturbed Burrito benchmark.
+For this app, **Parakeet through FluidAudio is the strongest fast native final-ASR candidate, but input tempo normalization is the actual fix for accelerated playback**. Keep Apple Speech for language coverage, especially Hindi. Do not promise speed-independent reliability until the same models and normalization pipeline pass a speed-perturbed Burrito benchmark.

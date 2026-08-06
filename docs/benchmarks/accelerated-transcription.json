@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "audioLocation": "External licensed corpus; never commit source audio",
+  "playbackRates": [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10],
+  "domains": [
+    "lecture",
+    "online-video",
+    "meeting",
+    "accented-speech",
+    "technical-jargon",
+    "music-bed",
+    "compressed-audio",
+    "quiet-speech",
+    "hindi"
+  ],
+  "variants": [
+    "raw-accelerated-capture",
+    "inverse-tempo-normalized",
+    "original-media-import"
+  ],
+  "metrics": [
+    "word-error-rate",
+    "silence-hallucination-rate",
+    "timestamp-error",
+    "cold-load-latency",
+    "warm-load-latency",
+    "realtime-factor",
+    "peak-memory",
+    "energy-impact",
+    "model-download-size"
+  ],
+  "requirements": {
+    "minimumReferenceAudioHours": 2,
+    "referenceTranscripts": "Exact human transcripts",
+    "device": "Oldest supported Apple Silicon Mac"
+  }
+}

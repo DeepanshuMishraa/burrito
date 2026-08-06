@@ -5,6 +5,51 @@ enum AudioSource: String, Codable, CaseIterable, Sendable {
     case microphone = "Microphone"
 }
 
+struct PlaybackRate: RawRepresentable, Codable, Equatable, Hashable, Sendable {
+    static let validRange = 1.0...10.0
+    static let natural = PlaybackRate(validatedRawValue: 1)
+    static let menuPresets = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+        .map(PlaybackRate.init(validatedRawValue:))
+
+    let rawValue: Double
+
+    init?(rawValue: Double) {
+        guard rawValue.isFinite, Self.validRange.contains(rawValue) else { return nil }
+        self.init(validatedRawValue: rawValue)
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(Double.self)
+        guard let rate = PlaybackRate(rawValue: value) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Playback rate must be a finite value from 1 through 10."
+            )
+        }
+        self = rate
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    var displayTitle: String {
+        rawValue.formatted(.number.precision(.fractionLength(0...2))) + "×"
+    }
+
+    private init(validatedRawValue: Double) {
+        self.rawValue = validatedRawValue
+    }
+}
+
+enum TranscriptionInput: Equatable, Sendable {
+    case natural(fileURL: URL, source: AudioSource)
+    case systemCapture(fileURL: URL, playbackRate: PlaybackRate)
+    case importedMedia(fileURL: URL, source: AudioSource)
+}
+
 struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     var source: AudioSource
@@ -298,6 +343,8 @@ enum BurritoError: Error, Equatable, Sendable {
     case recordingAlreadyInProgress
     case noActiveRecording
     case captureFailed(details: String)
+    case audioPreparationFailed(details: String)
+    case mediaImportFailed(details: String)
     case transcriptionFailed(details: String)
     case generationFailed(details: String)
     case storageFailed(details: String)
@@ -324,6 +371,10 @@ enum BurritoError: Error, Equatable, Sendable {
             "There is no active recording to stop."
         case .captureFailed(let details):
             "Audio capture failed: \(details). Any audio already written remains available for recovery."
+        case .audioPreparationFailed(let details):
+            "Audio preparation failed: \(details). The original recording is preserved; retry or import the original media file."
+        case .mediaImportFailed(let details):
+            "Media import failed: \(details)"
         case .transcriptionFailed(let details):
             "Transcription failed: \(details). The audio is preserved so you can retry."
         case .generationFailed(let details):
@@ -1145,6 +1196,7 @@ struct RecordingOptions: Equatable, Sendable {
     var languageIdentifier: String
     var mode: RecordingMode
     var retainsAudio: Bool
+    var playbackRate: PlaybackRate = .natural
 }
 
 struct CalendarEventSnapshot: Codable, Equatable, Sendable {
@@ -1201,6 +1253,21 @@ struct RecordingFiles: Equatable, Sendable {
     var sessionID: UUID
     var systemAudioURL: URL?
     var microphoneAudioURL: URL?
+    var systemTranscriptionURL: URL? = nil
+    var microphoneTranscriptionURL: URL? = nil
+
+    var allURLs: [URL] {
+        [
+            systemAudioURL,
+            microphoneAudioURL,
+            systemTranscriptionURL,
+            microphoneTranscriptionURL,
+        ].compactMap { $0 }
+    }
+
+    var transcriptionURLs: [URL] {
+        [systemTranscriptionURL, microphoneTranscriptionURL].compactMap { $0 }
+    }
 }
 
 struct GeneratedNote: Equatable, Sendable {

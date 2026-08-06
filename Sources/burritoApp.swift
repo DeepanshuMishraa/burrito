@@ -170,6 +170,11 @@ private struct BurritoMenuBarMenu: View {
         BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var language = "en-US"
     @AppStorage("retainAudioDefault") private var retainsAudio = false
+    @AppStorage("playbackRateDefault") private var playbackRateValue = 1.0
+
+    private var playbackRate: PlaybackRate {
+        PlaybackRate(rawValue: playbackRateValue) ?? .natural
+    }
 
     private var nextMeeting: UpcomingCalendarEvent? {
         calendarAccess.upcomingEvents
@@ -208,6 +213,20 @@ private struct BurritoMenuBarMenu: View {
                 openMainWindow()
             }
         } else {
+            Menu("Playback Speed · \(playbackRate.displayTitle)") {
+                ForEach(PlaybackRate.menuPresets, id: \.self) { rate in
+                    Button {
+                        playbackRateValue = rate.rawValue
+                    } label: {
+                        if rate == playbackRate {
+                            Label(rate.displayTitle, systemImage: "checkmark")
+                        } else {
+                            Text(rate.displayTitle)
+                        }
+                    }
+                }
+            }
+
             Menu("Start Recording") {
                 Button("Listen Along") {
                     startQuickRecording(mode: .listenAlong)
@@ -294,7 +313,8 @@ private struct BurritoMenuBarMenu: View {
                     ),
                     languageIdentifier: language,
                     mode: .meeting,
-                    retainsAudio: retainsAudio
+                    retainsAudio: retainsAudio,
+                    playbackRate: playbackRate
                 ),
                 destination: .calendarEvent(event.snapshot),
                 context: modelContext
@@ -313,7 +333,8 @@ private struct BurritoMenuBarMenu: View {
                     ),
                     languageIdentifier: language,
                     mode: mode,
-                    retainsAudio: retainsAudio
+                    retainsAudio: retainsAudio,
+                    playbackRate: playbackRate
                 ),
                 context: modelContext
             )

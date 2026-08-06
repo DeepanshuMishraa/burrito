@@ -219,6 +219,19 @@ struct ContentView: View {
                     recordingDestination = nil
                     selectedNoteID = nil
                     sidebarSelection = .models
+                },
+                importMedia: { url, options in
+                    recordingDestination = nil
+                    Task {
+                        let result = await coordinator.importMedia(
+                            fileURL: url,
+                            options: options,
+                            context: modelContext
+                        )
+                        if case .success(let noteID) = result {
+                            selectedNoteID = noteID
+                        }
+                    }
                 }
             ) { options in
                 recordingDestination = nil
@@ -4222,6 +4235,7 @@ private struct RecordingSetupView: View {
     @Bindable var modelStore: ParakeetModelStore
     let calendarEvent: CalendarEventSnapshot?
     let openModels: () -> Void
+    let importMedia: (URL, RecordingOptions) -> Void
     let start: (RecordingOptions) -> Void
 
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
@@ -4229,9 +4243,12 @@ private struct RecordingSetupView: View {
     @AppStorage("recordingModeDefault") private var recordingModeRawValue =
         RecordingMode.listenAlong.rawValue
     @AppStorage("retainAudioDefault") private var retainsAudio = false
+    @AppStorage("playbackRateDefault") private var playbackRateValue = 1.0
     @State private var templateID: UUID?
     @State private var openPicker: RecordingSetupPicker?
     @State private var languageQuery = ""
+    @State private var showingMediaImporter = false
+    @State private var mediaImportError: String?
 
     private var selectedTemplate: NoteTemplate? {
         templates.first { $0.id == templateID }
@@ -4250,6 +4267,21 @@ private struct RecordingSetupView: View {
     private var recordingMode: RecordingMode {
         get { RecordingMode(rawValue: recordingModeRawValue) ?? .listenAlong }
         nonmutating set { recordingModeRawValue = newValue.rawValue }
+    }
+
+    private var playbackRate: PlaybackRate {
+        PlaybackRate(rawValue: playbackRateValue) ?? .natural
+    }
+
+    private var recordingOptions: RecordingOptions? {
+        guard let effectiveTemplate else { return nil }
+        return RecordingOptions(
+            template: effectiveTemplate,
+            languageIdentifier: effectiveLanguage,
+            mode: recordingMode,
+            retainsAudio: retainsAudio,
+            playbackRate: playbackRate
+        )
     }
 
     var body: some View {
@@ -4324,6 +4356,10 @@ private struct RecordingSetupView: View {
                 .zIndex(1)
                 Divider().padding(.leading, 12)
                 RecordingModePicker(selection: recordingModeBinding)
+                if recordingMode == .listenAlong {
+                    Divider().padding(.leading, 12)
+                    RecordingPlaybackRatePicker(selection: playbackRateBinding)
+                }
                 Divider().padding(.leading, 12)
                 BurritoToggleRow(
                     title: "Keep audio",
@@ -4349,17 +4385,17 @@ private struct RecordingSetupView: View {
             HStack {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                if calendarEvent == nil {
+                    Button("Import media") {
+                        showingMediaImporter = true
+                    }
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                    .help("Use original audio or video for playback-speed-independent transcription")
+                }
                 Spacer()
                 BurritoButton("Start recording", systemImage: "waveform") {
-                    guard let effectiveTemplate else { return }
-                    start(
-                        RecordingOptions(
-                            template: effectiveTemplate,
-                            languageIdentifier: effectiveLanguage,
-                            mode: recordingMode,
-                            retainsAudio: retainsAudio
-                        )
-                    )
+                    guard let recordingOptions else { return }
+                    start(recordingOptions)
                 }
                 .buttonStyle(BurritoActionButtonStyle(prominent: true))
                 .disabled(effectiveTemplate == nil)
@@ -4398,12 +4434,46 @@ private struct RecordingSetupView: View {
                 dismiss()
             }
         }
+        .fileImporter(
+            isPresented: $showingMediaImporter,
+            allowedContentTypes: [.audio, .movie]
+        ) { result in
+            switch result {
+            case .success(let url):
+                guard let recordingOptions else { return }
+                importMedia(url, recordingOptions)
+            case .failure(let error):
+                mediaImportError = error.localizedDescription
+            }
+        }
+        .alert(
+            "Media could not be selected",
+            isPresented: Binding(
+                get: { mediaImportError != nil },
+                set: { if !$0 { mediaImportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { mediaImportError = nil }
+        } message: {
+            Text(mediaImportError ?? "Choose a local audio or video file and try again.")
+        }
     }
 
     private var recordingModeBinding: Binding<RecordingMode> {
         Binding(
             get: { recordingMode },
             set: { recordingMode = $0 }
+        )
+    }
+
+    private var playbackRateBinding: Binding<Double> {
+        Binding(
+            get: { playbackRate.rawValue },
+            set: { newValue in
+                if let rate = PlaybackRate(rawValue: newValue) {
+                    playbackRateValue = rate.rawValue
+                }
+            }
         )
     }
 
@@ -4435,6 +4505,41 @@ private struct RecordingSetupView: View {
         case nil:
             EmptyView()
         }
+    }
+}
+
+private struct RecordingPlaybackRatePicker: View {
+    @Binding var selection: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Source playback speed")
+                        .font(.system(size: 13, weight: .init(450)))
+                    Text(
+                        selection > 1
+                            ? "Best effort for captured audio. Import the original media for reliable results."
+                            : "Match the speed used by the app playing the audio."
+                    )
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Text(selection.formatted(.number.precision(.fractionLength(0...2))) + "×")
+                    .font(.system(size: 12, weight: .init(550), design: .monospaced))
+                    .foregroundStyle(selection > 1 ? BurritoTheme.accent : .secondary)
+                    .frame(width: 52, alignment: .trailing)
+            }
+
+            Slider(value: $selection, in: 1...10, step: 0.05)
+                .accessibilityLabel("Source playback speed")
+                .accessibilityValue(
+                    selection.formatted(.number.precision(.fractionLength(0...2))) + " times"
+                )
+        }
+        .padding(14)
     }
 }
 

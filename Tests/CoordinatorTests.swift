@@ -69,12 +69,43 @@ private struct TranscriberStub: Transcribing {
     }
 
     func transcribe(
-        fileURL: URL,
-        source: AudioSource,
+        input: TranscriptionInput,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
-        .success([
+        let source: AudioSource = switch input {
+        case .natural(_, let source), .importedMedia(_, let source): source
+        case .systemCapture: .system
+        }
+        return .success([
             TranscriptSegment(source: source, startTime: 0, duration: 1, text: "\(source.rawValue) text"),
+        ])
+    }
+}
+
+private final class TranscriptionInputSpy: Transcribing, Sendable {
+    let inputs = Mutex<[TranscriptionInput]>([])
+
+    func requiresSpeechAuthorization(for identifier: String) -> Bool { false }
+
+    func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func transcribe(
+        input: TranscriptionInput,
+        languageIdentifier: String
+    ) async -> Result<[TranscriptSegment], BurritoError> {
+        inputs.withLock { $0.append(input) }
+        let source: AudioSource = switch input {
+        case .natural(_, let source), .importedMedia(_, let source): source
+        case .systemCapture: .system
+        }
+        return .success([
+            TranscriptSegment(source: source, startTime: 0, duration: 1, text: "Text"),
         ])
     }
 }
@@ -172,6 +203,20 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
     }
 }
 
+private struct MediaAudioExtractorStub: MediaAudioExtracting {
+    var result: Result<ImportedMediaAudio, BurritoError> = .success(
+        ImportedMediaAudio(duration: 42)
+    )
+
+    func extract(
+        sourceURL: URL,
+        transcriptionURL: URL,
+        retainedAudioURL: URL?
+    ) async -> Result<ImportedMediaAudio, BurritoError> {
+        result
+    }
+}
+
 private final class FileStoreSpy: RecordingFileStore, Sendable {
     let removeCount = Mutex(0)
     let root: URL
@@ -185,7 +230,11 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
             RecordingFiles(
                 sessionID: id,
                 systemAudioURL: root.appending(path: "system.m4a"),
-                microphoneAudioURL: mode == .meeting ? root.appending(path: "microphone.m4a") : nil
+                microphoneAudioURL: mode == .meeting ? root.appending(path: "microphone.m4a") : nil,
+                systemTranscriptionURL: root.appending(path: "system-transcription.caf"),
+                microphoneTranscriptionURL: mode == .meeting
+                    ? root.appending(path: "microphone-transcription.caf")
+                    : nil
             )
         )
     }
@@ -196,6 +245,10 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
         removeCount.withLock { $0 += 1 }
         return .success(())
+    }
+
+    func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
+        .success(())
     }
 }
 
@@ -216,6 +269,92 @@ private func sampleCalendarEvent() -> CalendarEventSnapshot {
 @MainActor
 @Suite("Recording coordinator")
 struct CoordinatorTests {
+    @Test("Selected playback rate applies only to captured system audio")
+    func routesPlaybackRateToSystemAudio() async throws {
+        let context = try makeContext()
+        let transcriber = TranscriptionInputSpy()
+        let rate = try #require(PlaybackRate(rawValue: 3))
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: transcriber,
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false,
+            playbackRate: rate
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let inputs = transcriber.inputs.withLock { $0 }
+        #expect(inputs.count == 2)
+        #expect(
+            inputs.contains {
+                if case .systemCapture(_, let playbackRate) = $0 {
+                    return playbackRate == rate
+                }
+                return false
+            }
+        )
+        #expect(
+            inputs.contains {
+                if case .natural(_, let source) = $0 {
+                    return source == .microphone
+                }
+                return false
+            }
+        )
+    }
+
+    @Test("Importing original media bypasses capture and produces a ready note")
+    func importsOriginalMedia() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            mediaAudioExtractor: MediaAudioExtractorStub(),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Study guide",
+                symbol: "book",
+                instructions: "Build a study guide."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false,
+            playbackRate: try #require(PlaybackRate(rawValue: 10))
+        )
+
+        let result = await coordinator.importMedia(
+            fileURL: URL(filePath: "/tmp/accelerated-lecture.mov"),
+            options: options,
+            context: context
+        )
+        let noteID = try result.get()
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+
+        #expect(note.id == noteID)
+        #expect(note.lifecycle == .ready)
+        #expect(note.duration == 42)
+        #expect(note.playbackRate == .natural)
+        #expect(note.transcriptSegments.map(\.source) == [.system])
+        #expect(capture.starts == 0)
+    }
+
     @Test("Local transcription starts without requesting Apple Speech access")
     func localTranscriptionSkipsSpeechAuthorization() async throws {
         let context = try makeContext()

@@ -24,8 +24,7 @@ protocol Transcribing: Sendable {
     func verifyLanguage(_ identifier: String) async -> Result<Void, BurritoError>
     func installLanguageAsset(_ identifier: String) async -> Result<Void, BurritoError>
     func transcribe(
-        fileURL: URL,
-        source: AudioSource,
+        input: TranscriptionInput,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError>
 }
@@ -57,6 +56,7 @@ protocol RecordingFileStore: Sendable {
     func relativePath(for url: URL) -> String
     func url(forRelativePath path: String) -> URL
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError>
+    func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError>
 }
 
 protocol PromptTokenMeasuring: Sendable {

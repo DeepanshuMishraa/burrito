@@ -131,6 +131,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     let hasMicrophone: Bool
     private let systemWriter: AudioSampleWriter?
     private let microphoneWriter: AudioSampleWriter?
+    private let systemTranscriptionWriter: PCMFileWriter?
+    private let microphoneTranscriptionWriter: PCMFileWriter?
     private let lock = NSLock()
     private var streamError: Error?
     private var systemLevel = 0.0
@@ -154,6 +156,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         self.microphoneWriter = try files.microphoneAudioURL.map {
             try AudioSampleWriter(url: $0, channelCount: 1)
         }
+        self.systemTranscriptionWriter = files.systemTranscriptionURL.map { PCMFileWriter(url: $0) }
+        self.microphoneTranscriptionWriter = files.microphoneTranscriptionURL.map { PCMFileWriter(url: $0) }
         self.hasMicrophone = files.microphoneAudioURL != nil
         super.init()
     }
@@ -184,6 +188,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
 
     func finish() async throws {
         let captureError = lock.withLock { streamError }
+        systemTranscriptionWriter?.finish()
+        microphoneTranscriptionWriter?.finish()
         if let captureError { throw captureError }
         try await systemWriter?.finish()
         try await microphoneWriter?.finish()
@@ -228,6 +234,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
                 return copy
             }
             let level = AudioLevel.measure(buffer)
+            switch source {
+            case .system:
+                try systemTranscriptionWriter?.write(buffer)
+            case .microphone:
+                try microphoneTranscriptionWriter?.write(buffer)
+            }
             updateLevel(
                 level,
                 duration: Double(buffer.frameLength) / buffer.format.sampleRate,
@@ -256,6 +268,39 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
                 microphoneLevel = AudioLevel.smoothed(previous: microphoneLevel, next: measuredLevel)
             }
         }
+    }
+}
+
+final class PCMFileWriter: @unchecked Sendable {
+    private let url: URL
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func write(_ buffer: AVAudioPCMBuffer) throws {
+        try lock.withLock {
+            let destination: AVAudioFile
+            if let file {
+                destination = file
+            } else {
+                let newFile = try AVAudioFile(
+                    forWriting: url,
+                    settings: buffer.format.settings,
+                    commonFormat: buffer.format.commonFormat,
+                    interleaved: buffer.format.isInterleaved
+                )
+                file = newFile
+                destination = newFile
+            }
+            try destination.write(from: buffer)
+        }
+    }
+
+    func finish() {
+        lock.withLock { file = nil }
     }
 }
 

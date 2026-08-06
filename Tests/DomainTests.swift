@@ -1006,6 +1006,153 @@ struct AudioLevelTests {
 
 @Suite("Transcription configuration")
 struct TranscriptionConfigurationTests {
+    @Test("Playback rates accept finite values from one through ten")
+    func validatesPlaybackRates() throws {
+        #expect(PlaybackRate(rawValue: 0.99) == nil)
+        #expect(PlaybackRate(rawValue: 10.01) == nil)
+        #expect(PlaybackRate(rawValue: .infinity) == nil)
+        #expect(try #require(PlaybackRate(rawValue: 1)).rawValue == 1)
+        #expect(try #require(PlaybackRate(rawValue: 10)).rawValue == 10)
+        #expect(PlaybackRate.menuPresets.first == .natural)
+        #expect(PlaybackRate.menuPresets.last?.rawValue == 10)
+        #expect(PlaybackRate.menuPresets.allSatisfy { PlaybackRate.validRange.contains($0.rawValue) })
+    }
+
+    @Test("Playback rates decode only valid persisted values")
+    func decodesPlaybackRatesSafely() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let rate = try #require(PlaybackRate(rawValue: 2.5))
+
+        #expect(try decoder.decode(PlaybackRate.self, from: encoder.encode(rate)) == rate)
+        #expect(throws: DecodingError.self) {
+            try decoder.decode(PlaybackRate.self, from: Data("12".utf8))
+        }
+    }
+
+    @Test("Prepared accelerated audio maps timestamps back to capture time")
+    func remapsAcceleratedTimestamps() {
+        let segment = TranscriptSegment(
+            source: .system,
+            startTime: 20,
+            duration: 4,
+            text: "Normalized speech"
+        )
+        let prepared = PreparedTranscriptionAudio(
+            fileURL: URL(filePath: "/tmp/prepared.caf"),
+            source: .system,
+            timelineScale: 0.5,
+            temporaryFileURL: nil
+        )
+
+        let remapped = prepared.remap([segment])
+
+        #expect(remapped.first?.startTime == 10)
+        #expect(remapped.first?.duration == 2)
+        #expect(remapped.first?.id == segment.id)
+    }
+
+    @Test("Accelerated audio is rendered as 16 kHz mono at natural tempo")
+    func normalizesAcceleratedAudio() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appending(path: "source.caf")
+        let outputDirectory = root.appending(path: "prepared", directoryHint: .isDirectory)
+        let format = try #require(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 48_000,
+                channels: 2,
+                interleaved: false
+            )
+        )
+        let frameCount: AVAudioFrameCount = 12_000
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+        )
+        buffer.frameLength = frameCount
+        let channels = try #require(buffer.floatChannelData)
+        for frame in 0..<Int(frameCount) {
+            let sample = Float(sin(2 * Double.pi * 440 * Double(frame) / 48_000))
+            channels[0][frame] = sample
+            channels[1][frame] = sample
+        }
+        var sourceFile: AVAudioFile? = try AVAudioFile(
+            forWriting: sourceURL,
+            settings: format.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        try sourceFile?.write(from: buffer)
+        sourceFile = nil
+
+        let normalizer = AudioTempoNormalizer(outputDirectory: outputDirectory)
+        let result = await normalizer.prepare(
+            .systemCapture(
+                fileURL: sourceURL,
+                playbackRate: try #require(PlaybackRate(rawValue: 2))
+            )
+        )
+        let prepared = try result.get()
+        let preparedFile = try AVAudioFile(forReading: prepared.fileURL)
+
+        #expect(preparedFile.processingFormat.sampleRate == 16_000)
+        #expect(preparedFile.processingFormat.channelCount == 1)
+        let duration = Double(preparedFile.length) / preparedFile.processingFormat.sampleRate
+        #expect(abs(duration - 0.5) < 0.03)
+        #expect(prepared.timelineScale == 0.5)
+    }
+
+    @Test("Original media import extracts a lossless transcription track")
+    func extractsImportedMediaAudio() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceURL = root.appending(path: "source.caf")
+        let transcriptionURL = root.appending(path: "transcription.caf")
+        let format = try #require(
+            AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+            )
+        )
+        let frameCount: AVAudioFrameCount = 8_000
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+        )
+        buffer.frameLength = frameCount
+        let samples = try #require(buffer.floatChannelData?[0])
+        for frame in 0..<Int(frameCount) {
+            samples[frame] = Float(sin(2 * Double.pi * 220 * Double(frame) / 16_000))
+        }
+        var sourceFile: AVAudioFile? = try AVAudioFile(
+            forWriting: sourceURL,
+            settings: format.settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        try sourceFile?.write(from: buffer)
+        sourceFile = nil
+
+        let result = await LocalMediaAudioExtractor().extract(
+            sourceURL: sourceURL,
+            transcriptionURL: transcriptionURL,
+            retainedAudioURL: nil
+        )
+        let imported = try result.get()
+        let transcriptionFile = try AVAudioFile(forReading: transcriptionURL)
+
+        #expect(abs(imported.duration - 0.5) < 0.03)
+        #expect(transcriptionFile.length == AVAudioFramePosition(frameCount))
+        #expect(transcriptionFile.processingFormat.sampleRate == 16_000)
+        #expect(transcriptionFile.processingFormat.channelCount == 1)
+    }
+
     @Test("Language matrix distinguishes downloadable and system transcription")
     func languageCoverageMatrix() {
         #expect(TranscriptionLanguage.resolve("en-US").engineCoverage == .downloadableLocalModel)
