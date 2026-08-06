@@ -142,6 +142,9 @@ struct LocalTranscriber: Transcribing {
         input: TranscriptionInput,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
+        let languageCheck = await verifyLanguage(languageIdentifier)
+        if case .failure(let error) = languageCheck { return .failure(error) }
+
         let preparation = await audioPreparer.prepare(input)
         guard case .success(let prepared) = preparation else {
             if case .failure(let error) = preparation { return .failure(error) }

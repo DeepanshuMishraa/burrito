@@ -51,6 +51,7 @@ struct PersistenceTests {
             languageIdentifier: "en-US",
             template: template.snapshot,
             recordingMode: .meeting,
+            playbackRate: try #require(PlaybackRate(rawValue: 3)),
             retainsAudio: true
         )
         note.folder = folder
@@ -73,6 +74,7 @@ struct PersistenceTests {
         #expect(decoded.notes.first?.transcriptSegments == note.transcriptSegments)
         #expect(decoded.notes.first?.markdownBody == note.markdownBody)
         #expect(decoded.notes.first?.isFavorite == true)
+        #expect(decoded.notes.first?.playbackRateValue == 3)
     }
 
     @Test("Restoring the same archive twice preserves local data and skips duplicates")
@@ -97,6 +99,7 @@ struct PersistenceTests {
             markdownBody: "## Summary\n\nImported.",
             languageIdentifier: "en-US",
             template: template.snapshot,
+            playbackRate: try #require(PlaybackRate(rawValue: 2)),
             retainsAudio: false
         )
         note.folder = folder
@@ -117,6 +120,40 @@ struct PersistenceTests {
         #expect(try context.fetch(FetchDescriptor<Note>()).count == 1)
         #expect(imported.title == "Locally renamed")
         #expect(imported.folder?.name == "Imported")
+        #expect(imported.playbackRate.rawValue == 2)
+    }
+
+    @Test("Archives without a playback rate restore at natural speed")
+    func archivePlaybackRateBackwardCompatibility() throws {
+        let note = Note(
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(name: "Study", symbol: "book", instructions: "Summarize."),
+            playbackRate: try #require(PlaybackRate(rawValue: 2)),
+            retainsAudio: false
+        )
+        let archive = BurritoArchive.capture(notes: [note], folders: [], templates: [])
+        var object = try #require(
+            JSONSerialization.jsonObject(with: archive.encoded()) as? [String: Any]
+        )
+        var records = try #require(object["notes"] as? [[String: Any]])
+        records[0].removeValue(forKey: "playbackRateValue")
+        object["notes"] = records
+
+        let decoded = try BurritoArchive.decode(JSONSerialization.data(withJSONObject: object))
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+
+        _ = try decoded.restore(into: context)
+
+        let restored = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(decoded.notes.first?.playbackRateValue == nil)
+        #expect(restored.playbackRate == .natural)
     }
 
     @Test("Folders, favorites, Trash, and restore keep migration-safe defaults")

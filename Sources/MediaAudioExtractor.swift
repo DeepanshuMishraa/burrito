@@ -61,7 +61,10 @@ actor LocalMediaAudioExtractor: MediaAudioExtracting {
             while let sampleBuffer = output.copyNextSampleBuffer() {
                 try Task.checkCancellation()
                 let buffer = try Self.copyPCMBuffer(from: sampleBuffer)
-                try writer.write(buffer)
+                try writer.write(
+                    buffer,
+                    presentationTime: sampleBuffer.presentationTimeStamp
+                )
                 wroteFrames = wroteFrames || buffer.frameLength > 0
             }
             writer.finish()

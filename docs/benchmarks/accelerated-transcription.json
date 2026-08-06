@@ -32,6 +32,12 @@
   "requirements": {
     "minimumReferenceAudioHours": 2,
     "referenceTranscripts": "Exact human transcripts",
-    "device": "Oldest supported Apple Silicon Mac"
+    "benchmarkEnvironment": {
+      "macModel": "MacBook Air (Mac16,12)",
+      "chip": "Apple M4",
+      "memory": "16 GB",
+      "macOS": "26.5.2 (25F84)",
+      "appVersion": "0.0.2 (1)"
+    }
   }
 }

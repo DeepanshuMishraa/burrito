@@ -46,15 +46,7 @@ struct LocalRecordingFileStore: RecordingFileStore {
     }
 
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
-        do {
-            for url in files.allURLs
-            where FileManager.default.fileExists(atPath: url.path()) {
-                try FileManager.default.removeItem(at: url)
-            }
-            return .success(())
-        } catch {
-            return .failure(.storageFailed(details: error.localizedDescription))
-        }
+        remove(files.allURLs)
     }
 
     func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {

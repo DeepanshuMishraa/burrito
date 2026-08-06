@@ -4391,6 +4391,7 @@ private struct RecordingSetupView: View {
                     }
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
                     .help("Use original audio or video for playback-speed-independent transcription")
+                    .disabled(effectiveTemplate == nil)
                 }
                 Spacer()
                 BurritoButton("Start recording", systemImage: "waveform") {

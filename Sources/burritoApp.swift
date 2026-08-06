@@ -176,6 +176,12 @@ private struct BurritoMenuBarMenu: View {
         PlaybackRate(rawValue: playbackRateValue) ?? .natural
     }
 
+    private var selectedPlaybackRatePreset: PlaybackRate? {
+        PlaybackRate.menuPresets.first {
+            abs($0.rawValue - playbackRate.rawValue) < 0.001
+        }
+    }
+
     private var nextMeeting: UpcomingCalendarEvent? {
         calendarAccess.upcomingEvents
             .filter { $0.endDate >= .now }
@@ -218,12 +224,16 @@ private struct BurritoMenuBarMenu: View {
                     Button {
                         playbackRateValue = rate.rawValue
                     } label: {
-                        if rate == playbackRate {
+                        if rate == selectedPlaybackRatePreset {
                             Label(rate.displayTitle, systemImage: "checkmark")
                         } else {
                             Text(rate.displayTitle)
                         }
                     }
+                }
+                if selectedPlaybackRatePreset == nil {
+                    Divider()
+                    Label("Custom · \(playbackRate.displayTitle)", systemImage: "checkmark")
                 }
             }
 

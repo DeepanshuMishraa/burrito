@@ -162,6 +162,12 @@ actor AudioTempoNormalizer: TranscriptionAudioPreparing {
             throw AudioPreparationError.renderBufferUnavailable
         }
         flushBuffer.frameLength = flushFrames
+        for audioBuffer in UnsafeMutableAudioBufferListPointer(
+            flushBuffer.mutableAudioBufferList
+        ) {
+            guard let data = audioBuffer.mData else { continue }
+            memset(data, 0, Int(audioBuffer.mDataByteSize))
+        }
         player.scheduleBuffer(flushBuffer)
         try engine.start()
         player.play()
@@ -172,6 +178,7 @@ actor AudioTempoNormalizer: TranscriptionAudioPreparing {
         }
 
         while engine.manualRenderingSampleTime < expectedFrames {
+            try Task.checkCancellation()
             let remaining = expectedFrames - engine.manualRenderingSampleTime
             let requestedFrames = AVAudioFrameCount(
                 min(AVAudioFramePosition(maximumFrameCount), remaining)

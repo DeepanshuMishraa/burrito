@@ -94,7 +94,7 @@ For example, a word located at 20 seconds in system audio expanded with `n = 0.5
 
 ### Unknown playback rate
 
-The implemented UX accepts an explicit rate from 1× through 10× and persists the last selection. There is no unverified `Auto` mode.
+The implemented UX accepts an explicit rate from 1× through 10× and persists the last selection. `Auto` is not implemented in this release; it remains future work below.
 
 `Auto` should be a rescue mode, not an unverified promise:
 

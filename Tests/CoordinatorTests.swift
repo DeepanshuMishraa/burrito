@@ -84,6 +84,11 @@ private struct TranscriberStub: Transcribing {
 
 private final class TranscriptionInputSpy: Transcribing, Sendable {
     let inputs = Mutex<[TranscriptionInput]>([])
+    private let result: Result<[TranscriptSegment], BurritoError>?
+
+    init(result: Result<[TranscriptSegment], BurritoError>? = nil) {
+        self.result = result
+    }
 
     func requiresSpeechAuthorization(for identifier: String) -> Bool { false }
 
@@ -100,6 +105,7 @@ private final class TranscriptionInputSpy: Transcribing, Sendable {
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
         inputs.withLock { $0.append(input) }
+        if let result { return result }
         let source: AudioSource = switch input {
         case .natural(_, let source), .importedMedia(_, let source): source
         case .systemCapture: .system
@@ -219,6 +225,7 @@ private struct MediaAudioExtractorStub: MediaAudioExtracting {
 
 private final class FileStoreSpy: RecordingFileStore, Sendable {
     let removeCount = Mutex(0)
+    let removeTranscriptionCount = Mutex(0)
     let root: URL
 
     init(root: URL) {
@@ -248,7 +255,8 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
     }
 
     func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
-        .success(())
+        removeTranscriptionCount.withLock { $0 += 1 }
+        return .success(())
     }
 }
 
@@ -299,16 +307,18 @@ struct CoordinatorTests {
         #expect(inputs.count == 2)
         #expect(
             inputs.contains {
-                if case .systemCapture(_, let playbackRate) = $0 {
-                    return playbackRate == rate
+                if case .systemCapture(let fileURL, let playbackRate) = $0 {
+                    return fileURL.lastPathComponent == "system.m4a"
+                        && playbackRate == rate
                 }
                 return false
             }
         )
         #expect(
             inputs.contains {
-                if case .natural(_, let source) = $0 {
-                    return source == .microphone
+                if case .natural(let fileURL, let source) = $0 {
+                    return fileURL.lastPathComponent == "microphone.m4a"
+                        && source == .microphone
                 }
                 return false
             }
@@ -319,9 +329,10 @@ struct CoordinatorTests {
     func importsOriginalMedia() async throws {
         let context = try makeContext()
         let capture = CaptureSpyingStub()
+        let transcriber = TranscriptionInputSpy()
         let coordinator = AppCoordinator(
             capture: capture,
-            transcriber: TranscriberStub(),
+            transcriber: transcriber,
             generator: GeneratorStub(),
             fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
             mediaAudioExtractor: MediaAudioExtractorStub(),
@@ -353,6 +364,46 @@ struct CoordinatorTests {
         #expect(note.playbackRate == .natural)
         #expect(note.transcriptSegments.map(\.source) == [.system])
         #expect(capture.starts == 0)
+        let input = try #require(transcriber.inputs.withLock { $0 }.first)
+        if case .importedMedia(_, .system) = input {
+            // Expected: imported media must not be treated as natural captured audio.
+        } else {
+            Issue.record("Expected imported system media input, received \(input).")
+        }
+    }
+
+    @Test("Failed imported transcription removes its incomplete note and audio")
+    func importFailureRemovesIncompleteSession() async throws {
+        let context = try makeContext()
+        let expectedError = BurritoError.transcriptionFailed(details: "Fixture failure")
+        let fileStore = FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriptionInputSpy(result: .failure(expectedError)),
+            generator: GeneratorStub(),
+            fileStore: fileStore,
+            mediaAudioExtractor: MediaAudioExtractorStub()
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        let result = await coordinator.importMedia(
+            fileURL: URL(filePath: "/tmp/fixture.mov"),
+            options: options,
+            context: context
+        )
+
+        #expect(result == .failure(expectedError))
+        #expect(fileStore.removeCount.withLock { $0 } == 1)
+        #expect(try context.fetch(FetchDescriptor<Note>()).isEmpty)
     }
 
     @Test("Local transcription starts without requesting Apple Speech access")

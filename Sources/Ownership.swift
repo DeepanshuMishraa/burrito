@@ -46,6 +46,7 @@ struct BurritoArchive: Codable, Equatable, Sendable {
         let isFavorite: Bool
         let deletedAt: Date?
         let recordingModeRawValue: String?
+        let playbackRateValue: Double?
         let retainsAudio: Bool
         let transcriptRevision: Int
         let generatedFromTranscriptRevision: Int
@@ -87,6 +88,7 @@ struct BurritoArchive: Codable, Equatable, Sendable {
                     isFavorite: note.isFavorite,
                     deletedAt: note.deletedAt,
                     recordingModeRawValue: note.recordingModeRawValue,
+                    playbackRateValue: note.playbackRate.rawValue,
                     retainsAudio: note.retainsAudio,
                     transcriptRevision: note.transcriptRevision,
                     generatedFromTranscriptRevision: note.generatedFromTranscriptRevision,
@@ -769,6 +771,8 @@ extension BurritoArchive {
                 : archivedLifecycle
             let mode = record.recordingModeRawValue
                 .flatMap(RecordingMode.init(rawValue:)) ?? .listenAlong
+            let playbackRate = record.playbackRateValue
+                .flatMap(PlaybackRate.init(rawValue:)) ?? .natural
             let note = Note(
                 id: record.id,
                 lifecycle: restoredLifecycle,
@@ -784,6 +788,7 @@ extension BurritoArchive {
                     instructions: record.templateInstructions
                 ),
                 recordingMode: mode,
+                playbackRate: playbackRate,
                 retainsAudio: record.retainsAudio,
                 calendarEvent: record.calendarEvent
             )

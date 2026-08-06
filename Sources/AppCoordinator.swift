@@ -106,6 +106,7 @@ final class AppCoordinator {
             languageIdentifier: options.languageIdentifier,
             template: options.template,
             recordingMode: .listenAlong,
+            // Imported original media is already at natural tempo; the capture-only rate is ignored.
             playbackRate: .natural,
             retainsAudio: options.retainsAudio
         )
@@ -115,7 +116,7 @@ final class AppCoordinator {
             try context.save()
         } catch {
             let failure = BurritoError.storageFailed(details: error.localizedDescription)
-            failBeforeRecording(failure)
+            failImport(note: note, files: files, error: failure, context: context)
             return .failure(failure)
         }
 
@@ -126,11 +127,11 @@ final class AppCoordinator {
         )
         guard case .success(let importedAudio) = extraction else {
             if case .failure(let error) = extraction {
-                fail(note: note, error: error, context: context)
+                failImport(note: note, files: files, error: error, context: context)
                 return .failure(error)
             }
             let error = BurritoError.mediaImportFailed(details: "The extraction result was invalid.")
-            fail(note: note, error: error, context: context)
+            failImport(note: note, files: files, error: error, context: context)
             return .failure(error)
         }
 
@@ -143,11 +144,11 @@ final class AppCoordinator {
         )
         guard case .success(let segments) = transcription else {
             if case .failure(let error) = transcription {
-                fail(note: note, error: error, context: context)
+                failImport(note: note, files: files, error: error, context: context)
                 return .failure(error)
             }
             let error = BurritoError.transcriptionFailed(details: "The import transcript was unavailable.")
-            fail(note: note, error: error, context: context)
+            failImport(note: note, files: files, error: error, context: context)
             return .failure(error)
         }
 
@@ -363,7 +364,9 @@ final class AppCoordinator {
         try? context.save()
 
         var systemSegments: [TranscriptSegment] = []
-        if let systemURL = files.systemTranscriptionURL ?? files.systemAudioURL {
+        let systemURL = existingPCMURL(files.systemTranscriptionURL)
+            ?? files.systemAudioURL
+        if let systemURL {
             let systemResult = await transcriber.transcribe(
                 input: .systemCapture(
                     fileURL: systemURL,
@@ -381,7 +384,9 @@ final class AppCoordinator {
         }
 
         var microphoneSegments: [TranscriptSegment] = []
-        if let microphoneURL = files.microphoneTranscriptionURL ?? files.microphoneAudioURL {
+        let microphoneURL = existingPCMURL(files.microphoneTranscriptionURL)
+            ?? files.microphoneAudioURL
+        if let microphoneURL {
             let microphoneResult = await transcriber.transcribe(
                 input: .natural(fileURL: microphoneURL, source: .microphone),
                 languageIdentifier: note.languageIdentifier
@@ -464,6 +469,11 @@ final class AppCoordinator {
         activity = .silent
         silentFor = 0
         smartStopStatus = .monitoring
+    }
+
+    private func existingPCMURL(_ url: URL?) -> URL? {
+        guard let url, FileManager.default.fileExists(atPath: url.path()) else { return nil }
+        return url
     }
 
     private func finishSilentRecording(
@@ -735,6 +745,18 @@ final class AppCoordinator {
         activeCalendarEvent = nil
         smartStopStatus = .monitoring
         lastError = error
+    }
+
+    private func failImport(
+        note: Note,
+        files: RecordingFiles,
+        error: BurritoError,
+        context: ModelContext
+    ) {
+        _ = fileStore.removeAudio(for: files)
+        context.delete(note)
+        try? context.save()
+        failBeforeRecording(error)
     }
 
     private func fail(note: Note, error: BurritoError, context: ModelContext) {
