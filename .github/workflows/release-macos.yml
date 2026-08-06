@@ -45,6 +45,7 @@ jobs:
             -scheme burrito \
             -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/BurritoDerivedData" \
+            -skipPackagePluginValidation \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGNING_ALLOWED=NO \
