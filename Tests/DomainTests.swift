@@ -819,11 +819,10 @@ struct LocalMemoryTests {
         let validURL = evidence.citationURL?.absoluteString ?? ""
         let inventedURL = "burrito://memory/\(UUID().uuidString)/\(UUID().uuidString)"
 
+        let supportedAnswer = "Launch is October 12. [source](\(validURL))"
         #expect(
-            MemoryAnswer.validated(
-                "Launch is October 12. [source](\(validURL))",
-                against: [evidence]
-            ) != nil
+            MemoryAnswer.validated(supportedAnswer, against: [evidence])
+                == supportedAnswer
         )
         #expect(MemoryAnswer.validated("Launch is October 12.", against: [evidence]) == nil)
         #expect(
@@ -876,9 +875,7 @@ struct LocalMemoryTests {
                 against: [evidence]
             )
         )
-        #expect(answer.contains("Unverified AI answer"))
-        #expect(answer.contains(explanation))
-        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+        #expect(answer == explanation)
     }
 
     @Test("Memory answers strip insufficient-evidence markers when citations are present")
@@ -904,12 +901,11 @@ struct LocalMemoryTests {
                 against: [evidence]
             )
         )
-        #expect(answer.contains(explanation))
-        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+        #expect(answer == explanation)
     }
 
-    @Test("Memory answers label claim grounding as unverified")
-    func labelsUnverifiedGrounding() throws {
+    @Test("Memory answers validate claim grounding against evidence")
+    func validatesGroundingAgainstEvidence() throws {
         let evidence = MemoryEvidence(
             noteID: UUID(),
             noteTitle: "Launch planning",
@@ -923,13 +919,59 @@ struct LocalMemoryTests {
             )
         )
         let validURL = evidence.citationURL?.absoluteString ?? ""
-        let unsupportedClaim = "The moon is made of cheese. [source](\(validURL))"
+        let claim = "The launch date is October 12. [source](\(validURL))"
 
         let answer = try #require(
-            MemoryAnswer.validated(unsupportedClaim, against: [evidence])
+            MemoryAnswer.validated(claim, against: [evidence])
         )
-        #expect(answer.contains("Unverified AI answer"))
-        #expect(answer.contains(unsupportedClaim))
+        #expect(answer == claim)
+    }
+
+    @Test("Memory answers reject claims contradicted by cited evidence")
+    func rejectsContradictedGrounding() {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let claim = "The launch date is October 13. [source](\(validURL))"
+
+        #expect(MemoryAnswer.validated(claim, against: [evidence]) == nil)
+    }
+
+    @Test("Recovered tool answers append exact meeting citations without a notice")
+    func recoversToolAnswerWithExactSources() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let citation = evidence.citationURL?.absoluteString ?? ""
+        let claim = "The launch date is October 12."
+
+        let answer = try #require(
+            MemoryAnswer.recoveredToolAnswer(claim, against: [evidence])
+        )
+        #expect(
+            answer == claim
+                + "\n\n**Meeting sources:** [Launch planning](\(citation))"
+        )
+        #expect(!answer.contains("Unverified AI answer"))
     }
 }
 
@@ -1113,6 +1155,46 @@ struct FoundationModelAdapterTests {
         #expect(response == "Step one. Final step.")
         let lastUpdate = await recorder.updates.last
         #expect(lastUpdate == response)
+    }
+
+    @Test("Streaming emits a complete throttled final update once")
+    func emitsCompleteThrottledFinalUpdateOnce() async throws {
+        let toolCall = AI.ToolCall(id: "call-1", name: "lookup", arguments: [:])
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("Step one. "),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("Final "),
+                .textDelta("step."),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
+        let tool = AI.Tool(
+            name: "lookup",
+            description: "Look up context",
+            parameters: ["type": "object", "properties": [:]],
+            execute: { _ in ["result": "done"] }
+        )
+
+        let response = try await adapter.completeChatStreaming(
+            instructions: "Use the tool.",
+            conversation: [],
+            question: "Continue across steps.",
+            tools: [tool],
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
+        )
+        let updates = await recorder.updates
+
+        #expect(response == "Step one. Final step.")
+        #expect(updates.last == response)
+        #expect(updates.filter { $0 == response }.count == 1)
+        #expect(!updates.contains("Step one. Final Final step."))
     }
 
     @Test("Injects prefetched meeting evidence before the question")
@@ -1574,6 +1656,34 @@ struct TemplateTests {
         #expect(prompt.contains("untrusted quoted source material"))
     }
 
+    @Test("Built-in templates define distinct output jobs")
+    func builtInTemplatesHaveDistinctJobs() {
+        #expect(BuiltInTemplate.summary.previousInstructions != BuiltInTemplate.summary.instructions)
+        #expect(BuiltInTemplate.summary.previousInstructions.contains("four to eight"))
+        #expect(BuiltInTemplate.summary.instructions.contains("executive briefing editor"))
+        #expect(BuiltInTemplate.summary.instructions.contains("smallest useful account"))
+        #expect(BuiltInTemplate.summary.instructions.contains("with no minimum"))
+        #expect(!BuiltInTemplate.summary.instructions.contains("four to eight"))
+        #expect(!BuiltInTemplate.summary.instructions.contains("Check Your Understanding"))
+
+        #expect(BuiltInTemplate.detailed.instructions.contains("technical archivist"))
+        #expect(BuiltInTemplate.detailed.instructions.contains("Optimize for retrieval and completeness"))
+        #expect(!BuiltInTemplate.detailed.instructions.contains("Action Register"))
+
+        #expect(BuiltInTemplate.studyNotes.previousInstructions != BuiltInTemplate.studyNotes.instructions)
+        #expect(BuiltInTemplate.studyNotes.previousInstructions.contains("three to seven"))
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("instructional designer"))
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("Check Your Understanding"))
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("with no minimum"))
+        #expect(!BuiltInTemplate.studyNotes.instructions.contains("three to seven"))
+        #expect(!BuiltInTemplate.studyNotes.instructions.contains("Decision Log"))
+
+        #expect(BuiltInTemplate.meeting.instructions.contains("operations recorder"))
+        #expect(BuiltInTemplate.meeting.instructions.contains("Decision Log"))
+        #expect(BuiltInTemplate.meeting.instructions.contains("Action Register"))
+        #expect(!BuiltInTemplate.meeting.instructions.contains("Learning Objectives"))
+    }
+
     @Test("Every generation stage treats sensitive transcript text as source material")
     func sensitiveSourceMaterialPolicy() {
         let prompts = [
@@ -1697,6 +1807,36 @@ struct TemplateTests {
 
         #expect(prompt.contains("Markdown table"))
         #expect(prompt.contains("Never infer owners"))
+    }
+
+    @Test(
+        "Previous built-in snapshots receive the latest purpose-built prompt",
+        arguments: BuiltInTemplate.allCases
+    )
+    func resolvesPreviousBuiltInPrompt(template: BuiltInTemplate) {
+        let snapshot = TemplateSnapshot(
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.previousInstructions
+        )
+
+        let resolved = BuiltInTemplate.resolvedInstructions(for: snapshot)
+
+        #expect(resolved == template.instructions)
+    }
+
+    @Test(
+        "Expanded built-in snapshots receive the latest purpose-built prompt",
+        arguments: BuiltInTemplate.allCases
+    )
+    func resolvesExpandedBuiltInPrompt(template: BuiltInTemplate) {
+        let snapshot = TemplateSnapshot(
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.expandedInstructions
+        )
+
+        #expect(BuiltInTemplate.resolvedInstructions(for: snapshot) == template.instructions)
     }
 
     @Test("Custom template instructions are not replaced by a matching name")

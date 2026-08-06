@@ -99,6 +99,24 @@ struct BurritoIcon: View {
     }
 }
 
+struct BurritoAppIcon: View {
+    var size: CGFloat = 24
+
+    var body: some View {
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: size * 0.25,
+                    style: .continuous
+                )
+            )
+            .accessibilityHidden(true)
+    }
+}
+
 struct BurritoLabel: View {
     let title: String
     let systemImage: String

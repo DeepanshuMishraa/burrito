@@ -24,6 +24,8 @@ enum BurritoFontRegistrar {
 }
 
 extension Font {
+    private static let splineWeightAxis = NSNumber(value: 0x7767_6874)
+
     static func burritoDisplay(
         size: CGFloat,
         weight: Font.Weight = .regular
@@ -32,12 +34,31 @@ extension Font {
         return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
     }
 
+    static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
+        spline(size: size, weight: weight)
+    }
+
     static func spline(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
         BurritoFontRegistrar.registerFontsIfNeeded()
         return .custom("Spline Sans Mono", fixedSize: size).weight(weight)
+    }
+
+    static func spline(size: CGFloat, weight: CGFloat) -> Font {
+        BurritoFontRegistrar.registerFontsIfNeeded()
+        let descriptor = CTFontDescriptorCreateWithNameAndSize(
+            "Spline Sans Mono" as CFString,
+            size
+        )
+        let variedDescriptor = CTFontDescriptorCreateCopyWithVariation(
+            descriptor,
+            splineWeightAxis,
+            weight
+        )
+        let font = CTFontCreateWithFontDescriptor(variedDescriptor, size, nil)
+        return Font(font as NSFont)
     }
 
     static func spline(
@@ -47,6 +68,88 @@ extension Font {
     ) -> Font {
         BurritoFontRegistrar.registerFontsIfNeeded()
         return .custom("Spline Sans Mono", size: size, relativeTo: textStyle).weight(weight)
+    }
+
+    static func spline(
+        size: CGFloat,
+        weight: CGFloat,
+        relativeTo textStyle: Font.TextStyle
+    ) -> Font {
+        spline(
+            size: BurritoFontMetrics.scaledSize(size, relativeTo: textStyle),
+            weight: weight
+        )
+    }
+
+    static func system(
+        size: CGFloat,
+        weight: CGFloat,
+        design: Font.Design = .default
+    ) -> Font {
+        let regular = NSFont.Weight.regular.rawValue
+        let medium = NSFont.Weight.medium.rawValue
+        let fraction = min(1, max(0, (weight - 400) / 100))
+        let platformWeight = NSFont.Weight(
+            rawValue: regular + ((medium - regular) * fraction)
+        )
+        return Font(BurritoFontMetrics.systemFont(
+            size: size,
+            weight: platformWeight,
+            design: design
+        ))
+    }
+}
+
+enum BurritoFontMetrics {
+    static func scaledSize(
+        _ size: CGFloat,
+        relativeTo textStyle: Font.TextStyle,
+        preferredPointSize: CGFloat? = nil
+    ) -> CGFloat {
+        let metrics = textMetrics(for: textStyle)
+        let preferred = preferredPointSize
+            ?? NSFont.preferredFont(forTextStyle: metrics.style).pointSize
+        return size * preferred / metrics.defaultPointSize
+    }
+
+    static func systemFont(
+        size: CGFloat,
+        weight: NSFont.Weight,
+        design: Font.Design
+    ) -> NSFont {
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        let systemDesign: NSFontDescriptor.SystemDesign
+        if design == .rounded {
+            systemDesign = .rounded
+        } else if design == .serif {
+            systemDesign = .serif
+        } else if design == .monospaced {
+            systemDesign = .monospaced
+        } else {
+            return base
+        }
+        guard let descriptor = base.fontDescriptor.withDesign(systemDesign),
+              let font = NSFont(descriptor: descriptor, size: size)
+        else {
+            return base
+        }
+        return font
+    }
+
+    private static func textMetrics(
+        for textStyle: Font.TextStyle
+    ) -> (style: NSFont.TextStyle, defaultPointSize: CGFloat) {
+        if textStyle == .largeTitle { return (.largeTitle, 26) }
+        if textStyle == .title { return (.title1, 22) }
+        if textStyle == .title2 { return (.title2, 17) }
+        if textStyle == .title3 { return (.title3, 15) }
+        if textStyle == .headline { return (.headline, 13) }
+        if textStyle == .subheadline { return (.subheadline, 11) }
+        if textStyle == .callout { return (.callout, 12) }
+        if textStyle == .footnote { return (.footnote, 10) }
+        if textStyle == .caption { return (.caption1, 10) }
+        if textStyle == .caption2 { return (.caption2, 10) }
+        return (.body, 13)
     }
 }
 
@@ -152,12 +255,69 @@ enum BurritoTheme {
     }
 }
 
+enum BurritoElevation {
+    case control
+    case surface
+    case floating
+}
+
+private struct BurritoElevationModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    let elevation: BurritoElevation
+    let isActive: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let metrics = shadowMetrics
+        if isActive {
+            content.shadow(
+                color: .black.opacity(metrics.opacity),
+                radius: metrics.radius,
+                y: metrics.offset
+            )
+        } else {
+            content
+        }
+    }
+
+    private var shadowMetrics: (opacity: Double, radius: CGFloat, offset: CGFloat) {
+        let contrastBoost = colorSchemeContrast == .increased ? 1.2 : 1
+        switch (elevation, colorScheme) {
+        case (.control, .light):
+            return (0.07 * contrastBoost, 2.5, 1)
+        case (.control, .dark):
+            return (0.24 * contrastBoost, 3.5, 1.5)
+        case (.surface, .light):
+            return (0.09 * contrastBoost, 9, 3)
+        case (.surface, .dark):
+            return (0.32 * contrastBoost, 11, 4)
+        case (.floating, .light):
+            return (0.18 * contrastBoost, 24, 12)
+        case (.floating, .dark):
+            return (0.48 * contrastBoost, 28, 14)
+        @unknown default:
+            return (0.09 * contrastBoost, 9, 3)
+        }
+    }
+}
+
+extension View {
+    func burritoElevation(
+        _ elevation: BurritoElevation = .surface,
+        isActive: Bool = true
+    ) -> some View {
+        modifier(BurritoElevationModifier(elevation: elevation, isActive: isActive))
+    }
+}
+
 struct BurritoSectionLabel: View {
     let title: String
 
     var body: some View {
         Text(title.uppercased())
-            .font(.spline(size: 10, weight: .medium))
+            .font(.spline(size: 10, weight: 450))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }
@@ -174,6 +334,7 @@ struct BurritoPill: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .burritoElevation(.control)
     }
 }
 
@@ -232,8 +393,8 @@ struct BurritoToggleRow: View {
 
     private var titleFont: Font {
         style == .settingsForm
-            ? .spline(size: 13, weight: .medium)
-            : .system(size: 13, weight: .medium)
+            ? .spline(size: 13, weight: 450)
+            : .system(size: 13, weight: 450)
     }
 
     private var subtitleFont: Font {
@@ -252,7 +413,7 @@ struct BurritoToggleRow: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(.white)
                         .frame(width: 16, height: 16)
-                        .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
+                        .burritoElevation(.control)
                         .padding(3)
                 }
         } else {
@@ -296,7 +457,7 @@ struct BurritoLanguagePicker: View {
             HStack(spacing: 12) {
                 if showsLabel {
                     Text("Language")
-                        .font(.spline(size: 13, weight: .medium))
+                        .font(.spline(size: 13, weight: 450))
                         .foregroundStyle(.primary)
                 }
 
@@ -315,6 +476,7 @@ struct BurritoLanguagePicker: View {
                 embedded ? Color.clear : BurritoTheme.controlFill,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
+            .burritoElevation(.control, isActive: !embedded)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -333,6 +495,7 @@ struct BurritoLanguagePicker: View {
                 .padding(.horizontal, 10)
                 .frame(height: 32)
                 .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .burritoElevation(.control)
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -379,6 +542,7 @@ struct BurritoLanguagePicker: View {
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
+            .burritoElevation(.control, isActive: selection == language.identifier)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

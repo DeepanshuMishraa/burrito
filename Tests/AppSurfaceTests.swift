@@ -1,9 +1,51 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import Burrito
 
 @Suite("App surfaces")
 struct AppSurfaceTests {
+    @Test("Numeric Spline fonts scale relative to their text style")
+    func numericSplineFontScalesRelativeToTextStyle() {
+        #expect(
+            BurritoFontMetrics.scaledSize(
+                12,
+                relativeTo: .caption,
+                preferredPointSize: 20
+            ) == 24
+        )
+    }
+
+    @Test("Numeric system fonts preserve requested designs")
+    func numericSystemFontPreservesDesign() {
+        let rounded = BurritoFontMetrics.systemFont(
+            size: 13,
+            weight: .medium,
+            design: .rounded
+        )
+        let serif = BurritoFontMetrics.systemFont(
+            size: 13,
+            weight: .medium,
+            design: .serif
+        )
+        let monospaced = BurritoFontMetrics.systemFont(
+            size: 13,
+            weight: .medium,
+            design: .monospaced
+        )
+
+        #expect(rounded.familyName?.contains("Rounded") == true)
+        #expect(
+            serif.familyName.map { $0.contains("Serif") || $0 == "New York" } == true
+        )
+        #expect(
+            monospaced.familyName.map {
+                $0.contains("Monospaced") || $0 == "SF Mono"
+            } == true
+        )
+    }
+
     @Test("Calendar meeting links skip non-web links before a web link")
     func calendarMeetingLinkSkipsNonWebLinks() {
         let location = "Dial tel:+15551234 or join https://meet.example.com/weekly"

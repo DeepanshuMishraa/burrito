@@ -216,7 +216,9 @@ enum SeedData {
                     )
                 )
             } else if let stored = existing.first(where: { $0.builtInID == template.rawValue }),
-                      stored.instructions == template.legacyInstructions {
+                      stored.instructions == template.legacyInstructions
+                        || stored.instructions == template.previousInstructions
+                        || stored.instructions == template.expandedInstructions {
                 stored.instructions = template.instructions
             }
         }

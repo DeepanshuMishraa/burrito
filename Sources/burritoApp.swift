@@ -38,7 +38,8 @@ struct burritoApp: App {
             )
         }
         .modelContainer(container)
-        .defaultSize(width: 1_180, height: 760)
+        .defaultSize(width: 1_180, height: 730)
+        .defaultPosition(.center)
         .windowStyle(.hiddenTitleBar)
         .commands {
             BurritoCommands()
@@ -65,7 +66,7 @@ struct burritoApp: App {
     }
 }
 
-private enum BurritoMenuBarArtwork {
+enum BurritoMenuBarArtwork {
     private static let idle = makeImage(isRecording: false)
     private static let recording = makeImage(isRecording: true)
 

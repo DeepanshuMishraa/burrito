@@ -159,8 +159,8 @@ enum LocalMemory {
         guard limit > 0 else { return [] }
         let queryTerms = terms(in: question)
         let candidates = documents.flatMap { document in
-            document.segments.map { segment in
-                let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+            let titleMatches = queryTerms.intersection(terms(in: document.title)).count
+            return document.segments.map { segment in
                 let passageMatches = queryTerms.intersection(terms(in: segment.text)).count
                 return (
                     evidence: MemoryEvidence(
@@ -364,6 +364,106 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .summary:
             """
+            Act as an executive briefing editor. Compress the source into the smallest useful account
+            for a busy reader who needs the bottom line, not a record of every topic discussed.
+
+            Output:
+            - `## Bottom Line`: one paragraph of at most three sentences stating the dominant subject,
+              why it mattered, and the principal outcome or conclusion.
+            - `## Essential Points`: include only as many importance-ranked bullets as the source
+              supports, with no minimum and normally no more than eight. Each bullet must add a distinct
+              fact, argument, finding, constraint, or consequence.
+            - `## Outcomes and Next Steps`: include only explicit decisions, commitments, or next steps.
+            - `## Unresolved`: include only questions or uncertainties that materially affect the bottom line.
+
+            Selection policy:
+            - Favor conclusions and decision-relevant facts over background, process detail, and examples.
+            - Include a supporting example only when the central point would be unclear without it.
+            - Merge repeated ideas. Exclude greetings, tangents, minor asides, and speaker-by-speaker narration.
+            - Keep proposals, opinions, and confirmed outcomes visibly distinct.
+            - Do not turn this into comprehensive notes, a lesson, or meeting minutes.
+            - Omit optional sections when unsupported. Never invent context, rationale, ownership, or next steps.
+            """
+        case .detailed:
+            """
+            Act as a technical archivist. Build a durable reference record that preserves the source's
+            material detail, reasoning, and nuance without reproducing it speaker by speaker.
+
+            Output:
+            - `## Scope and Context`: identify the subject, purpose, boundaries, and relevant background.
+            - Create descriptive `##` sections for every major topic in a logical reading order.
+            - Within each topic, use `###` subsections where useful to separate how something works,
+              supporting evidence or examples, alternatives, constraints, and consequences.
+            - Add `## Process or Timeline` when sequence is essential to understanding events or instructions.
+            - End with any supported `## Conclusions`, `## Decisions`, and `## Open Questions` sections.
+
+            Coverage policy:
+            - Optimize for retrieval and completeness, not brevity. Preserve meaningful secondary points,
+              caveats, exceptions, dependencies, figures, dates, commands, and ordered steps.
+            - Reassemble fragmented remarks under the topic they clarify; do not preserve transcript order
+              when it obscures the subject.
+            - Attribute claims when identity affects authority, disagreement, or interpretation.
+            - Preserve uncertainty and competing viewpoints rather than resolving them yourself.
+            - Merge only genuine repetition. Do not manufacture explanations, transitions, or conclusions.
+            - Do not add study exercises or force operational meeting fields onto non-meeting material.
+            """
+        case .studyNotes:
+            """
+            Act as an instructional designer. Turn the source into a self-contained learning aid that helps
+            a learner understand, connect, and later recall the taught material.
+
+            Output:
+            - `## Learning Map`: briefly show the concepts covered and how they relate.
+            - `## Learning Objectives`: include only as many observable outcomes as the source supports,
+              with no minimum and normally no more than seven. Phrase each as what the learner can explain,
+              compare, derive, or apply using this material.
+            - Create one `##` section per major concept. For each, separate `### Definition`,
+              `### How It Works`, and `### Why It Matters` when the source supports them.
+            - Add source-backed `### Examples`, derivations, or procedures directly beneath their concept.
+            - `## Key Terms`: define only terminology introduced by the source.
+            - `## Check Your Understanding`: write recall and reasoning questions answerable entirely from
+              the notes. Do not provide an answer key.
+            - Add `## Common Pitfalls` only for misconceptions, edge cases, or warnings actually discussed.
+
+            Teaching policy:
+            - Preserve formulas, technical terms, causal links, prerequisites, and step order exactly.
+            - Make implicit connections only when the source directly supports them; never fill gaps with
+              outside knowledge or invented examples.
+            - Keep definitions, mechanisms, evidence, and examples distinct so the learner can study them.
+            - Do not frame decisions or action items as meeting minutes unless they are themselves lesson content.
+            """
+        case .meeting:
+            """
+            Act as an operations recorder. Produce a decision-and-accountability record that lets the team
+            act after the meeting without rereading the discussion.
+
+            Output:
+            - `## Meeting Outcome`: state the purpose, overall result, and current status in one short paragraph.
+            - `## Discussion by Topic`: for each agenda topic, capture only context needed to understand
+              proposals, objections, tradeoffs, and the resulting position.
+            - `## Decision Log`: a Markdown table with `Decision`, `Rationale`, and `Constraints` columns.
+              Include only decisions explicitly reached; write `Not stated` for omitted rationale or constraints.
+            - `## Action Register`: a Markdown table with `Action`, `Owner`, and `Due` columns. Use
+              `Unassigned` and `Not stated` rather than guessing missing values.
+            - `## Risks and Blockers`: include active dependencies, risks, or blockers requiring attention.
+            - `## Open Questions`: include unresolved items and who must answer them when explicitly stated.
+            - `## Follow-up`: include a stated next meeting, checkpoint, or future agenda.
+
+            Recording policy:
+            - Attribute proposals, objections, decisions, and commitments when attribution affects accountability.
+            - Never convert discussion into a decision, a suggestion into an action, or attendance into agreement.
+            - Never infer owners, deadlines, consensus, status, or priority.
+            - Preserve project terms, quantities, dates, commitments, and explicitly identified participants.
+            - Exclude greetings, commentary about the meeting itself, and background unrelated to an outcome.
+            - Omit every unsupported section instead of writing placeholders, except required table cells.
+            """
+        }
+    }
+
+    var expandedInstructions: String {
+        switch self {
+        case .summary:
+            """
             Produce a concise, high-signal summary for someone who did not hear the recording.
 
             Structure:
@@ -445,6 +545,28 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var previousInstructions: String {
+        switch self {
+        case .summary:
+            instructions.replacingOccurrences(
+                of: "include only as many importance-ranked bullets as the source\n"
+                    + "  supports, with no minimum and normally no more than eight. Each bullet must add a distinct",
+                with: "four to eight importance-ranked bullets. Each bullet must add a\n"
+                    + "  distinct"
+            )
+        case .studyNotes:
+            instructions.replacingOccurrences(
+                of: "include only as many observable outcomes as the source supports,\n"
+                    + "  with no minimum and normally no more than seven. Phrase each as what the learner can explain,\n"
+                    + "  compare, derive, or apply using this material.",
+                with: "three to seven observable outcomes phrased as what the learner can\n"
+                    + "  explain, compare, derive, or apply using this material."
+            )
+        case .detailed, .meeting:
+            instructions
+        }
+    }
+
     var legacyInstructions: String {
         switch self {
         case .summary:
@@ -462,6 +584,8 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         guard let builtIn = allCases.first(where: {
             $0.name == template.name
                 && ($0.instructions == template.instructions
+                    || $0.previousInstructions == template.instructions
+                    || $0.expandedInstructions == template.instructions
                     || $0.legacyInstructions == template.instructions)
         }) else {
             return template.instructions

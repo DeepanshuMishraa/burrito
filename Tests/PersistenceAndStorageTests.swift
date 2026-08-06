@@ -6,6 +6,18 @@ import Testing
 @MainActor
 @Suite("Persistence")
 struct PersistenceTests {
+    enum PriorInstructionVersion: CaseIterable, Sendable {
+        case previous
+        case expanded
+
+        func instructions(for template: BuiltInTemplate) -> String {
+            switch self {
+            case .previous: template.previousInstructions
+            case .expanded: template.expandedInstructions
+            }
+        }
+    }
+
     @Test("A versioned archive round-trips notes, transcripts, folders, and templates")
     func archiveRoundTrip() throws {
         let folder = Folder(
@@ -237,6 +249,37 @@ struct PersistenceTests {
             name: template.name,
             symbol: template.symbol,
             instructions: template.legacyInstructions
+        )
+        context.insert(stored)
+        try context.save()
+
+        try SeedData.insertBuiltInTemplatesIfNeeded(context: context)
+
+        #expect(stored.instructions == template.instructions)
+    }
+
+    @Test(
+        "Seed data upgrades every recognized prior built-in prompt",
+        arguments: BuiltInTemplate.allCases,
+        PriorInstructionVersion.allCases
+    )
+    func upgradesPreviousExpandedBuiltInPrompts(
+        template: BuiltInTemplate,
+        version: PriorInstructionVersion
+    ) throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let stored = NoteTemplate(
+            builtInID: template.rawValue,
+            name: template.name,
+            symbol: template.symbol,
+            instructions: version.instructions(for: template)
         )
         context.insert(stored)
         try context.save()
