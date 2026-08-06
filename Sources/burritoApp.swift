@@ -110,7 +110,7 @@ private final class InitialWindowSizeNSView: NSView {
     }
 }
 
-private enum BurritoMenuBarArtwork {
+enum BurritoMenuBarArtwork {
     private static let idle = makeImage(isRecording: false)
     private static let recording = makeImage(isRecording: true)
 

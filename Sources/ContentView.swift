@@ -465,6 +465,7 @@ struct ContentView: View {
                     SidebarNavigationButton(
                         title: "Ask Burrito",
                         systemImage: "at",
+                        usesBurritoGlyph: true,
                         count: 0,
                         isSelected: sidebarSelection == .memory
                     ) {
@@ -3120,6 +3121,7 @@ private struct SidebarNavigationButton: View {
     let title: String
     let systemImage: String
     var markerColor: Color? = nil
+    var usesBurritoGlyph = false
     let count: Int
     let isSelected: Bool
     let action: () -> Void
@@ -3143,6 +3145,12 @@ private struct SidebarNavigationButton: View {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(markerColor)
                             .frame(width: 8, height: 8)
+                    } else if usesBurritoGlyph {
+                        Image(nsImage: BurritoMenuBarArtwork.image(isRecording: false))
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
                     } else {
                         BurritoIcon(name: systemImage)
                             .foregroundStyle(isSelected ? BurritoTheme.accent : (isHovered ? .primary : .secondary))
@@ -4884,6 +4892,10 @@ private struct TemplatePromptDetail: View {
     @State private var activeTab: Tab = .instructions
     @State private var copiedText = false
 
+    private var displayedInstructions: String {
+        BuiltInTemplate.resolvedInstructions(for: template.snapshot)
+    }
+
     private var systemPrompt: String {
         GenerationPrompt.finalInstructions(template: template.snapshot)
     }
@@ -4977,7 +4989,7 @@ private struct TemplatePromptDetail: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(
-                        activeTab == .instructions ? template.instructions : systemPrompt,
+                        activeTab == .instructions ? displayedInstructions : systemPrompt,
                         forType: .string
                     )
                     copiedText = true
@@ -5002,7 +5014,7 @@ private struct TemplatePromptDetail: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if activeTab == .instructions {
-                        Text(template.instructions)
+                        Text(displayedInstructions)
                             .font(.spline(size: 13, weight: 400))
                             .foregroundStyle(.primary.opacity(0.9))
                             .lineSpacing(6)
@@ -5089,12 +5101,18 @@ private struct MarkdownNoteContent: View {
         case .orderedList(let items):
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 11) {
-                        Text("\(index + 1)")
-                            .font(.spline(size: 11, weight: 600))
-                            .foregroundStyle(BurritoTheme.accent)
-                            .frame(width: 21, height: 21)
-                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(BurritoTheme.controlFill)
+                                .frame(width: 20, height: 20)
+                                .overlay {
+                                    Circle().stroke(BurritoTheme.softBorder)
+                                }
+                            Text("\(index + 1)")
+                                .font(.spline(size: 10, weight: 600))
+                                .foregroundStyle(BurritoTheme.accent)
+                        }
                         inlineText(item)
                             .font(.spline(size: 14, weight: 400))
                             .lineSpacing(4)
@@ -5102,18 +5120,23 @@ private struct MarkdownNoteContent: View {
                 }
             }
         case .quote(let text):
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(BurritoTheme.accent)
-                    .frame(width: 3)
+            HStack(alignment: .top, spacing: 10) {
+                BurritoIcon(name: text.contains("Unverified") ? "shield.exclamation" : "info", size: 14)
+                    .foregroundStyle(BurritoTheme.accent)
+                    .padding(.top, 2)
+
                 inlineText(text)
-                    .font(.spline(size: 14, weight: 400).italic())
+                    .font(.spline(size: 12, weight: 400))
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)
-                    .padding(.vertical, 8)
             }
             .padding(.horizontal, 14)
-            .background(BurritoTheme.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.vertical, 10)
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(BurritoTheme.softBorder)
+            }
         case .code(let text):
             ScrollView(.horizontal) {
                 Text(text)
@@ -5528,6 +5551,9 @@ private struct MemoryChatView: View {
                                 }
                             }
 
+                            Color.clear
+                                .frame(height: 1)
+                                .id("chat-bottom-anchor")
                         }
                     }
                     .frame(maxWidth: 760, alignment: .leading)
@@ -5537,7 +5563,19 @@ private struct MemoryChatView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollIndicators(.hidden)
+                .background(ThinScrollerConfigurator())
+                .overlay(alignment: .trailing) {
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .fill(Color.primary.opacity(0.2))
+                        .frame(width: 3)
+                        .padding(.trailing, 3)
+                        .padding(.vertical, 12)
+                        .allowsHitTesting(false)
+                }
                 .onChange(of: session.messages.count) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: session.messages.last?.text) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: session.isAnswering) { _, answering in
@@ -5730,14 +5768,14 @@ private struct MemoryChatView: View {
 
     private func userMessageBubble(_ msg: MemoryChatMessage) -> some View {
         HStack {
-            Spacer(minLength: 60)
-            VStack(alignment: .trailing, spacing: 5) {
+            Spacer(minLength: 80)
+            VStack(alignment: .trailing, spacing: 4) {
                 HStack(spacing: 6) {
                     Text("YOU")
                         .font(.spline(size: 9, weight: 450))
-                        .foregroundStyle(BurritoTheme.accent)
+                        .foregroundStyle(.tertiary)
                     Text(msg.timestamp, format: .dateTime.hour().minute())
-                        .font(.spline(size: 9, weight: .regular))
+                        .font(.spline(size: 9, weight: 400))
                         .foregroundStyle(.tertiary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
@@ -5749,15 +5787,20 @@ private struct MemoryChatView: View {
                                 .font(.spline(size: 10, weight: 450))
                         }
                         .foregroundStyle(BurritoTheme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
                     }
                     Text(msg.text)
-                        .font(.spline(size: 13, weight: .regular))
+                        .font(.spline(size: 13, weight: 400))
                         .foregroundStyle(.primary)
                 }
-                .padding(14)
-                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.accent.opacity(0.3))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
                 }
             }
         }
@@ -5766,13 +5809,7 @@ private struct MemoryChatView: View {
     private func assistantMessageCard(_ msg: MemoryChatMessage) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(BurritoTheme.accentSoft)
-                        .frame(width: 22, height: 22)
-                    BurritoIcon(name: "sparkles", size: 11)
-                        .foregroundStyle(BurritoTheme.accent)
-                }
+                BurritoAppIcon(size: 18)
                 Text("Burrito AI")
                     .font(.spline(size: 11, weight: 450))
                     .foregroundStyle(.primary)
@@ -5810,7 +5847,7 @@ private struct MemoryChatView: View {
 
             if let error = msg.errorMessage {
                 BurritoLabel(error, systemImage: "exclamationmark.triangle")
-                    .font(.spline(size: 11, weight: .regular))
+                    .font(.spline(size: 11, weight: 400))
                     .foregroundStyle(.red)
             } else {
                 MarkdownNoteContent(
@@ -5820,9 +5857,9 @@ private struct MemoryChatView: View {
             }
         }
         .padding(16)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(BurritoTheme.softBorder)
         }
     }
 
@@ -5831,10 +5868,8 @@ private struct MemoryChatView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if let lastID = session.messages.last?.id {
-            withAnimation(reduceMotion ? nil : .burritoSpring) {
-                proxy.scrollTo(lastID, anchor: .bottom)
-            }
+        withAnimation(reduceMotion ? nil : .burritoSpring) {
+            proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
         }
     }
 
@@ -5961,6 +5996,27 @@ private struct MemoryChatView: View {
     }
 }
 
+private struct ThinScrollerConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            var ancestor = view.superview
+            while let current = ancestor {
+                if let scrollView = current as? NSScrollView {
+                    scrollView.scrollerStyle = .overlay
+                    scrollView.verticalScroller?.controlSize = .mini
+                    scrollView.scrollerKnobStyle = .dark
+                    break
+                }
+                ancestor = current.superview
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 private struct BurritoChatGenerationStatus: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -5970,11 +6026,7 @@ private struct BurritoChatGenerationStatus: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            BurritoAppIcon()
 
             ZStack(alignment: .leading) {
                 Text(phrases[phraseIndex])
