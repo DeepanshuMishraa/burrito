@@ -36,8 +36,14 @@ struct AppSurfaceTests {
         )
 
         #expect(rounded.familyName?.contains("Rounded") == true)
-        #expect(serif.familyName?.contains("Serif") == true)
-        #expect(monospaced.familyName?.contains("Monospaced") == true)
+        #expect(
+            serif.familyName.map { $0.contains("Serif") || $0 == "New York" } == true
+        )
+        #expect(
+            monospaced.familyName.map {
+                $0.contains("Monospaced") || $0 == "SF Mono"
+            } == true
+        )
     }
 
     @Test("Calendar meeting links skip non-web links before a web link")
