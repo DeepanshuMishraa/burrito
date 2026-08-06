@@ -57,7 +57,6 @@ struct MarkdownDocument: Equatable, Sendable {
             }
             if trimmed.isEmpty {
                 flushParagraph()
-                flushLists()
                 continue
             }
             if ["---", "***", "___"].contains(trimmed) {

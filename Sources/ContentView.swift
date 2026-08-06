@@ -1308,12 +1308,24 @@ private struct CommandPaletteView: View {
         }
         .task {
             let sources = notes.map(CommandPaletteNote.Source.init)
-            let index = await Task.detached(priority: .userInitiated) {
-                sources
-                    .map(CommandPaletteNote.init)
-                    .sorted { $0.updatedAt > $1.updatedAt }
-            }.value
-            guard !Task.isCancelled else { return }
+            let indexTask = Task.detached(priority: .userInitiated) {
+                var index: [CommandPaletteNote] = []
+                index.reserveCapacity(sources.count)
+                for source in sources {
+                    try Task.checkCancellation()
+                    index.append(CommandPaletteNote(source: source))
+                }
+                try Task.checkCancellation()
+                index.sort { $0.updatedAt > $1.updatedAt }
+                try Task.checkCancellation()
+                return index
+            }
+            let index = await withTaskCancellationHandler {
+                try? await indexTask.value
+            } onCancel: {
+                indexTask.cancel()
+            }
+            guard let index, !Task.isCancelled else { return }
             indexedNotes = index
             selectedResult = resultIDs.first
             await Task.yield()
@@ -5466,6 +5478,7 @@ private struct MemoryChatView: View {
     let openCitation: (MemoryCitation) -> Void
 
     @FocusState private var questionFocused: Bool
+    @State private var pendingScrollTask: Task<Void, Never>?
 
     private var scopedDocument: MemoryDocument? {
         guard let scopedDocumentID = session.scopedDocumentID else { return nil }
@@ -5723,6 +5736,10 @@ private struct MemoryChatView: View {
         }
         .background(BurritoTheme.canvas)
         .onAppear { questionFocused = true }
+        .onDisappear {
+            pendingScrollTask?.cancel()
+            pendingScrollTask = nil
+        }
     }
 
     private var mentionPicker: some View {
@@ -5921,12 +5938,17 @@ private struct MemoryChatView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
-        if animated && !reduceMotion {
-            withAnimation(.burritoSpring) {
+        pendingScrollTask?.cancel()
+        pendingScrollTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            guard !Task.isCancelled else { return }
+            if animated && !reduceMotion {
+                withAnimation(.burritoSpring) {
+                    proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
+                }
+            } else {
                 proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
             }
-        } else {
-            proxy.scrollTo("chat-bottom-anchor", anchor: .bottom)
         }
     }
 
@@ -6053,25 +6075,50 @@ private struct MemoryChatView: View {
     }
 }
 
+private final class BurritoThinScroller: NSScroller {
+    override class func scrollerWidth(
+        for controlSize: NSControl.ControlSize,
+        scrollerStyle: NSScroller.Style
+    ) -> CGFloat {
+        4
+    }
+}
+
 private struct ThinScrollerConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            var ancestor = view.superview
-            while let current = ancestor {
-                if let scrollView = current as? NSScrollView {
-                    scrollView.scrollerStyle = .overlay
-                    scrollView.verticalScroller?.controlSize = .mini
-                    scrollView.scrollerKnobStyle = .dark
-                    break
+    final class View: NSView {
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            configureScrollView()
+        }
+
+        func configureScrollView() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                var ancestor = superview
+                while let current = ancestor {
+                    if let scrollView = current as? NSScrollView {
+                        scrollView.scrollerStyle = .overlay
+                        scrollView.autohidesScrollers = true
+                        if !(scrollView.verticalScroller is BurritoThinScroller) {
+                            let scroller = BurritoThinScroller(frame: .zero)
+                            scroller.controlSize = .mini
+                            scrollView.verticalScroller = scroller
+                        }
+                        break
+                    }
+                    ancestor = current.superview
                 }
-                ancestor = current.superview
             }
         }
-        return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func makeNSView(context: Context) -> View {
+        View()
+    }
+
+    func updateNSView(_ nsView: View, context: Context) {
+        nsView.configureScrollView()
+    }
 }
 
 private struct BurritoChatGenerationStatus: View {

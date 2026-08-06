@@ -82,4 +82,23 @@ struct MarkdownDocumentTests {
             ]
         )
     }
+
+    @Test("Keeps ordered-list numbering across blank lines")
+    func keepsOrderedListNumberingAcrossBlankLines() {
+        let document = MarkdownDocument.parse(
+            """
+            1. First point
+
+            2. Second point
+
+            3. Third point
+            """
+        )
+
+        #expect(
+            document.blocks == [
+                .orderedList(["First point", "Second point", "Third point"]),
+            ]
+        )
+    }
 }
