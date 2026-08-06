@@ -819,11 +819,10 @@ struct LocalMemoryTests {
         let validURL = evidence.citationURL?.absoluteString ?? ""
         let inventedURL = "burrito://memory/\(UUID().uuidString)/\(UUID().uuidString)"
 
+        let supportedAnswer = "Launch is October 12. [source](\(validURL))"
         #expect(
-            MemoryAnswer.validated(
-                "Launch is October 12. [source](\(validURL))",
-                against: [evidence]
-            ) != nil
+            MemoryAnswer.validated(supportedAnswer, against: [evidence])
+                == supportedAnswer
         )
         #expect(MemoryAnswer.validated("Launch is October 12.", against: [evidence]) == nil)
         #expect(
@@ -876,8 +875,7 @@ struct LocalMemoryTests {
                 against: [evidence]
             )
         )
-        #expect(answer.contains(explanation))
-        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+        #expect(answer == explanation)
     }
 
     @Test("Memory answers strip insufficient-evidence markers when citations are present")
@@ -903,8 +901,7 @@ struct LocalMemoryTests {
                 against: [evidence]
             )
         )
-        #expect(answer.contains(explanation))
-        #expect(!answer.contains("INSUFFICIENT_EVIDENCE:"))
+        #expect(answer == explanation)
     }
 
     @Test("Memory answers validate claim grounding against evidence")
@@ -922,12 +919,59 @@ struct LocalMemoryTests {
             )
         )
         let validURL = evidence.citationURL?.absoluteString ?? ""
-        let claim = "The launch date is set. [source](\(validURL))"
+        let claim = "The launch date is October 12. [source](\(validURL))"
 
         let answer = try #require(
             MemoryAnswer.validated(claim, against: [evidence])
         )
-        #expect(answer.contains(claim))
+        #expect(answer == claim)
+    }
+
+    @Test("Memory answers reject claims contradicted by cited evidence")
+    func rejectsContradictedGrounding() {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let validURL = evidence.citationURL?.absoluteString ?? ""
+        let claim = "The launch date is October 13. [source](\(validURL))"
+
+        #expect(MemoryAnswer.validated(claim, against: [evidence]) == nil)
+    }
+
+    @Test("Recovered tool answers append exact meeting citations without a notice")
+    func recoversToolAnswerWithExactSources() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let citation = evidence.citationURL?.absoluteString ?? ""
+        let claim = "The launch date is October 12."
+
+        let answer = try #require(
+            MemoryAnswer.recoveredToolAnswer(claim, against: [evidence])
+        )
+        #expect(
+            answer == claim
+                + "\n\n**Meeting sources:** [Launch planning](\(citation))"
+        )
+        #expect(!answer.contains("Unverified AI answer"))
     }
 }
 
@@ -1111,6 +1155,46 @@ struct FoundationModelAdapterTests {
         #expect(response == "Step one. Final step.")
         let lastUpdate = await recorder.updates.last
         #expect(lastUpdate == response)
+    }
+
+    @Test("Streaming emits a complete throttled final update once")
+    func emitsCompleteThrottledFinalUpdateOnce() async throws {
+        let toolCall = AI.ToolCall(id: "call-1", name: "lookup", arguments: [:])
+        let model = MockLanguageModel(responses: [
+            [
+                .textDelta("Step one. "),
+                .toolCall(toolCall),
+                .finish(reason: .toolCalls, usage: Usage()),
+            ],
+            [
+                .textDelta("Final "),
+                .textDelta("step."),
+                .finish(reason: .stop, usage: Usage()),
+            ],
+        ])
+        let adapter = FoundationModelAdapter(model: model)
+        let recorder = StreamedTextRecorder()
+        let tool = AI.Tool(
+            name: "lookup",
+            description: "Look up context",
+            parameters: ["type": "object", "properties": [:]],
+            execute: { _ in ["result": "done"] }
+        )
+
+        let response = try await adapter.completeChatStreaming(
+            instructions: "Use the tool.",
+            conversation: [],
+            question: "Continue across steps.",
+            tools: [tool],
+            maximumResponseTokens: 512,
+            onTextUpdate: { recorder.record($0) }
+        )
+        let updates = await recorder.updates
+
+        #expect(response == "Step one. Final step.")
+        #expect(updates.last == response)
+        #expect(updates.filter { $0 == response }.count == 1)
+        #expect(!updates.contains("Step one. Final Final step."))
     }
 
     @Test("Injects prefetched meeting evidence before the question")

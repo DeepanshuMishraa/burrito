@@ -35,7 +35,7 @@ struct MarkdownDocumentTests {
                 .heading(level: 2, text: "Key points"),
                 .unorderedList(["First", "Second"]),
                 .orderedList(["Start here", "Continue"]),
-                .quote("Remember this."),
+                .quote(kind: .informational, text: "Remember this."),
                 .divider,
                 .code("let value = 1"),
             ]
@@ -78,7 +78,7 @@ struct MarkdownDocumentTests {
                     "Is **Friday** confirmed?",
                     "Who owns the rollout?",
                 ]),
-                .quote("Follow up with Priya."),
+                .quote(kind: .informational, text: "Follow up with Priya."),
             ]
         )
     }
@@ -98,6 +98,17 @@ struct MarkdownDocumentTests {
         #expect(
             document.blocks == [
                 .orderedList(["First point", "Second point", "Third point"]),
+            ]
+        )
+    }
+
+    @Test("Parses warning quotes from a stable marker")
+    func parsesWarningQuoteMarker() {
+        let document = MarkdownDocument.parse("> [!WARNING] Verify this claim.")
+
+        #expect(
+            document.blocks == [
+                .quote(kind: .warning, text: "Verify this claim."),
             ]
         )
     }

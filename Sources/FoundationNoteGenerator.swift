@@ -540,7 +540,81 @@ enum MemoryAnswer {
         if destinations.isEmpty {
             guard isInsufficientEvidence else { return nil }
         }
+        guard isInsufficientEvidence
+                || claimsAreSupported(in: normalizedAnswer, by: evidence)
+        else {
+            return nil
+        }
         return normalizedAnswer
+    }
+
+    private static func claimsAreSupported(
+        in answer: String,
+        by evidence: [MemoryEvidence]
+    ) -> Bool {
+        guard let citationPattern = try? NSRegularExpression(
+            pattern: #"\[[^\]]+\]\((burrito://memory/[^)]+)\)"#
+        ) else {
+            return false
+        }
+        var evidenceByCitation: [String: MemoryEvidence] = [:]
+        for item in evidence {
+            guard let citation = item.citationURL?.absoluteString else { continue }
+            evidenceByCitation[citation] = item
+        }
+
+        var evaluatedClaim = false
+        for rawLine in answer.split(whereSeparator: \Character.isNewline) {
+            let line = String(rawLine)
+            let range = NSRange(line.startIndex..<line.endIndex, in: line)
+            let matches = citationPattern.matches(in: line, range: range)
+            var claimStart = line.startIndex
+            for match in matches {
+                guard let citationRange = Range(match.range(at: 1), in: line) else {
+                    return false
+                }
+                guard let item = evidenceByCitation[String(line[citationRange])],
+                      let matchRange = Range(match.range, in: line)
+                else {
+                    return false
+                }
+                let claim = factualClause(in: String(line[claimStart..<matchRange.lowerBound]))
+                claimStart = matchRange.upperBound
+                let claimTerms = groundingTerms(in: claim)
+                guard !claimTerms.isEmpty else { continue }
+                evaluatedClaim = true
+                let evidenceTerms = groundingTerms(in: item.segment.text)
+                guard claimTerms.isSubset(of: evidenceTerms) else { return false }
+            }
+        }
+        return evaluatedClaim
+    }
+
+    private static func factualClause(in text: String) -> String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = value.last, ".!?".contains(last) {
+            value.removeLast()
+            value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let boundary = value.lastIndex(where: { ".!?".contains($0) }) else {
+            return value
+        }
+        return String(value[value.index(after: boundary)...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func groundingTerms(in text: String) -> Set<String> {
+        let ignored: Set<String> = [
+            "a", "an", "and", "are", "as", "at", "be", "been", "being", "but", "by",
+            "for", "from", "in", "is", "it", "its", "of", "on", "or", "that", "the",
+            "these", "this", "those", "to", "was", "were", "with",
+        ]
+        return Set(
+            text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                .lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty && !ignored.contains($0) }
+        )
     }
 
     static func recoveredToolAnswer(
@@ -985,6 +1059,7 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         var currentStepText = ""
         var finishReason: FinishReason?
         var lastUpdate: ContinuousClock.Instant?
+        var lastEmittedText: String?
 
         for try await part in result.fullStream {
             switch part {
@@ -994,14 +1069,21 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
                 currentStepText += delta
                 let now = ContinuousClock.now
                 if lastUpdate.map({ $0.duration(to: now) >= updateInterval }) ?? true {
-                    await onTextUpdate(accumulatedText + currentStepText)
+                    let update = accumulatedText + currentStepText
+                    if update != lastEmittedText {
+                        await onTextUpdate(update)
+                        lastEmittedText = update
+                    }
                     lastUpdate = now
                 }
             case .finishStep(let step):
                 let completedStepText = step.text.isEmpty ? currentStepText : step.text
                 accumulatedText += completedStepText
                 currentStepText = ""
-                await onTextUpdate(accumulatedText)
+                if accumulatedText != lastEmittedText {
+                    await onTextUpdate(accumulatedText)
+                    lastEmittedText = accumulatedText
+                }
             case .finish(let reason, _):
                 finishReason = reason
             default:
@@ -1012,7 +1094,9 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
             throw BurritoError.generationFailed(details: contentFilterMessage)
         }
         let finalText = accumulatedText + currentStepText
-        await onTextUpdate(finalText)
+        if finalText != lastEmittedText {
+            await onTextUpdate(finalText)
+        }
         return finalText
     }
 

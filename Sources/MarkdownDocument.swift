@@ -1,12 +1,17 @@
 import Foundation
 
 struct MarkdownDocument: Equatable, Sendable {
+    enum QuoteKind: Equatable, Sendable {
+        case informational
+        case warning
+    }
+
     enum Block: Equatable, Sendable {
         case heading(level: Int, text: String)
         case paragraph(String)
         case unorderedList([String])
         case orderedList([String])
-        case quote(String)
+        case quote(kind: QuoteKind, text: String)
         case code(String)
         case divider
     }
@@ -86,12 +91,8 @@ struct MarkdownDocument: Equatable, Sendable {
             if trimmed.hasPrefix(">") {
                 flushParagraph()
                 flushLists()
-                blocks.append(
-                    .quote(
-                        String(trimmed.dropFirst())
-                            .trimmingCharacters(in: .whitespaces)
-                    )
-                )
+                let quote = quote(from: trimmed)
+                blocks.append(.quote(kind: quote.kind, text: quote.text))
                 continue
             }
             flushLists()
@@ -180,5 +181,19 @@ struct MarkdownDocument: Equatable, Sendable {
             return nil
         }
         return String(line[line.index(period, offsetBy: 2)...])
+    }
+
+    private static func quote(from line: String) -> (kind: QuoteKind, text: String) {
+        let content = String(line.dropFirst())
+            .trimmingCharacters(in: .whitespaces)
+        let warningMarker = "[!WARNING]"
+        guard content.hasPrefix(warningMarker) else {
+            return (.informational, content)
+        }
+        return (
+            .warning,
+            String(content.dropFirst(warningMarker.count))
+                .trimmingCharacters(in: .whitespaces)
+        )
     }
 }

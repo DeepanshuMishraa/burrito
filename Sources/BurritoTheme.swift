@@ -255,6 +255,63 @@ enum BurritoTheme {
     }
 }
 
+enum BurritoElevation {
+    case control
+    case surface
+    case floating
+}
+
+private struct BurritoElevationModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    let elevation: BurritoElevation
+    let isActive: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let metrics = shadowMetrics
+        if isActive {
+            content.shadow(
+                color: .black.opacity(metrics.opacity),
+                radius: metrics.radius,
+                y: metrics.offset
+            )
+        } else {
+            content
+        }
+    }
+
+    private var shadowMetrics: (opacity: Double, radius: CGFloat, offset: CGFloat) {
+        let contrastBoost = colorSchemeContrast == .increased ? 1.2 : 1
+        switch (elevation, colorScheme) {
+        case (.control, .light):
+            return (0.07 * contrastBoost, 2.5, 1)
+        case (.control, .dark):
+            return (0.24 * contrastBoost, 3.5, 1.5)
+        case (.surface, .light):
+            return (0.09 * contrastBoost, 9, 3)
+        case (.surface, .dark):
+            return (0.32 * contrastBoost, 11, 4)
+        case (.floating, .light):
+            return (0.18 * contrastBoost, 24, 12)
+        case (.floating, .dark):
+            return (0.48 * contrastBoost, 28, 14)
+        @unknown default:
+            return (0.09 * contrastBoost, 9, 3)
+        }
+    }
+}
+
+extension View {
+    func burritoElevation(
+        _ elevation: BurritoElevation = .surface,
+        isActive: Bool = true
+    ) -> some View {
+        modifier(BurritoElevationModifier(elevation: elevation, isActive: isActive))
+    }
+}
+
 struct BurritoSectionLabel: View {
     let title: String
 
@@ -277,6 +334,7 @@ struct BurritoPill: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .burritoElevation(.control)
     }
 }
 
@@ -355,7 +413,7 @@ struct BurritoToggleRow: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(.white)
                         .frame(width: 16, height: 16)
-                        .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
+                        .burritoElevation(.control)
                         .padding(3)
                 }
         } else {
@@ -418,6 +476,7 @@ struct BurritoLanguagePicker: View {
                 embedded ? Color.clear : BurritoTheme.controlFill,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
+            .burritoElevation(.control, isActive: !embedded)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -436,6 +495,7 @@ struct BurritoLanguagePicker: View {
                 .padding(.horizontal, 10)
                 .frame(height: 32)
                 .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .burritoElevation(.control)
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
@@ -482,6 +542,7 @@ struct BurritoLanguagePicker: View {
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
+            .burritoElevation(.control, isActive: selection == language.identifier)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
