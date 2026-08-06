@@ -171,19 +171,22 @@ private struct SettingsPane: View {
             case .general:
                 VStack(alignment: .leading, spacing: 26) {
                     VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "THEME")
+                        BurritoSectionLabel(title: "APPEARANCE & TYPOGRAPHY")
 
-                        BurritoThemePicker(selection: $colorThemeRawValue)
+                        VStack(spacing: 0) {
+                            BurritoThemePicker(selection: $colorThemeRawValue)
 
-                        SettingsFootnote("Themes apply throughout Burrito and follow your light or dark appearance.")
-                    }
+                            Divider().padding(.leading, 16)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "FONT")
+                            BurritoFontPicker(selection: $fontChoiceRawValue)
+                        }
+                        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .burritoElevation(.surface)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                        }
 
-                        BurritoFontPicker(selection: $fontChoiceRawValue)
-
-                        SettingsFootnote("Choose one typeface for Burrito's interface and notes.")
+                        SettingsFootnote("Themes and typography apply across all windows and adapt to light or dark appearance.")
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -287,9 +290,19 @@ private struct SettingsPane: View {
 
 private struct BurritoThemePicker: View {
     @Binding var selection: String
+    @State private var isPresented = false
+    @State private var query = ""
 
     private var selectedTheme: BurritoColorTheme {
         BurritoColorTheme.resolve(selection)
+    }
+
+    private var filteredThemes: [BurritoColorTheme] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return BurritoColorTheme.allCases }
+        return BurritoColorTheme.allCases.filter {
+            $0.title.localizedStandardContains(trimmed)
+        }
     }
 
     var body: some View {
@@ -299,92 +312,262 @@ private struct BurritoThemePicker: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Color theme")
                     .font(.spline(size: 13, weight: 450))
-                Text("Choose a semantic color palette for the app.")
+                    .foregroundStyle(.primary)
+                Text("Choose a color palette for Burrito.")
                     .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Picker("Color theme", selection: $selection) {
-                ForEach(BurritoColorTheme.allCases) { theme in
-                    Text(theme.title).tag(theme.rawValue)
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedTheme.title)
+                        .font(.spline(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                    BurritoIcon(name: "chevron.down", size: 8)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 150)
-            .onChange(of: selection) { _, _ in
-                BurritoHaptics.trigger(.alignment)
+            .buttonStyle(.plain)
+            .popover(
+                isPresented: $isPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        BurritoIcon(name: "magnifyingglass", size: 11)
+                            .foregroundStyle(.tertiary)
+                        TextField("Find a theme…", text: $query)
+                            .textFieldStyle(.plain)
+                            .font(.spline(size: 12, weight: 400))
+                        if !query.isEmpty {
+                            Button {
+                                query = ""
+                            } label: {
+                                BurritoIcon(name: "xmark.circle.fill", size: 10)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .burritoElevation(.control)
+
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(filteredThemes) { theme in
+                                Button {
+                                    BurritoHaptics.trigger(.alignment)
+                                    selection = theme.rawValue
+                                    isPresented = false
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        ThemeSwatches(colors: theme.previewColors)
+                                        Text(theme.title)
+                                            .font(.spline(size: 12, weight: 450))
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        if selection == theme.rawValue {
+                                            BurritoIcon(name: "checkmark", size: 10)
+                                                .foregroundStyle(BurritoTheme.accent)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 36)
+                                    .background(
+                                        selection == theme.rawValue
+                                            ? BurritoTheme.controlFill
+                                            : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .padding(10)
+                .frame(width: 250, height: 320)
+                .background(BurritoTheme.raised)
+                .presentationBackground(BurritoTheme.raised)
             }
         }
         .padding(.horizontal, 16)
-        .frame(height: 64)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .burritoElevation(.surface)
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(BurritoTheme.softBorder)
+        .frame(height: 54)
+        .onChange(of: isPresented) { _, presented in
+            if !presented { query = "" }
         }
         .onAppear {
             selection = selectedTheme.rawValue
         }
-        .accessibilityElement(children: .contain)
     }
 }
 
 private struct BurritoFontPicker: View {
     @Binding var selection: String
+    @State private var isPresented = false
+    @State private var query = ""
 
     private var selectedFont: BurritoFontChoice {
         BurritoFontChoice.resolve(selection)
     }
 
+    private var filteredFonts: [BurritoFontChoice] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return BurritoFontChoice.allCases }
+        return BurritoFontChoice.allCases.filter {
+            $0.title.localizedStandardContains(trimmed) ||
+            $0.category.rawValue.localizedStandardContains(trimmed)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 14) {
             Text("Ag")
-                .font(selectedFont.font(size: 22, weight: .medium))
+                .font(selectedFont.font(size: 17, weight: 450))
                 .foregroundStyle(BurritoTheme.accent)
-                .frame(width: 54)
+                .frame(width: 32, height: 32)
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(selectedFont.title)
-                    .font(selectedFont.font(size: 13, weight: .medium))
-                Text(selectedFont.category.rawValue.capitalized)
-                    .font(selectedFont.font(size: 11, weight: .regular, relativeTo: .caption))
+                Text("App font")
+                    .font(.spline(size: 13, weight: 450))
+                    .foregroundStyle(.primary)
+                Text("Choose a typeface for interface and notes.")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Picker("App font", selection: $selection) {
-                ForEach(BurritoFontCategory.allCases) { category in
-                    Section(category.rawValue) {
-                        ForEach(BurritoFontChoice.allCases.filter { $0.category == category }) { font in
-                            Text(font.title).tag(font.rawValue)
-                        }
-                    }
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedFont.title)
+                        .font(.spline(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                    BurritoIcon(name: "chevron.down", size: 8)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .frame(width: 170)
-            .onChange(of: selection) { _, _ in
-                BurritoHaptics.trigger(.alignment)
+            .buttonStyle(.plain)
+            .popover(
+                isPresented: $isPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        BurritoIcon(name: "magnifyingglass", size: 11)
+                            .foregroundStyle(.tertiary)
+                        TextField("Find a font…", text: $query)
+                            .textFieldStyle(.plain)
+                            .font(.spline(size: 12, weight: 400))
+                        if !query.isEmpty {
+                            Button {
+                                query = ""
+                            } label: {
+                                BurritoIcon(name: "xmark.circle.fill", size: 10)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .burritoElevation(.control)
+
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(BurritoFontCategory.allCases) { category in
+                                let categoryFonts = filteredFonts.filter { $0.category == category }
+                                if !categoryFonts.isEmpty {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(category.rawValue)
+                                            .font(.spline(size: 9, weight: 600))
+                                            .tracking(0.8)
+                                            .foregroundStyle(.tertiary)
+                                            .padding(.horizontal, 10)
+                                            .padding(.top, 4)
+
+                                        ForEach(categoryFonts) { font in
+                                            Button {
+                                                BurritoHaptics.trigger(.alignment)
+                                                selection = font.rawValue
+                                                isPresented = false
+                                            } label: {
+                                                HStack(spacing: 12) {
+                                                    Text("Ag")
+                                                        .font(font.font(size: 15, weight: 450))
+                                                        .foregroundStyle(BurritoTheme.accent)
+                                                        .frame(width: 24)
+
+                                                    Text(font.title)
+                                                        .font(font.font(size: 12, weight: 450))
+                                                        .foregroundStyle(.primary)
+
+                                                    Spacer()
+
+                                                    if selection == font.rawValue {
+                                                        BurritoIcon(name: "checkmark", size: 10)
+                                                            .foregroundStyle(BurritoTheme.accent)
+                                                    }
+                                                }
+                                                .padding(.horizontal, 10)
+                                                .frame(height: 34)
+                                                .background(
+                                                    selection == font.rawValue
+                                                        ? BurritoTheme.controlFill
+                                                        : Color.clear,
+                                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
+                .padding(10)
+                .frame(width: 250, height: 320)
+                .background(BurritoTheme.raised)
+                .presentationBackground(BurritoTheme.raised)
             }
         }
         .padding(.horizontal, 16)
-        .frame(height: 64)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .burritoElevation(.surface)
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(BurritoTheme.softBorder)
+        .frame(height: 54)
+        .onChange(of: isPresented) { _, presented in
+            if !presented { query = "" }
         }
         .onAppear {
             selection = selectedFont.rawValue
         }
-        .accessibilityElement(children: .contain)
     }
 }
 
