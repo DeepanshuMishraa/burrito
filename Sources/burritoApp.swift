@@ -36,9 +36,12 @@ struct burritoApp: App {
                 coordinator: coordinator,
                 calendarAccess: calendarAccess
             )
+            .background(
+                InitialWindowSizeView(widthInPixels: 2_360, heightInPixels: 1_460)
+            )
         }
         .modelContainer(container)
-        .defaultSize(width: 1_180, height: 760)
+        .defaultSize(width: 1_180, height: 730)
         .windowStyle(.hiddenTitleBar)
         .commands {
             BurritoCommands()
@@ -62,6 +65,48 @@ struct burritoApp: App {
             )
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+private struct InitialWindowSizeView: NSViewRepresentable {
+    let widthInPixels: CGFloat
+    let heightInPixels: CGFloat
+
+    func makeNSView(context: Context) -> InitialWindowSizeNSView {
+        InitialWindowSizeNSView(
+            targetPixelSize: NSSize(width: widthInPixels, height: heightInPixels)
+        )
+    }
+
+    func updateNSView(_ nsView: InitialWindowSizeNSView, context: Context) {}
+}
+
+private final class InitialWindowSizeNSView: NSView {
+    private let targetPixelSize: NSSize
+    private var hasAppliedSize = false
+
+    init(targetPixelSize: NSSize) {
+        self.targetPixelSize = targetPixelSize
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard !hasAppliedSize, let window else { return }
+        hasAppliedSize = true
+        let scale = window.backingScaleFactor
+        window.setContentSize(
+            NSSize(
+                width: targetPixelSize.width / scale,
+                height: targetPixelSize.height / scale
+            )
+        )
+        window.center()
     }
 }
 
