@@ -370,8 +370,9 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
             Output:
             - `## Bottom Line`: one paragraph of at most three sentences stating the dominant subject,
               why it mattered, and the principal outcome or conclusion.
-            - `## Essential Points`: four to eight importance-ranked bullets. Each bullet must add a
-              distinct fact, argument, finding, constraint, or consequence.
+            - `## Essential Points`: include only as many importance-ranked bullets as the source
+              supports, with no minimum and normally no more than eight. Each bullet must add a distinct
+              fact, argument, finding, constraint, or consequence.
             - `## Outcomes and Next Steps`: include only explicit decisions, commitments, or next steps.
             - `## Unresolved`: include only questions or uncertainties that materially affect the bottom line.
 
@@ -413,8 +414,9 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
 
             Output:
             - `## Learning Map`: briefly show the concepts covered and how they relate.
-            - `## Learning Objectives`: three to seven observable outcomes phrased as what the learner can
-              explain, compare, derive, or apply using this material.
+            - `## Learning Objectives`: include only as many observable outcomes as the source supports,
+              with no minimum and normally no more than seven. Phrase each as what the learner can explain,
+              compare, derive, or apply using this material.
             - Create one `##` section per major concept. For each, separate `### Definition`,
               `### How It Works`, and `### Why It Matters` when the source supports them.
             - Add source-backed `### Examples`, derivations, or procedures directly beneath their concept.
@@ -458,7 +460,7 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var previousInstructions: String {
+    var expandedInstructions: String {
         switch self {
         case .summary:
             """
@@ -543,6 +545,28 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var previousInstructions: String {
+        switch self {
+        case .summary:
+            instructions.replacingOccurrences(
+                of: "include only as many importance-ranked bullets as the source\n"
+                    + "  supports, with no minimum and normally no more than eight. Each bullet must add a distinct",
+                with: "four to eight importance-ranked bullets. Each bullet must add a\n"
+                    + "  distinct"
+            )
+        case .studyNotes:
+            instructions.replacingOccurrences(
+                of: "include only as many observable outcomes as the source supports,\n"
+                    + "  with no minimum and normally no more than seven. Phrase each as what the learner can explain,\n"
+                    + "  compare, derive, or apply using this material.",
+                with: "three to seven observable outcomes phrased as what the learner can\n"
+                    + "  explain, compare, derive, or apply using this material."
+            )
+        case .detailed, .meeting:
+            instructions
+        }
+    }
+
     var legacyInstructions: String {
         switch self {
         case .summary:
@@ -561,6 +585,7 @@ enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {
             $0.name == template.name
                 && ($0.instructions == template.instructions
                     || $0.previousInstructions == template.instructions
+                    || $0.expandedInstructions == template.instructions
                     || $0.legacyInstructions == template.instructions)
         }) else {
             return template.instructions

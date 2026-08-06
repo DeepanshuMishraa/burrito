@@ -73,9 +73,12 @@ extension Font {
     static func spline(
         size: CGFloat,
         weight: CGFloat,
-        relativeTo _: Font.TextStyle
+        relativeTo textStyle: Font.TextStyle
     ) -> Font {
-        spline(size: size, weight: weight)
+        spline(
+            size: BurritoFontMetrics.scaledSize(size, relativeTo: textStyle),
+            weight: weight
+        )
     }
 
     static func system(
@@ -89,10 +92,64 @@ extension Font {
         let platformWeight = NSFont.Weight(
             rawValue: regular + ((medium - regular) * fraction)
         )
-        let font = design == .monospaced
-            ? NSFont.monospacedSystemFont(ofSize: size, weight: platformWeight)
-            : NSFont.systemFont(ofSize: size, weight: platformWeight)
-        return Font(font)
+        return Font(BurritoFontMetrics.systemFont(
+            size: size,
+            weight: platformWeight,
+            design: design
+        ))
+    }
+}
+
+enum BurritoFontMetrics {
+    static func scaledSize(
+        _ size: CGFloat,
+        relativeTo textStyle: Font.TextStyle,
+        preferredPointSize: CGFloat? = nil
+    ) -> CGFloat {
+        let metrics = textMetrics(for: textStyle)
+        let preferred = preferredPointSize
+            ?? NSFont.preferredFont(forTextStyle: metrics.style).pointSize
+        return size * preferred / metrics.defaultPointSize
+    }
+
+    static func systemFont(
+        size: CGFloat,
+        weight: NSFont.Weight,
+        design: Font.Design
+    ) -> NSFont {
+        let base = NSFont.systemFont(ofSize: size, weight: weight)
+        let systemDesign: NSFontDescriptor.SystemDesign
+        if design == .rounded {
+            systemDesign = .rounded
+        } else if design == .serif {
+            systemDesign = .serif
+        } else if design == .monospaced {
+            systemDesign = .monospaced
+        } else {
+            return base
+        }
+        guard let descriptor = base.fontDescriptor.withDesign(systemDesign),
+              let font = NSFont(descriptor: descriptor, size: size)
+        else {
+            return base
+        }
+        return font
+    }
+
+    private static func textMetrics(
+        for textStyle: Font.TextStyle
+    ) -> (style: NSFont.TextStyle, defaultPointSize: CGFloat) {
+        if textStyle == .largeTitle { return (.largeTitle, 26) }
+        if textStyle == .title { return (.title1, 22) }
+        if textStyle == .title2 { return (.title2, 17) }
+        if textStyle == .title3 { return (.title3, 15) }
+        if textStyle == .headline { return (.headline, 13) }
+        if textStyle == .subheadline { return (.subheadline, 11) }
+        if textStyle == .callout { return (.callout, 12) }
+        if textStyle == .footnote { return (.footnote, 10) }
+        if textStyle == .caption { return (.caption1, 10) }
+        if textStyle == .caption2 { return (.caption2, 10) }
+        return (.body, 13)
     }
 }
 

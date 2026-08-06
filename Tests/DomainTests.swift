@@ -1574,16 +1574,24 @@ struct TemplateTests {
 
     @Test("Built-in templates define distinct output jobs")
     func builtInTemplatesHaveDistinctJobs() {
+        #expect(BuiltInTemplate.summary.previousInstructions != BuiltInTemplate.summary.instructions)
+        #expect(BuiltInTemplate.summary.previousInstructions.contains("four to eight"))
         #expect(BuiltInTemplate.summary.instructions.contains("executive briefing editor"))
         #expect(BuiltInTemplate.summary.instructions.contains("smallest useful account"))
+        #expect(BuiltInTemplate.summary.instructions.contains("with no minimum"))
+        #expect(!BuiltInTemplate.summary.instructions.contains("four to eight"))
         #expect(!BuiltInTemplate.summary.instructions.contains("Check Your Understanding"))
 
         #expect(BuiltInTemplate.detailed.instructions.contains("technical archivist"))
         #expect(BuiltInTemplate.detailed.instructions.contains("Optimize for retrieval and completeness"))
         #expect(!BuiltInTemplate.detailed.instructions.contains("Action Register"))
 
+        #expect(BuiltInTemplate.studyNotes.previousInstructions != BuiltInTemplate.studyNotes.instructions)
+        #expect(BuiltInTemplate.studyNotes.previousInstructions.contains("three to seven"))
         #expect(BuiltInTemplate.studyNotes.instructions.contains("instructional designer"))
         #expect(BuiltInTemplate.studyNotes.instructions.contains("Check Your Understanding"))
+        #expect(BuiltInTemplate.studyNotes.instructions.contains("with no minimum"))
+        #expect(!BuiltInTemplate.studyNotes.instructions.contains("three to seven"))
         #expect(!BuiltInTemplate.studyNotes.instructions.contains("Decision Log"))
 
         #expect(BuiltInTemplate.meeting.instructions.contains("operations recorder"))
@@ -1731,6 +1739,20 @@ struct TemplateTests {
         let resolved = BuiltInTemplate.resolvedInstructions(for: snapshot)
 
         #expect(resolved == template.instructions)
+    }
+
+    @Test(
+        "Expanded built-in snapshots receive the latest purpose-built prompt",
+        arguments: BuiltInTemplate.allCases
+    )
+    func resolvesExpandedBuiltInPrompt(template: BuiltInTemplate) {
+        let snapshot = TemplateSnapshot(
+            name: template.name,
+            symbol: template.symbol,
+            instructions: template.expandedInstructions
+        )
+
+        #expect(BuiltInTemplate.resolvedInstructions(for: snapshot) == template.instructions)
     }
 
     @Test("Custom template instructions are not replaced by a matching name")

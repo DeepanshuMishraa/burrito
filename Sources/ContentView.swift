@@ -5619,16 +5619,8 @@ private struct MemoryChatView: View {
                     .padding(.bottom, 30)
                     .frame(maxWidth: .infinity)
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.visible)
                 .background(ThinScrollerConfigurator())
-                .overlay(alignment: .trailing) {
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(Color.primary.opacity(0.2))
-                        .frame(width: 3)
-                        .padding(.trailing, 3)
-                        .padding(.vertical, 12)
-                        .allowsHitTesting(false)
-                }
                 .onChange(of: session.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
