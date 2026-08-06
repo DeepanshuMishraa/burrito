@@ -381,10 +381,6 @@ struct ContentView: View {
             } else if sidebarSelection == .memory {
                 MemoryChatView(
                     session: chatSessions.askBurrito,
-                    title: memoryFolder.map { "Ask \($0.name)" } ?? "Ask Burrito",
-                    subtitle: memoryFolder == nil
-                        ? "Chat generally or search local transcripts with cited answers."
-                        : "Chat generally or search this folder's transcripts.",
                     documents: memoryNotes.map(memoryDocument),
                     languageIdentifier: defaultLanguage
                 ) { citation in
@@ -5384,8 +5380,6 @@ private struct MemoryChatView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Bindable var session: MemoryChatSession
-    let title: String
-    let subtitle: String
     let documents: [MemoryDocument]
     var usesSingleMeetingContext = false
     let languageIdentifier: String
@@ -5448,64 +5442,6 @@ private struct MemoryChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !usesSingleMeetingContext {
-                HStack(alignment: .center, spacing: 14) {
-                    Text("@")
-                        .font(.spline(size: 26, weight: 450))
-                        .foregroundStyle(BurritoTheme.accent)
-                        .frame(width: 24, alignment: .leading)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.spline(size: 20, weight: 450))
-                            .foregroundStyle(.primary)
-                        Text(subtitle)
-                            .font(.spline(size: 12, weight: 400, relativeTo: .caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-
-                    HStack(spacing: 10) {
-                        if !session.messages.isEmpty {
-                            Button {
-                                BurritoHaptics.trigger(.alignment)
-                                session.answerTask?.cancel()
-                                session.answerTask = nil
-                                session.isAnswering = false
-                                withAnimation(.burritoSpring) {
-                                    session.messages.removeAll()
-                                }
-                            } label: {
-                                BurritoLabel("Clear chat", systemImage: "trash")
-                                    .font(.spline(size: 11, weight: 450))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 28)
-                                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        BurritoLabel("On device", systemImage: "lock.fill")
-                            .font(.spline(size: 11, weight: 450))
-                            .foregroundStyle(BurritoTheme.accent)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
-                            }
-                    }
-                }
-                .padding(.horizontal, 36)
-                .frame(height: 64)
-
-                Divider()
-            }
-
             if usesSingleMeetingContext, !session.messages.isEmpty {
                 HStack {
                     Spacer()
@@ -5572,6 +5508,13 @@ private struct MemoryChatView: View {
                             }
                             .padding(.top, 42)
                         } else {
+                            if !usesSingleMeetingContext {
+                                HStack {
+                                    Spacer()
+                                    clearChatButton
+                                }
+                            }
+
                             ForEach(session.messages) { msg in
                                 if msg.isUser {
                                     userMessageBubble(msg)
@@ -5884,31 +5827,7 @@ private struct MemoryChatView: View {
     }
 
     private var assistantSkeletonCard: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { timeline in
-            let pulse = reduceMotion
-                ? 0.55
-                : 0.45 + (sin(timeline.date.timeIntervalSinceReferenceDate * 3) + 1) * 0.12
-
-            VStack(alignment: .leading, spacing: 10) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .frame(height: 12)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .frame(height: 12)
-                    .padding(.trailing, 90)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .frame(height: 12)
-                    .padding(.trailing, 220)
-            }
-            .foregroundStyle(BurritoTheme.controlFill)
-            .opacity(pulse)
-        }
-        .padding(18)
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Generating answer")
+        BurritoChatGenerationStatus()
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
@@ -6039,6 +5958,101 @@ private struct MemoryChatView: View {
             }
             BurritoHaptics.trigger(.levelChange)
         }
+    }
+}
+
+private struct BurritoChatGenerationStatus: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var phraseIndex = 0
+
+    private let phrases = ["Thinking…", "Cooking…", "Mulling…"]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            ZStack(alignment: .leading) {
+                Text(phrases[phraseIndex])
+                    .id(phraseIndex)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 3)),
+                            removal: .opacity.combined(with: .offset(y: -3))
+                        )
+                    )
+            }
+            .frame(width: 100, height: 22, alignment: .leading)
+            .clipped()
+        }
+        .font(.spline(size: 13, weight: 450))
+        .foregroundStyle(.secondary)
+        .modifier(BurritoChatShimmer(enabled: !reduceMotion))
+        .padding(.leading, 2)
+        .padding(.vertical, 12)
+        .task(id: reduceMotion) {
+            guard !reduceMotion else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(1.7))
+                } catch {
+                    return
+                }
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    phraseIndex = (phraseIndex + 1) % phrases.count
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Burrito is generating an answer")
+    }
+}
+
+private struct BurritoChatShimmer: ViewModifier {
+    let enabled: Bool
+
+    @State private var isActive = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                GeometryReader { geometry in
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.primary.opacity(0.32),
+                            .clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .frame(width: max(44, geometry.size.width * 0.42))
+                    .offset(
+                        x: enabled && isActive
+                            ? geometry.size.width
+                            : -geometry.size.width * 0.5
+                    )
+                }
+                .allowsHitTesting(false)
+                .mask(content)
+            }
+            .animation(
+                enabled
+                    ? .linear(duration: 1.55).repeatForever(autoreverses: false)
+                    : nil,
+                value: isActive
+            )
+            .onAppear {
+                guard enabled else { return }
+                isActive = true
+            }
+            .onChange(of: enabled) { _, enabled in
+                isActive = enabled
+            }
     }
 }
 
@@ -6523,8 +6537,6 @@ private struct NoteDetailView: View {
             } else {
                 MemoryChatView(
                     session: chatSession,
-                    title: "Ask this meeting",
-                    subtitle: "Chat generally; meeting questions use this transcript.",
                     documents: [
                         MemoryDocument(
                             noteID: note.id,
