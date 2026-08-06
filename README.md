@@ -48,9 +48,10 @@ git push origin v0.0.2
 gh release create v0.0.2 --verify-tag --title "Burrito v0.0.2" --generate-notes
 ```
 
-No version file needs to be edited. The workflow derives
-`CFBundleShortVersionString` from the release tag and uses the GitHub Actions run
-number as the monotonically increasing `CFBundleVersion`.
+Keep `MARKETING_VERSION` in `project.yml` aligned with the latest release so local
+builds display the current version. The workflow derives the release build’s
+`CFBundleShortVersionString` from the tag and uses the GitHub Actions run number
+as the monotonically increasing `CFBundleVersion`.
 
 The first download is currently ad-hoc signed, so macOS requires the user to
 approve that installation. Once Burrito is installed, Sparkle validates future
