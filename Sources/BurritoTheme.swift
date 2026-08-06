@@ -205,54 +205,189 @@ enum BurritoAppearance: String, CaseIterable, Identifiable {
 
 }
 
+struct BurritoThemeColor: Hashable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let alpha: Double
+
+    static func rgb(_ value: UInt32, alpha: Double = 1) -> BurritoThemeColor {
+        BurritoThemeColor(
+            red: Double((value >> 16) & 0xff) / 255,
+            green: Double((value >> 8) & 0xff) / 255,
+            blue: Double(value & 0xff) / 255,
+            alpha: alpha
+        )
+    }
+
+    fileprivate var nsColor: NSColor {
+        NSColor(
+            calibratedRed: red,
+            green: green,
+            blue: blue,
+            alpha: alpha
+        )
+    }
+
+    var relativeLuminance: Double {
+        func linearize(_ component: Double) -> Double {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+
+        return (0.2126 * linearize(red))
+            + (0.7152 * linearize(green))
+            + (0.0722 * linearize(blue))
+    }
+
+    func contrastRatio(with other: BurritoThemeColor) -> Double {
+        let lighter = max(relativeLuminance, other.relativeLuminance)
+        let darker = min(relativeLuminance, other.relativeLuminance)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    func ensuringContrast(
+        against backgrounds: [BurritoThemeColor],
+        minimum: Double
+    ) -> BurritoThemeColor {
+        guard backgrounds.contains(where: { contrastRatio(with: $0) < minimum }) else {
+            return self
+        }
+
+        let candidates = [BurritoThemeColor.rgb(0x000000), .rgb(0xFFFFFF)].compactMap { target in
+            guard backgrounds.allSatisfy({ target.contrastRatio(with: $0) >= minimum }) else {
+                return Optional<(color: BurritoThemeColor, amount: Double)>.none
+            }
+
+            var lower = 0.0
+            var upper = 1.0
+            for _ in 0..<32 {
+                let amount = (lower + upper) / 2
+                let candidate = mixed(with: target, amount: amount)
+                if backgrounds.allSatisfy({ candidate.contrastRatio(with: $0) >= minimum }) {
+                    upper = amount
+                } else {
+                    lower = amount
+                }
+            }
+            return (mixed(with: target, amount: upper), upper)
+        }
+
+        return candidates.min(by: { $0.amount < $1.amount })?.color ?? self
+    }
+
+    private func mixed(with other: BurritoThemeColor, amount: Double) -> BurritoThemeColor {
+        BurritoThemeColor(
+            red: red + ((other.red - red) * amount),
+            green: green + ((other.green - green) * amount),
+            blue: blue + ((other.blue - blue) * amount),
+            alpha: alpha
+        )
+    }
+}
+
+struct BurritoAdaptiveThemeColor {
+    let light: BurritoThemeColor
+    let dark: BurritoThemeColor
+
+    var color: Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                    ? dark.nsColor
+                    : light.nsColor
+            }
+        )
+    }
+}
+
+struct BurritoThemePalette {
+    let foreground: BurritoAdaptiveThemeColor
+    let sidebarForeground: BurritoAdaptiveThemeColor
+    let accent: BurritoAdaptiveThemeColor
+    let accentForeground: BurritoAdaptiveThemeColor
+    let accentSoft: BurritoAdaptiveThemeColor
+    let canvas: BurritoAdaptiveThemeColor
+    let sidebar: BurritoAdaptiveThemeColor
+    let paper: BurritoAdaptiveThemeColor
+    let raised: BurritoAdaptiveThemeColor
+    let controlFill: BurritoAdaptiveThemeColor
+    let softBorder: BurritoAdaptiveThemeColor
+    let sage: BurritoAdaptiveThemeColor
+}
+
+enum BurritoColorTheme: String, CaseIterable, Identifiable {
+    case burrito
+    case modernMinimal = "modern-minimal"
+    case t3Chat = "t3-chat"
+    case twitter
+    case mochaMousse = "mocha-mousse"
+    case bubblegum
+    case doom64 = "doom-64"
+    case catppuccin
+    case graphite
+    case perpetuity
+    case kodamaGrove = "kodama-grove"
+    case cosmicNight = "cosmic-night"
+    case tangerine
+    case quantumRose = "quantum-rose"
+    case nature
+    case boldTech = "bold-tech"
+    case elegantLuxury = "elegant-luxury"
+    case amberMinimal = "amber-minimal"
+    case supabase
+    case neoBrutalism = "neo-brutalism"
+    case solarDusk = "solar-dusk"
+    case claymorphism
+    case cyberpunk
+    case pastelDreams = "pastel-dreams"
+    case cleanSlate = "clean-slate"
+    case caffeine
+    case oceanBreeze = "ocean-breeze"
+    case retroArcade = "retro-arcade"
+    case midnightBloom = "midnight-bloom"
+    case candyland
+    case northernLights = "northern-lights"
+    case vintagePaper = "vintage-paper"
+    case sunsetHorizon = "sunset-horizon"
+    case starryNight = "starry-night"
+    case claude
+    case vercel
+    case mono
+
+    static let storageKey = "appColorTheme"
+
+    var id: Self { self }
+
+    static func resolve(_ rawValue: String) -> BurritoColorTheme {
+        BurritoColorTheme(rawValue: rawValue) ?? .burrito
+    }
+}
+
 enum BurritoTheme {
-    static let accent = adaptive(
-        light: NSColor(calibratedRed: 0.88, green: 0.30, blue: 0.10, alpha: 1),
-        dark: NSColor(calibratedRed: 1.00, green: 0.43, blue: 0.20, alpha: 1)
-    )
-    static let accentSoft = adaptive(
-        light: NSColor(calibratedRed: 0.98, green: 0.88, blue: 0.80, alpha: 1),
-        dark: NSColor(calibratedRed: 0.25, green: 0.14, blue: 0.10, alpha: 1)
-    )
-    static let canvas = adaptive(
-        light: NSColor(calibratedRed: 0.95, green: 0.94, blue: 0.91, alpha: 1),
-        dark: NSColor(calibratedRed: 0.145, green: 0.14, blue: 0.13, alpha: 1)
-    )
-    static let sidebar = adaptive(
-        light: NSColor(calibratedRed: 0.92, green: 0.91, blue: 0.88, alpha: 1),
-        dark: NSColor(calibratedRed: 0.115, green: 0.112, blue: 0.105, alpha: 1)
-    )
-    static let paper = adaptive(
-        light: NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.93, alpha: 1),
-        dark: NSColor(calibratedRed: 0.17, green: 0.165, blue: 0.155, alpha: 1)
-    )
-    static let raised = adaptive(
-        light: NSColor(calibratedRed: 0.99, green: 0.985, blue: 0.965, alpha: 1),
-        dark: NSColor(calibratedRed: 0.205, green: 0.20, blue: 0.19, alpha: 1)
-    )
-    static let controlFill = adaptive(
-        light: NSColor(calibratedWhite: 0.0, alpha: 0.055),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.075)
-    )
-    static let softBorder = adaptive(
-        light: NSColor(calibratedWhite: 0.0, alpha: 0.09),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.10)
-    )
-    static let sage = adaptive(
-        light: NSColor(calibratedRed: 0.31, green: 0.47, blue: 0.37, alpha: 1),
-        dark: NSColor(calibratedRed: 0.51, green: 0.68, blue: 0.56, alpha: 1)
-    )
+    private static var palette: BurritoThemePalette {
+        let rawValue = UserDefaults.standard.string(forKey: BurritoColorTheme.storageKey)
+            ?? BurritoColorTheme.burrito.rawValue
+        return BurritoColorTheme.resolve(rawValue).palette
+    }
+
+    static var foreground: Color { palette.foreground.color }
+    static var sidebarForeground: Color { palette.sidebarForeground.color }
+    static var accent: Color { palette.accent.color }
+    static var accentForeground: Color { palette.accentForeground.color }
+    static var accentSoft: Color { palette.accentSoft.color }
+    static var canvas: Color { palette.canvas.color }
+    static var sidebar: Color { palette.sidebar.color }
+    static var paper: Color { palette.paper.color }
+    static var raised: Color { palette.raised.color }
+    static var controlFill: Color { palette.controlFill.color }
+    static var softBorder: Color { palette.softBorder.color }
+    static var sage: Color { palette.sage.color }
 
     static let sidebarWidth: CGFloat = 216
     static let listWidth: CGFloat = 340
     static let editorWidth: CGFloat = 760
-    private static func adaptive(light: NSColor, dark: NSColor) -> Color {
-        Color(
-            nsColor: NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-            }
-        )
-    }
 }
 
 enum BurritoElevation {
@@ -411,7 +546,7 @@ struct BurritoToggleRow: View {
                 .frame(width: 40, height: 22)
                 .overlay(alignment: isOn ? .trailing : .leading) {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(.white)
+                        .fill(BurritoTheme.accentForeground)
                         .frame(width: 16, height: 16)
                         .burritoElevation(.control)
                         .padding(3)
@@ -422,7 +557,7 @@ struct BurritoToggleRow: View {
                     .fill(isOn ? BurritoTheme.accent : BurritoTheme.controlFill)
                     .frame(width: 38, height: 22)
                 Rectangle()
-                    .fill(Color.white)
+                    .fill(BurritoTheme.accentForeground)
                     .frame(width: 16, height: 16)
                     .padding(3)
             }

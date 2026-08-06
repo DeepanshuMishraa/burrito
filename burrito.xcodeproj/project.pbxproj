@@ -30,6 +30,7 @@
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
 		A7F9C86C275EF4A67CABECB4 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 1ADC8A04BD0CC461DBBB407C /* MLXLLM */; };
+		B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */; };
 		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
@@ -90,6 +91,7 @@
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
 		B737FF74F93EB5BBB0E94B25 /* BurritoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BurritoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
+		BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoThemeRegistry.swift; sourceTree = "<group>"; };
 		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
 		D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarAccess.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
 				C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
+				BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */,
 				0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */,
 				D76F9BE5D500980A49AAB217 /* CalendarAccess.swift */,
 				3B76BDAAD1105FDBF200FA0E /* ContentView.swift */,
@@ -322,6 +325,7 @@
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
 				FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
+				B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */,
 				63D6B5E998CF954795A8BBB2 /* BurritoUpdateManager.swift in Sources */,
 				77212088B28FD2D9BCD76AE2 /* CalendarAccess.swift in Sources */,
 				F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */,

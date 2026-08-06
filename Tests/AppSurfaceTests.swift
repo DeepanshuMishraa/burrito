@@ -6,6 +6,61 @@ import Testing
 
 @Suite("App surfaces")
 struct AppSurfaceTests {
+    @Test("Color themes resolve persisted values safely")
+    func colorThemesResolvePersistedValuesSafely() {
+        #expect(BurritoColorTheme.resolve("ocean-breeze") == .oceanBreeze)
+        #expect(BurritoColorTheme.resolve("unknown-theme") == .burrito)
+        #expect(Set(BurritoColorTheme.allCases.map(\.title)).count == BurritoColorTheme.allCases.count)
+    }
+
+    @Test("Color themes include Burrito and every tweakcn registry preset")
+    func colorThemesIncludeRegistryPresets() {
+        #expect(BurritoColorTheme.allCases.count == 37)
+        #expect(BurritoColorTheme.allCases.first == .burrito)
+        #expect(BurritoColorTheme.allCases.last == .mono)
+    }
+
+    @Test("Every color theme preserves readable semantic contrast")
+    func colorThemesPreserveSemanticContrast() {
+        for theme in BurritoColorTheme.allCases {
+            let palette = theme.palette
+
+            verifyContrast(in: palette, theme: theme, mode: "light", color: \.light)
+            verifyContrast(in: palette, theme: theme, mode: "dark", color: \.dark)
+        }
+    }
+
+    private func verifyContrast(
+        in palette: BurritoThemePalette,
+        theme: BurritoColorTheme,
+        mode: String,
+        color: KeyPath<BurritoAdaptiveThemeColor, BurritoThemeColor>
+    ) {
+        let foreground = palette.foreground[keyPath: color]
+        let sidebarForeground = palette.sidebarForeground[keyPath: color]
+        let accent = palette.accent[keyPath: color]
+        let accentForeground = palette.accentForeground[keyPath: color]
+        let sage = palette.sage[keyPath: color]
+        let canvas = palette.canvas[keyPath: color]
+        let sidebar = palette.sidebar[keyPath: color]
+        let paper = palette.paper[keyPath: color]
+        let raised = palette.raised[keyPath: color]
+        let accentSoft = palette.accentSoft[keyPath: color]
+        let surfaces = [canvas, paper, raised]
+        let context = "\(theme.rawValue) \(mode)"
+
+        for surface in surfaces {
+            #expect(foreground.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
+            #expect(accent.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
+            #expect(sage.contrastRatio(with: surface) >= 4.5, Comment(rawValue: context))
+        }
+
+        #expect(sidebarForeground.contrastRatio(with: sidebar) >= 4.5, Comment(rawValue: context))
+        #expect(accent.contrastRatio(with: sidebar) >= 4.5, Comment(rawValue: context))
+        #expect(accent.contrastRatio(with: accentSoft) >= 4.5, Comment(rawValue: context))
+        #expect(accentForeground.contrastRatio(with: accent) >= 4.5, Comment(rawValue: context))
+    }
+
     @Test("Numeric Spline fonts scale relative to their text style")
     func numericSplineFontScalesRelativeToTextStyle() {
         #expect(

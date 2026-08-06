@@ -88,6 +88,8 @@ struct ContentView: View {
     @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
+    @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
+        BurritoColorTheme.burrito.rawValue
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
@@ -139,6 +141,8 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let _ = colorThemeRawValue
+
         Group {
             if !permissionOnboardingCompleted || !permissions.allGranted {
                 PermissionGateView(
@@ -185,6 +189,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 1_020, minHeight: 640)
+        .foregroundStyle(BurritoTheme.foreground)
         .tint(BurritoTheme.accent)
         .preferredColorScheme(appearance.colorScheme)
         .font(.spline(size: 13, weight: .regular))
@@ -563,6 +568,7 @@ struct ContentView: View {
                 .padding(.bottom, 8)
             }
         }
+        .foregroundStyle(BurritoTheme.sidebarForeground)
         .background(BurritoTheme.sidebar)
     }
 
@@ -2551,7 +2557,7 @@ private struct CalendarPermissionRow: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                     BurritoIcon(name: "checkmark", size: 9)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BurritoTheme.accentForeground)
                 }
                 .frame(width: 18, height: 18)
                 Text("Connected")
@@ -2619,7 +2625,7 @@ private struct PermissionRow: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: 3, style: .continuous).fill(BurritoTheme.accent)
                         BurritoIcon(name: "checkmark", size: 9)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(BurritoTheme.accentForeground)
                     }
                     .frame(width: 18, height: 18)
                     Text("Allowed")
@@ -3812,7 +3818,7 @@ private struct CaptureCapsule: View {
                         .fill(BurritoTheme.accent)
                         .frame(width: 30, height: 30)
                     BurritoIcon(name: "waveform", size: 13)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(BurritoTheme.accentForeground)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("New recording")
@@ -4061,7 +4067,7 @@ private struct RecordingControlButton: View {
 
                     if isRecording {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(.white)
+                            .fill(BurritoTheme.accentForeground)
                             .frame(width: 8, height: 8)
                     } else {
                         BurritoIcon(name: "waveform", size: 10)
@@ -4710,7 +4716,7 @@ private struct TemplateChoiceCard: View {
                     ZStack {
                         Rectangle().fill(BurritoTheme.accent)
                         BurritoIcon(name: "checkmark", size: 8)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(BurritoTheme.accentForeground)
                     }
                     .frame(width: 17, height: 17)
                 }
@@ -4953,7 +4959,9 @@ private struct TemplateListRow: View {
                         .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
                         .frame(width: 32, height: 32)
                     BurritoIcon(name: template.symbol, size: 13)
-                        .foregroundStyle(isSelected ? .white : BurritoTheme.accent)
+                        .foregroundStyle(
+                            isSelected ? BurritoTheme.accentForeground : BurritoTheme.accent
+                        )
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -5773,7 +5781,9 @@ private struct MemoryChatView: View {
                     } else {
                         Button(action: ask) {
                             BurritoIcon(name: "arrow.up", size: 12)
-                                .foregroundStyle(canAsk ? .white : Color.secondary)
+                                .foregroundStyle(
+                                    canAsk ? BurritoTheme.accentForeground : Color.secondary
+                                )
                                 .frame(width: 28, height: 28)
                                 .background(
                                     canAsk ? BurritoTheme.accent : BurritoTheme.controlFill,

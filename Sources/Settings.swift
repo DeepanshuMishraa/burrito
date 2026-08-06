@@ -160,12 +160,22 @@ private struct SettingsPane: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "en-US"
     @AppStorage("microphoneDefault") private var microphoneDefault = false
     @AppStorage("retainAudioDefault") private var retainAudioDefault = false
+    @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
+        BurritoColorTheme.burrito.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             switch tab {
             case .general:
                 VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        BurritoSectionLabel(title: "THEME")
+
+                        BurritoThemePicker(selection: $colorThemeRawValue)
+
+                        SettingsFootnote("Themes apply throughout Burrito and follow your light or dark appearance.")
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         BurritoSectionLabel(title: "RECORDING & AUDIO")
 
@@ -262,6 +272,74 @@ private struct SettingsPane: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct BurritoThemePicker: View {
+    @Binding var selection: String
+
+    private var selectedTheme: BurritoColorTheme {
+        BurritoColorTheme.resolve(selection)
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ThemeSwatches(colors: selectedTheme.previewColors)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Color theme")
+                    .font(.spline(size: 13, weight: 450))
+                Text("Choose a semantic color palette for the app.")
+                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Picker("Color theme", selection: $selection) {
+                ForEach(BurritoColorTheme.allCases) { theme in
+                    Text(theme.title).tag(theme.rawValue)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 150)
+            .onChange(of: selection) { _, _ in
+                BurritoHaptics.trigger(.alignment)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 64)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(BurritoTheme.softBorder)
+        }
+        .onAppear {
+            selection = selectedTheme.rawValue
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct ThemeSwatches: View {
+    let colors: [Color]
+
+    var body: some View {
+        HStack(spacing: -5) {
+            ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                Circle()
+                    .fill(color)
+                    .frame(width: 22, height: 22)
+                    .overlay {
+                        Circle().stroke(BurritoTheme.softBorder)
+                    }
+                    .zIndex(Double(colors.count - index))
+            }
+        }
+        .frame(width: 54)
+        .accessibilityHidden(true)
     }
 }
 
@@ -503,7 +581,7 @@ private struct SettingsChoice: View {
                     .overlay {
                         if isSelected {
                             BurritoIcon(name: "checkmark", size: 9)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(BurritoTheme.accentForeground)
                         }
                     }
             }
