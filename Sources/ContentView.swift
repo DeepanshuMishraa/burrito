@@ -96,6 +96,10 @@ struct ContentView: View {
         BurritoAppearance.resolve(appearanceRawValue)
     }
 
+    private var colorTheme: BurritoColorTheme {
+        BurritoColorTheme.resolve(colorThemeRawValue)
+    }
+
     private var selectedNote: Note? {
         notes.first { $0.id == selectedNoteID }
     }
@@ -562,7 +566,8 @@ struct ContentView: View {
                 SidebarAccountCard(
                     profile: userProfile,
                     appearanceRawValue: $appearanceRawValue,
-                    updater: updater
+                    updater: updater,
+                    theme: colorTheme
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
@@ -1495,10 +1500,15 @@ private struct SidebarAccountCard: View {
     let profile: MacUserProfile
     @Binding var appearanceRawValue: String
     @Bindable var updater: BurritoUpdateManager
+    let theme: BurritoColorTheme
     @State private var isProfilePresented = false
 
     private var appearance: BurritoAppearance {
         BurritoAppearance.resolve(appearanceRawValue)
+    }
+
+    private var palette: BurritoThemePalette {
+        theme.palette
     }
 
     var body: some View {
@@ -1507,7 +1517,7 @@ private struct SidebarAccountCard: View {
                 Text("APPEARANCE")
                     .font(.spline(size: 9, weight: 450))
                     .tracking(0.7)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(palette.foreground.color.opacity(0.72))
 
                 HStack(spacing: 2) {
                     ForEach(BurritoAppearance.allCases) { option in
@@ -1523,14 +1533,16 @@ private struct SidebarAccountCard: View {
                         } label: {
                             BurritoIcon(name: option.systemImage, size: 11)
                                 .foregroundStyle(
-                                    appearance == option ? BurritoTheme.accent : .secondary
+                                    appearance == option
+                                        ? palette.accent.color
+                                        : palette.foreground.color.opacity(0.72)
                                 )
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 28)
                                 .background(
                                     appearance == option
-                                        ? BurritoTheme.accentSoft
-                                        : BurritoTheme.controlFill,
+                                        ? palette.accentSoft.color
+                                        : palette.controlFill.color,
                                     in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
                                 .burritoElevation(.control)
@@ -1546,7 +1558,7 @@ private struct SidebarAccountCard: View {
             .padding(11)
 
             Rectangle()
-                .fill(BurritoTheme.softBorder)
+                .fill(palette.softBorder.color)
                 .frame(height: 1)
 
             Button {
@@ -1559,17 +1571,17 @@ private struct SidebarAccountCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(BurritoTheme.softBorder)
+                                .stroke(palette.softBorder.color)
                         }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(profile.name)
                             .font(.spline(size: 13, weight: 450))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(palette.foreground.color)
                             .lineLimit(1)
                         Text("Local account")
                             .font(.spline(size: 10, weight: .regular))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(palette.foreground.color.opacity(0.72))
                     }
 
                     Spacer()
@@ -1579,7 +1591,7 @@ private struct SidebarAccountCard: View {
                         size: 10,
                         accessibilityLabel: "Account and updates"
                     )
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(palette.foreground.color.opacity(0.72))
                 }
                 .padding(11)
                 .contentShape(Rectangle())
@@ -1593,11 +1605,11 @@ private struct SidebarAccountCard: View {
                 AccountPopover(profile: profile, updater: updater)
             }
         }
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(palette.raised.color, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .burritoElevation(.surface)
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(BurritoTheme.softBorder)
+                .stroke(palette.softBorder.color)
         }
     }
 }
