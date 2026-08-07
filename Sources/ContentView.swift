@@ -24,6 +24,23 @@ final class RecordingDestinationInbox {
     }
 }
 
+@MainActor
+@Observable
+final class NoteSelectionInbox {
+    static let shared = NoteSelectionInbox()
+
+    private(set) var pendingNoteID: UUID?
+
+    func submit(_ noteID: UUID) {
+        pendingNoteID = noteID
+    }
+
+    func consume() -> UUID? {
+        defer { pendingNoteID = nil }
+        return pendingNoteID
+    }
+}
+
 private enum SidebarSelection: Hashable {
     case all
     case favorites
@@ -66,6 +83,7 @@ struct ContentView: View {
     @State private var notificationAccess = NotificationAccess.shared
     @State private var meetingActionInbox = MeetingActionInbox.shared
     @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
+    @State private var noteSelectionInbox = NoteSelectionInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
     @State private var languageModelStore = LocalLanguageModelStore.shared
@@ -332,6 +350,7 @@ struct ContentView: View {
             synchronizeMeetingReminders()
             handlePendingMeetingAction()
             handlePendingRecordingDestination()
+            handlePendingNoteSelection()
         }
         .task {
             await updater.checkIfDue()
@@ -357,6 +376,9 @@ struct ContentView: View {
         }
         .onChange(of: recordingDestinationInbox.pending) {
             handlePendingRecordingDestination()
+        }
+        .onChange(of: noteSelectionInbox.pendingNoteID) {
+            handlePendingNoteSelection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoNewRecording)) { _ in
             recordingDestination = .newNote
@@ -974,6 +996,13 @@ struct ContentView: View {
     private func handlePendingRecordingDestination() {
         guard let destination = recordingDestinationInbox.consume() else { return }
         recordingDestination = destination
+    }
+
+    private func handlePendingNoteSelection() {
+        guard let noteID = noteSelectionInbox.consume() else { return }
+        selectedMemoryCitation = nil
+        sidebarSelection = .all
+        selectedNoteID = noteID
     }
 
     private func exportMarkdown(_ note: Note) {

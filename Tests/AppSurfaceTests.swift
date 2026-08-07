@@ -228,6 +228,35 @@ struct AppSurfaceTests {
     }
 
     @MainActor
+    @Test("Menu note selections remain queued until the main window consumes them")
+    func noteSelectionRemainsQueued() {
+        let inbox = NoteSelectionInbox()
+        let noteID = UUID()
+
+        inbox.submit(noteID)
+
+        #expect(inbox.pendingNoteID == noteID)
+        #expect(inbox.consume() == noteID)
+        #expect(inbox.pendingNoteID == nil)
+    }
+
+    @Test("Menu notes are grouped into today, yesterday, and earlier")
+    func menuNotesUseRelativeDateSections() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try #require(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 7, hour: 12))
+        )
+        let today = try #require(calendar.date(byAdding: .hour, value: -2, to: now))
+        let yesterday = try #require(calendar.date(byAdding: .day, value: -1, to: now))
+        let earlier = try #require(calendar.date(byAdding: .day, value: -2, to: now))
+
+        #expect(MenuBarNoteSection.today.contains(today, relativeTo: now, calendar: calendar))
+        #expect(MenuBarNoteSection.yesterday.contains(yesterday, relativeTo: now, calendar: calendar))
+        #expect(MenuBarNoteSection.earlier.contains(earlier, relativeTo: now, calendar: calendar))
+    }
+
+    @MainActor
     @Test("Timeline excerpts show human notes when generated Markdown is empty")
     func timelineExcerptFallsBackToHumanNotes() {
         let note = Note(

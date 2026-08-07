@@ -161,6 +161,7 @@ enum BurritoMenuBarArtwork {
 private struct BurritoMenuBarMenu: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
+    @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @Query(sort: \NoteTemplate.createdAt) private var templates: [NoteTemplate]
 
     let coordinator: AppCoordinator
@@ -186,6 +187,10 @@ private struct BurritoMenuBarMenu: View {
         calendarAccess.upcomingEvents
             .filter { $0.endDate >= .now }
             .min { $0.startDate < $1.startDate }
+    }
+
+    private var availableNotes: [Note] {
+        notes.filter { $0.deletedAt == nil }
     }
 
     var body: some View {
@@ -226,6 +231,10 @@ private struct BurritoMenuBarMenu: View {
 
             Divider()
 
+            notesMenu
+
+            Divider()
+
             Button("Open Active Recording") {
                 openMainWindow()
             }
@@ -261,6 +270,10 @@ private struct BurritoMenuBarMenu: View {
                 openRecordingSetup()
             }
             .keyboardShortcut("n", modifiers: .command)
+
+            Divider()
+
+            notesMenu
 
             Divider()
 
@@ -320,6 +333,31 @@ private struct BurritoMenuBarMenu: View {
         }
     }
 
+    @ViewBuilder
+    private var notesMenu: some View {
+        Menu("Notes") {
+            if availableNotes.isEmpty {
+                Button("No Notes Yet") {}
+                    .disabled(true)
+            } else {
+                ForEach(MenuBarNoteSection.allCases) { section in
+                    let sectionNotes = availableNotes.filter {
+                        section.contains($0.updatedAt)
+                    }
+                    if !sectionNotes.isEmpty {
+                        Section(section.title) {
+                            ForEach(sectionNotes) { note in
+                                Button(note.title.isEmpty ? "Untitled Note" : note.title) {
+                                    openNote(note.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func start(_ event: UpcomingCalendarEvent, joinsMeeting: Bool) {
         if joinsMeeting, let meetingURL = event.meetingURL {
             NSWorkspace.shared.open(meetingURL)
@@ -367,9 +405,47 @@ private struct BurritoMenuBarMenu: View {
         openMainWindow()
     }
 
+    private func openNote(_ noteID: UUID) {
+        NoteSelectionInbox.shared.submit(noteID)
+        openMainWindow()
+    }
+
     private func openMainWindow() {
         openWindow(id: "main")
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+enum MenuBarNoteSection: Int, CaseIterable, Identifiable {
+    case today
+    case yesterday
+    case earlier
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .today: "Today"
+        case .yesterday: "Yesterday"
+        case .earlier: "Earlier"
+        }
+    }
+
+    func contains(
+        _ date: Date,
+        relativeTo now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        switch self {
+        case .today:
+            calendar.isDate(date, inSameDayAs: now)
+        case .yesterday:
+            calendar.date(byAdding: .day, value: -1, to: now)
+                .map { calendar.isDate(date, inSameDayAs: $0) } ?? false
+        case .earlier:
+            !Self.today.contains(date, relativeTo: now, calendar: calendar)
+                && !Self.yesterday.contains(date, relativeTo: now, calendar: calendar)
+        }
     }
 }
 
