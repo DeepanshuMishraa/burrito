@@ -817,17 +817,20 @@ struct BurritoToggleRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let subtitle: String
+    let symbol: String?
     @Binding var isOn: Bool
     let style: Style
 
     init(
         title: String,
         subtitle: String,
+        symbol: String? = nil,
         isOn: Binding<Bool>,
         style: Style = .standard
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.symbol = symbol
         _isOn = isOn
         self.style = style
     }
@@ -840,6 +843,13 @@ struct BurritoToggleRow: View {
             }
         } label: {
             HStack(alignment: .center, spacing: 14) {
+                if let symbol {
+                    BurritoIcon(name: symbol, size: 14)
+                        .foregroundStyle(BurritoTheme.accent)
+                        .frame(width: 28, height: 28)
+                        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(titleFont)
@@ -851,8 +861,8 @@ struct BurritoToggleRow: View {
                 Spacer()
                 switchControl
             }
-            .padding(.horizontal, style == .settingsForm ? 18 : 14)
-            .padding(.vertical, style == .settingsForm ? 14 : 0)
+            .padding(.horizontal, style == .settingsForm ? 16 : 14)
+            .padding(.vertical, style == .settingsForm ? 12 : 0)
             .frame(height: style == .standard ? 58 : nil)
             .contentShape(Rectangle())
         }

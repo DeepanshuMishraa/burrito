@@ -173,25 +173,30 @@ private struct SettingsPane: View {
         VStack(alignment: .leading, spacing: 0) {
             switch tab {
             case .general:
-                VStack(alignment: .leading, spacing: 26) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "APPEARANCE & TYPOGRAPHY")
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        BurritoSectionLabel(title: "APPEARANCE & TEMPLATES")
 
                         VStack(spacing: 0) {
                             BurritoThemePicker(selection: $colorThemeRawValue)
 
-                            Divider().padding(.leading, 16)
+                            Divider().padding(.leading, 58)
 
                             BurritoFontPicker(
                                 selection: $fontChoiceRawValue,
                                 sizeSelection: $interfaceFontSizeRawValue
                             )
 
-                            Divider().padding(.leading, 16)
+                            Divider().padding(.leading, 58)
+
+                            BurritoTemplatePicker(selection: $defaultTemplateID)
+
+                            Divider().padding(.leading, 58)
 
                             BurritoToggleRow(
                                 title: "Font smoothing",
-                                subtitle: "Use thinner grayscale anti-aliasing. Restart Burrito after changing this setting.",
+                                subtitle: "Use grayscale text anti-aliasing. Requires app restart.",
+                                symbol: "sparkles",
                                 isOn: $fontSmoothing,
                                 style: .settingsForm
                             )
@@ -201,27 +206,26 @@ private struct SettingsPane: View {
                         .overlay {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
                         }
-
-                        SettingsFootnote("Themes and typography apply across all windows and adapt to light or dark appearance.")
                     }
 
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
                         BurritoSectionLabel(title: "RECORDING & AUDIO")
 
-                        // Apple-Style Grouped Form Card
                         VStack(spacing: 0) {
                             BurritoToggleRow(
                                 title: "Include microphone by default",
-                                subtitle: "Capture your microphone alongside system audio for every new recording.",
+                                subtitle: "Capture microphone audio alongside system sound for new recordings.",
+                                symbol: "mic",
                                 isOn: $microphoneDefault,
                                 style: .settingsForm
                             )
 
-                            Divider().padding(.leading, 16)
+                            Divider().padding(.leading, 58)
 
                             BurritoToggleRow(
                                 title: "Keep audio backups",
-                                subtitle: "Retain audio after successful transcription to allow regenerating notes later.",
+                                subtitle: "Retain local audio files after transcription to allow regenerating notes.",
+                                symbol: "folder",
                                 isOn: $retainAudioDefault,
                                 style: .settingsForm
                             )
@@ -231,26 +235,6 @@ private struct SettingsPane: View {
                         .overlay {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
                         }
-
-                        SettingsFootnote("System audio is always captured privately. Burrito never records screen frames.")
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        BurritoSectionLabel(title: "DEFAULT NOTE TEMPLATE")
-
-                        SettingsChoiceGrid {
-                            ForEach(BuiltInTemplate.allCases) { template in
-                                SettingsChoice(
-                                    title: template.name,
-                                    symbol: template.symbol,
-                                    isSelected: defaultTemplateID == template.rawValue
-                                ) {
-                                    defaultTemplateID = template.rawValue
-                                }
-                            }
-                        }
-
-                        SettingsFootnote("New recordings automatically generate notes using your default template.")
                     }
                 }
 
@@ -313,6 +297,100 @@ private struct SettingsPane: View {
         .onChange(of: fontSmoothing, initial: true) { _, isEnabled in
             BurritoFontSmoothing.apply(isEnabled)
         }
+    }
+}
+
+private struct BurritoTemplatePicker: View {
+    @Binding var selection: String
+    @State private var isPresented = false
+
+    private var selectedTemplate: BuiltInTemplate {
+        BuiltInTemplate(rawValue: selection) ?? .summary
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            BurritoIcon(name: selectedTemplate.symbol, size: 14)
+                .foregroundStyle(BurritoTheme.accent)
+                .frame(width: 28, height: 28)
+                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Default note template")
+                    .font(.burritoUI(size: 13, weight: 450))
+                    .foregroundStyle(.primary)
+                Text("Used automatically for new recordings")
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedTemplate.name)
+                        .font(.burritoUI(size: 12, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                    BurritoIcon(name: "chevron.down", size: 8)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(isPresented ? BurritoTheme.accent.opacity(0.55) : BurritoTheme.softBorder)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Default note template")
+            .accessibilityValue(selectedTemplate.name)
+            .popover(
+                isPresented: $isPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                VStack(spacing: 2) {
+                    ForEach(BuiltInTemplate.allCases) { template in
+                        Button {
+                            BurritoHaptics.trigger(.alignment)
+                            selection = template.rawValue
+                            isPresented = false
+                        } label: {
+                            HStack(spacing: 10) {
+                                BurritoIcon(name: template.symbol, size: 12)
+                                    .foregroundStyle(selection == template.rawValue ? BurritoTheme.accent : .secondary)
+                                Text(template.name)
+                                    .font(.burritoUI(size: 12, weight: 450))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if selection == template.rawValue {
+                                    BurritoIcon(name: "checkmark", size: 10)
+                                        .foregroundStyle(BurritoTheme.accent)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .background(
+                                selection == template.rawValue
+                                    ? BurritoTheme.controlFill
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+                .frame(width: 190)
+                .background(BurritoTheme.raised)
+                .presentationBackground(BurritoTheme.raised)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 54)
     }
 }
 
