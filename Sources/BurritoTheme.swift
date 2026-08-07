@@ -4,6 +4,7 @@ import OSLog
 import SwiftUI
 
 enum BurritoFontCategory: String, CaseIterable, Identifiable {
+    case apple = "APPLE"
     case mono = "MONO"
     case sans = "SANS"
     case serif = "SERIF"
@@ -12,6 +13,7 @@ enum BurritoFontCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .apple: "Apple"
         case .mono: "Mono"
         case .sans: "Sans"
         case .serif: "Serif"
@@ -51,14 +53,16 @@ enum BurritoFontSmoothing {
 
 enum BurritoFontChoice: String, CaseIterable, Identifiable {
     case burritoDefault = "burrito-default"
+    case systemSans = "system-sans"
+    case systemRounded = "system-rounded"
+    case systemMono = "system-mono"
+    case systemSerif = "system-serif"
     case geistMono = "geist-mono"
     case jetBrainsMono = "jetbrains-mono"
     case ibmPlexMono = "ibm-plex-mono"
-    case systemSans = "system-sans"
     case geistSans = "geist-sans"
     case inter
     case ibmPlexSans = "ibm-plex-sans"
-    case systemSerif = "system-serif"
     case sourceSerif = "source-serif-4"
 
     static let storageKey = "appFont"
@@ -74,23 +78,26 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .burritoDefault: "Default"
+        case .systemSans: "SF Pro"
+        case .systemRounded: "SF Pro Rounded"
+        case .systemMono: "SF Mono"
+        case .systemSerif: "New York"
         case .geistMono: "Geist Mono"
         case .jetBrainsMono: "JetBrains Mono"
         case .ibmPlexMono: "IBM Plex Mono"
-        case .systemSans: "System Sans"
         case .geistSans: "Geist Sans"
         case .inter: "Inter"
         case .ibmPlexSans: "IBM Plex Sans"
-        case .systemSerif: "System Serif"
         case .sourceSerif: "Source Serif 4"
         }
     }
 
     var category: BurritoFontCategory {
         switch self {
+        case .systemSans, .systemRounded, .systemMono, .systemSerif: .apple
         case .burritoDefault, .geistMono, .jetBrainsMono, .ibmPlexMono: .mono
-        case .systemSans, .geistSans, .inter, .ibmPlexSans: .sans
-        case .systemSerif, .sourceSerif: .serif
+        case .geistSans, .inter, .ibmPlexSans: .sans
+        case .sourceSerif: .serif
         }
     }
 
@@ -109,7 +116,7 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
                 "IBMPlexMono-SemiBold.ttf",
                 "IBMPlexMono-Bold.ttf",
             ]
-        case .systemSans, .systemSerif:
+        case .systemSans, .systemRounded, .systemMono, .systemSerif:
             []
         case .geistSans:
             ["Geist-Variable.ttf"]
@@ -129,7 +136,7 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
         case .jetBrainsMono: ["JetBrainsMono-Regular"]
         case .ibmPlexMono:
             ["IBMPlexMono-Regular", "IBMPlexMono-Medium", "IBMPlexMono-SemiBold", "IBMPlexMono-Bold"]
-        case .systemSans, .systemSerif: []
+        case .systemSans, .systemRounded, .systemMono, .systemSerif: []
         case .geistSans: ["Geist-Regular"]
         case .inter: ["Inter-Regular"]
         case .ibmPlexSans: ["IBMPlexSans-Regular"]
@@ -191,13 +198,15 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
         case .inter: "Inter"
         case .ibmPlexSans: "IBM Plex Sans"
         case .sourceSerif: "Source Serif 4"
-        case .systemSans, .systemSerif: ""
+        case .systemSans, .systemRounded, .systemMono, .systemSerif: ""
         }
     }
 
     private var systemDesign: Font.Design? {
         switch self {
         case .systemSans: .default
+        case .systemRounded: .rounded
+        case .systemMono: .monospaced
         case .systemSerif: .serif
         default: nil
         }
@@ -223,7 +232,7 @@ enum BurritoFontChoice: String, CaseIterable, Identifiable {
             return "IBMPlexSans-Regular"
         case .sourceSerif:
             return "SourceSerif4Roman-Regular"
-        case .systemSans, .systemSerif:
+        case .systemSans, .systemRounded, .systemMono, .systemSerif:
             return ""
         case .ibmPlexMono:
             if weight >= 650 { return "IBMPlexMono-Bold" }

@@ -6,15 +6,21 @@ import Testing
 
 @Suite("App surfaces")
 struct AppSurfaceTests {
-    @Test("App fonts include ten categorized choices with safe persistence")
-    func appFontsIncludeTenCategorizedChoices() {
-        #expect(BurritoFontChoice.allCases.count == 10)
+    @Test("App fonts include every Apple system design with safe persistence")
+    func appFontsIncludeAppleSystemDesigns() {
+        #expect(BurritoFontChoice.allCases.count == 12)
         #expect(BurritoFontChoice.resolve("geist-mono") == .geistMono)
         #expect(BurritoFontChoice.resolve("unknown-font") == .burritoDefault)
-        #expect(Set(BurritoFontChoice.allCases.map(\.title)).count == 10)
+        #expect(Set(BurritoFontChoice.allCases.map(\.title)).count == 12)
+        #expect(
+            Set(BurritoFontChoice.allCases.map(\.title)).isSuperset(
+                of: ["SF Pro", "SF Pro Rounded", "SF Mono", "New York"]
+            )
+        )
         #expect(BurritoFontChoice.allCases.filter { $0.category == .mono }.count == 4)
-        #expect(BurritoFontChoice.allCases.filter { $0.category == .sans }.count == 4)
-        #expect(BurritoFontChoice.allCases.filter { $0.category == .serif }.count == 2)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .apple }.count == 4)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .sans }.count == 3)
+        #expect(BurritoFontChoice.allCases.filter { $0.category == .serif }.count == 1)
         #expect(BurritoInterfaceFontSize.resolve(16) == 16)
         #expect(BurritoInterfaceFontSize.resolve(99) == BurritoInterfaceFontSize.maximum)
         #expect(BurritoInterfaceFontSize.resolve(1) == BurritoInterfaceFontSize.minimum)
