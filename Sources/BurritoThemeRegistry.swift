@@ -631,7 +631,7 @@ extension BurritoThemePalette {
                 red: foregroundColor.red,
                 green: foregroundColor.green,
                 blue: foregroundColor.blue,
-                alpha: isDark ? 0.075 : 0.055
+                alpha: isDark ? 0.085 : 0.05
             )
             let controlSurfaces = contentSurfaces.map { controlFillColor.composited(over: $0) }
             let accentSoftColor = color(accentSoft)
@@ -640,7 +640,7 @@ extension BurritoThemePalette {
                 minimum: 4.55
             )
             let registryBorderColor = color(softBorder)
-            let borderTintWeight = 0.2
+            let borderTintWeight = 0.65
             let softBorderColor = BurritoThemeColor(
                 red: foregroundColor.red * (1 - borderTintWeight)
                     + registryBorderColor.red * borderTintWeight,
@@ -648,7 +648,7 @@ extension BurritoThemePalette {
                     + registryBorderColor.green * borderTintWeight,
                 blue: foregroundColor.blue * (1 - borderTintWeight)
                     + registryBorderColor.blue * borderTintWeight,
-                alpha: isDark ? 0.38 : 0.32
+                alpha: isDark ? 0.16 : 0.12
             )
 
             return BurritoResolvedPalette(

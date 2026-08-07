@@ -123,7 +123,7 @@ struct AppSurfaceTests {
         let context = "\(theme.rawValue) \(mode)"
 
         #expect(
-            softBorder.alpha == (mode == "dark" ? 0.38 : 0.32),
+            softBorder.alpha == (mode == "dark" ? 0.16 : 0.12),
             Comment(rawValue: context)
         )
 

@@ -730,35 +730,45 @@ private struct BurritoElevationModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let metrics = shadowMetrics
         if isActive {
-            content.shadow(
-                color: .black.opacity(metrics.opacity),
-                radius: metrics.radius,
-                y: metrics.offset
-            )
+            let (key, ambient) = shadowLayers
+            content
+                .shadow(
+                    color: .black.opacity(key.opacity),
+                    radius: key.radius,
+                    x: 0,
+                    y: key.offset
+                )
+                .shadow(
+                    color: .black.opacity(ambient.opacity),
+                    radius: ambient.radius,
+                    x: 0,
+                    y: ambient.offset
+                )
         } else {
             content
         }
     }
 
-    private var shadowMetrics: (opacity: Double, radius: CGFloat, offset: CGFloat) {
-        let contrastBoost = colorSchemeContrast == .increased ? 1.2 : 1
-        switch (elevation, colorScheme) {
-        case (.control, .light):
-            return (0.07 * contrastBoost, 2.5, 1)
-        case (.control, .dark):
-            return (0.24 * contrastBoost, 3.5, 1.5)
-        case (.surface, .light):
-            return (0.09 * contrastBoost, 9, 3)
-        case (.surface, .dark):
-            return (0.32 * contrastBoost, 11, 4)
-        case (.floating, .light):
-            return (0.18 * contrastBoost, 24, 12)
-        case (.floating, .dark):
-            return (0.48 * contrastBoost, 28, 14)
-        @unknown default:
-            return (0.09 * contrastBoost, 9, 3)
+    private typealias ShadowLayer = (opacity: Double, radius: CGFloat, offset: CGFloat)
+
+    private var shadowLayers: (key: ShadowLayer, ambient: ShadowLayer) {
+        let contrastBoost = colorSchemeContrast == .increased ? 1.25 : 1.0
+        let isDark = colorScheme == .dark
+
+        switch elevation {
+        case .control:
+            let key: ShadowLayer = (isDark ? 0.10 * contrastBoost : 0.03 * contrastBoost, 1.5, 0.5)
+            let ambient: ShadowLayer = (isDark ? 0.16 * contrastBoost : 0.05 * contrastBoost, 4, 1.5)
+            return (key, ambient)
+        case .surface:
+            let key: ShadowLayer = (isDark ? 0.14 * contrastBoost : 0.04 * contrastBoost, 2.5, 1)
+            let ambient: ShadowLayer = (isDark ? 0.22 * contrastBoost : 0.07 * contrastBoost, 12, 5)
+            return (key, ambient)
+        case .floating:
+            let key: ShadowLayer = (isDark ? 0.18 * contrastBoost : 0.06 * contrastBoost, 5, 2)
+            let ambient: ShadowLayer = (isDark ? 0.28 * contrastBoost : 0.11 * contrastBoost, 28, 12)
+            return (key, ambient)
         }
     }
 }
