@@ -1,0 +1,21 @@
+docs/research/local-transcription.md
+  s_de268814f883b9::t_56e649368a1d6c 10,36,106,124,150-151
+  s_de268814f883b9::t_045771829cde6a 11-13,46,125-128,130-147
+  s_de268814f883b9::t_9f4966e8fbce7a 152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "15e3ef19b25634312fc1278bc3296eeb61e342ec",
+  "prompts": {},
+  "sessions": {
+    "s_de268814f883b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd807-1c63-74d0-8347-e930c26e2add",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
