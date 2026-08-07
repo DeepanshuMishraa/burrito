@@ -4941,38 +4941,24 @@ private struct TemplatesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let templates: [NoteTemplate]
 
-    @State private var selectedTemplateID: UUID?
     @State private var showingEditor = false
     @State private var editingTemplateID: UUID?
     @State private var deletingTemplateID: UUID?
 
-    private var selectedTemplate: NoteTemplate? {
-        templates.first { $0.id == selectedTemplateID } ?? templates.first
+    private var gridColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 300, maximum: 400), spacing: 18)]
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 44)
 
-            // Sleek Apple-Grade Header
+            // Sleek Header
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 10) {
-                        Text("Templates")
-                            .font(.burritoUI(size: 26, weight: 450))
-                            .foregroundStyle(.primary)
-
-                        Text("\(templates.count) available")
-                            .font(.burritoUI(size: 11, weight: 450, relativeTo: .caption))
-                            .foregroundStyle(BurritoTheme.accent)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 3)
-                            .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .burritoElevation(.control)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.accent.opacity(0.25))
-                            }
-                    }
+                    Text("Templates")
+                        .font(.burritoUI(size: 26, weight: 450))
+                        .foregroundStyle(.primary)
 
                     Text("Shape how Burrito turns meeting transcripts into structured notes.")
                         .font(.burritoUI(size: 13, weight: 400, relativeTo: .subheadline))
@@ -4990,74 +4976,30 @@ private struct TemplatesView: View {
                 .buttonStyle(HomeToolbarButtonStyle())
             }
             .padding(.horizontal, 36)
-            .padding(.bottom, 20)
+            .padding(.bottom, 24)
 
-            // Main Split Studio Container
-            HStack(spacing: 24) {
-                // Left Master List
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("TEMPLATES")
-                            .font(.burritoUI(size: 9, weight: 450, relativeTo: .caption2))
-                            .tracking(0.9)
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10)
-
-                    ScrollView {
-                        VStack(spacing: 6) {
-                            ForEach(templates) { template in
-                                TemplateListRow(
-                                    template: template,
-                                    isSelected: selectedTemplateID == template.id,
-                                    select: {
-                                        BurritoHaptics.trigger(.alignment)
-                                        withAnimation(reduceMotion ? nil : .burritoSpring) {
-                                            selectedTemplateID = template.id
-                                        }
-                                    }
-                                )
+            // Clean Grid of Template Cards
+            ScrollView {
+                LazyVGrid(columns: gridColumns, spacing: 18) {
+                    ForEach(templates) { template in
+                        TemplateGridCard(
+                            template: template,
+                            edit: {
+                                editingTemplateID = template.id
+                                showingEditor = true
+                            },
+                            delete: template.isBuiltIn ? nil : {
+                                deletingTemplateID = template.id
                             }
-                        }
+                        )
                     }
-                    .scrollIndicators(.hidden)
                 }
-                .frame(width: 240)
-
-                // Right Detail Studio Card
-                if let template = selectedTemplate {
-                    TemplatePromptDetail(
-                        template: template,
-                        edit: {
-                            editingTemplateID = template.id
-                            showingEditor = true
-                        },
-                        delete: template.isBuiltIn ? nil : {
-                            deletingTemplateID = template.id
-                        }
-                    )
-                } else {
-                    BurritoContentUnavailable(
-                        title: "No templates",
-                        systemImage: "doc.text",
-                        description: Text("Create a template to define a custom note format.")
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 60)
             }
-            .padding(.horizontal, 36)
-            .padding(.bottom, 32)
+            .scrollIndicators(.hidden)
         }
         .background(BurritoTheme.canvas)
-        .onAppear {
-            selectedTemplateID = selectedTemplate?.id
-        }
-        .onChange(of: templates.map(\.id)) {
-            if selectedTemplateID.flatMap({ id in templates.first { $0.id == id } }) == nil {
-                selectedTemplateID = templates.first?.id
-            }
-        }
         .sheet(isPresented: $showingEditor) {
             TemplateEditorView(
                 template: templates.first { $0.id == editingTemplateID }
@@ -5066,7 +5008,6 @@ private struct TemplatesView: View {
                     template.name = name
                     template.symbol = symbol
                     template.instructions = instructions
-                    selectedTemplateID = template.id
                 } else {
                     let template = NoteTemplate(
                         name: name,
@@ -5074,7 +5015,6 @@ private struct TemplatesView: View {
                         instructions: instructions
                     )
                     modelContext.insert(template)
-                    selectedTemplateID = template.id
                 }
                 try? modelContext.save()
                 showingEditor = false
@@ -5086,7 +5026,7 @@ private struct TemplatesView: View {
                 BurritoModalBackdrop {
                     BurritoMessageDialog(
                         title: "Delete \(template.name)?",
-                        message: "This custom template will be permanently deleted. Existing notes will keep their saved template instructions.",
+                        message: "This custom template will be permanently deleted.",
                         confirmTitle: "Delete Template",
                         isDestructive: true,
                         cancel: { deletingTemplateID = nil },
@@ -5102,230 +5042,78 @@ private struct TemplatesView: View {
     }
 }
 
-private struct TemplateListRow: View {
-    let template: NoteTemplate
-    let isSelected: Bool
-    let select: () -> Void
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: select) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isSelected ? BurritoTheme.accent : BurritoTheme.controlFill)
-                        .frame(width: 32, height: 32)
-                    BurritoIcon(name: template.symbol, size: 13)
-                        .foregroundStyle(
-                            isSelected ? BurritoTheme.accentForeground : BurritoTheme.accent
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(template.name)
-                        .font(.burritoUI(size: 13, weight: 450))
-                        .foregroundStyle(isSelected ? .primary : .secondary)
-                        .lineLimit(1)
-                    Text(template.isBuiltIn ? "Built in" : "Custom")
-                        .font(.burritoUI(size: 10, weight: 400, relativeTo: .caption2))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer()
-
-                if isSelected {
-                    BurritoIcon(name: "checkmark", size: 10)
-                        .foregroundStyle(BurritoTheme.accent)
-                }
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 52)
-            .background(
-                isSelected
-                    ? BurritoTheme.raised
-                    : (isHovered ? BurritoTheme.controlFill.opacity(0.6) : Color.clear),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .burritoElevation(.surface, isActive: isSelected)
-            .burritoElevation(.control, isActive: !isSelected && isHovered)
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(BurritoTheme.softBorder)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-private struct TemplatePromptDetail: View {
-    private enum Tab {
-        case instructions
-        case systemPrompt
-    }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+private struct TemplateGridCard: View {
     let template: NoteTemplate
     let edit: () -> Void
     let delete: (() -> Void)?
 
-    @State private var activeTab: Tab = .instructions
-    @State private var copiedText = false
+    @State private var isHovered = false
 
-    private var displayedInstructions: String {
-        BuiltInTemplate.resolvedInstructions(for: template.snapshot)
-    }
-
-    private var systemPrompt: String {
-        GenerationPrompt.finalInstructions(template: template.snapshot)
+    private var summaryText: String {
+        let instructions = BuiltInTemplate.resolvedInstructions(for: template.snapshot)
+        let lines = instructions.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return lines.prefix(3).joined(separator: " ")
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(BurritoTheme.accentSoft)
-                        .frame(width: 44, height: 44)
-                    BurritoIcon(name: template.symbol, size: 18)
-                        .foregroundStyle(BurritoTheme.accent)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(template.name)
+                    .font(.burritoUI(size: 16, weight: 450))
+                    .foregroundStyle(.primary)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(template.name)
-                            .font(.burritoUI(size: 20, weight: 450))
-                            .foregroundStyle(.primary)
-
-                        Text(template.isBuiltIn ? "Built-in" : "Custom")
-                            .font(.burritoUI(size: 10, weight: 450, relativeTo: .caption2))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                            .burritoElevation(.control)
-                    }
-
-                    Text("Used by Burrito AI model during note synthesis")
-                        .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
-                        .foregroundStyle(.tertiary)
-                }
+                Text(template.isBuiltIn ? "Built-in" : "Custom")
+                    .font(.burritoUI(size: 10, weight: 450, relativeTo: .caption2))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
 
                 Spacer()
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let delete {
-                        BurritoButton("Delete", systemImage: "trash", action: delete)
-                            .buttonStyle(HomeToolbarButtonStyle(destructive: true))
-                    }
-                    BurritoButton("Edit", systemImage: "pencil", action: edit)
-                        .buttonStyle(HomeToolbarButtonStyle())
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
-
-            HStack {
-                HStack(spacing: 2) {
-                    Button {
-                        withAnimation(reduceMotion ? nil : .burritoSpring) {
-                            activeTab = .instructions
+                        Button(action: delete) {
+                            BurritoIcon(name: "trash", size: 12)
+                                .foregroundStyle(Color.red.opacity(0.8))
+                                .frame(width: 26, height: 26)
+                                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
-                    } label: {
-                        BurritoLabel("Instructions", systemImage: "doc.text")
-                            .font(.burritoUI(size: 12, weight: activeTab == .instructions ? 450 : 400))
-                            .foregroundStyle(activeTab == .instructions ? .primary : .secondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 30)
-                            .background(activeTab == .instructions ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .burritoElevation(.control, isActive: activeTab == .instructions)
+                        .buttonStyle(.plain)
+                        .help("Delete template")
                     }
-                    .buttonStyle(.plain)
 
-                    Button {
-                        withAnimation(reduceMotion ? nil : .burritoSpring) {
-                            activeTab = .systemPrompt
-                        }
-                    } label: {
-                        BurritoLabel("Full System Prompt", systemImage: "terminal")
-                            .font(.burritoUI(size: 12, weight: activeTab == .systemPrompt ? 450 : 400))
-                            .foregroundStyle(activeTab == .systemPrompt ? .primary : .secondary)
-                            .padding(.horizontal, 12)
-                            .frame(height: 30)
-                            .background(activeTab == .systemPrompt ? BurritoTheme.controlFill : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .burritoElevation(.control, isActive: activeTab == .systemPrompt)
+                    Button(action: edit) {
+                        Text("Edit")
+                            .font(.burritoUI(size: 11, weight: 450))
+                            .foregroundStyle(BurritoTheme.accent)
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(3)
-                .background(BurritoTheme.controlFill.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .burritoElevation(.control)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(BurritoTheme.softBorder)
-                }
-
-                Spacer()
-
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(
-                        activeTab == .instructions ? displayedInstructions : systemPrompt,
-                        forType: .string
-                    )
-                    copiedText = true
-                    BurritoHaptics.trigger(.alignment)
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        copiedText = false
-                    }
-                } label: {
-                    BurritoLabel(copiedText ? "Copied" : "Copy", systemImage: copiedText ? "checkmark" : "doc.on.doc")
-                        .font(.burritoUI(size: 11, weight: 450))
-                }
-                .buttonStyle(HomeToolbarButtonStyle())
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 12)
 
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
+            Text(summaryText)
+                .font(.burritoUI(size: 12, weight: 400))
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .lineSpacing(3)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if activeTab == .instructions {
-                        Text(displayedInstructions)
-                            .font(.burritoUI(size: 13, weight: 400))
-                            .foregroundStyle(.primary.opacity(0.9))
-                            .lineSpacing(6)
-                            .textSelection(.enabled)
-                    } else {
-                        Text(systemPrompt)
-                            .font(.burritoUI(size: 12, weight: 400))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(5)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(22)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .scrollIndicators(.hidden)
+            Spacer(minLength: 0)
         }
-        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .burritoElevation(.surface)
+        .padding(18)
+        .frame(height: 135, alignment: .topLeading)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .burritoElevation(.surface, isActive: isHovered)
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(BurritoTheme.softBorder)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isHovered ? BurritoTheme.accent.opacity(0.4) : BurritoTheme.softBorder)
         }
+        .onHover { isHovered = $0 }
     }
 }
 
