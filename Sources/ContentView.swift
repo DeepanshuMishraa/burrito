@@ -7195,98 +7195,130 @@ private struct TemplateEditorView: View {
 
 private struct TemplateSymbolPicker: View {
     @Binding var selection: String
-
-    private var options: [TemplateSymbolOption] {
-        TemplateSymbolOption.all
-    }
+    @State private var isPresented = false
 
     var body: some View {
-        ScrollViewReader { proxy in
-            HStack(spacing: 6) {
-                Button {
-                    scrollPrevious(proxy: proxy)
-                } label: {
-                    BurritoIcon(name: "chevron.left", size: 10)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 30)
-                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Previous icons")
+        Button {
+            isPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                BurritoIcon(name: selection, size: 14)
+                    .foregroundStyle(BurritoTheme.accent)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(options) { option in
+                Text(TemplateSymbolOption.title(for: selection))
+                    .font(.burritoUI(size: 13, weight: 450))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                BurritoIcon(name: "chevron.up.chevron.down", size: 11)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .burritoElevation(.control)
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isPresented ? BurritoTheme.accent : BurritoTheme.softBorder)
+            }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            TemplateSymbolSearchPopover(selection: $selection, isPresented: $isPresented)
+        }
+    }
+}
+
+private struct TemplateSymbolSearchPopover: View {
+    @Binding var selection: String
+    @Binding var isPresented: Bool
+    @State private var query = ""
+
+    private var symbols: [TemplateSymbolOption] {
+        TemplateSymbolOption.matching(query)
+    }
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(minimum: 44), spacing: 6),
+        count: 5
+    )
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // Search Bar
+            HStack(spacing: 8) {
+                BurritoIcon(name: "magnifyingglass", size: 11)
+                    .foregroundStyle(.tertiary)
+                TextField("Search icons…", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.burritoUI(size: 12))
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                    } label: {
+                        BurritoIcon(name: "xmark.circle.fill", size: 11)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .burritoElevation(.control)
+
+            // Icon Grid
+            ScrollView {
+                if symbols.isEmpty {
+                    VStack(spacing: 4) {
+                        Text("No matching icons")
+                            .font(.burritoUI(size: 12, weight: 450))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 6) {
+                        ForEach(symbols) { option in
                             Button {
                                 selection = option.systemName
+                                isPresented = false
                             } label: {
-                                HStack(spacing: 5) {
-                                    BurritoIcon(name: option.systemName, size: 12)
-                                    Text(option.title)
-                                        .font(.burritoUI(size: 11, weight: 450))
+                                VStack(spacing: 3) {
+                                    BurritoIcon(name: option.systemName, size: 15)
                                 }
                                 .foregroundStyle(
                                     selection == option.systemName
-                                        ? BurritoTheme.accentForeground
-                                        : .secondary
+                                        ? BurritoTheme.accent
+                                        : Color.primary.opacity(0.8)
                                 )
-                                .padding(.horizontal, 10)
-                                .frame(height: 30)
+                                .frame(width: 44, height: 40)
                                 .background(
                                     selection == option.systemName
-                                        ? BurritoTheme.accent
-                                        : BurritoTheme.controlFill,
+                                        ? BurritoTheme.accentSoft
+                                        : BurritoTheme.controlFill.opacity(0.4),
                                     in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
-                                .burritoElevation(.control, isActive: selection == option.systemName)
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .stroke(
-                                            selection == option.systemName
-                                                ? BurritoTheme.accent
-                                                : BurritoTheme.softBorder
-                                        )
+                                    if selection == option.systemName {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(BurritoTheme.accent.opacity(0.6))
+                                    }
                                 }
                             }
                             .buttonStyle(.plain)
-                            .id(option.systemName)
+                            .help(option.title)
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-
-                Button {
-                    scrollNext(proxy: proxy)
-                } label: {
-                    BurritoIcon(name: "chevron.right", size: 10)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 30)
-                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Next icons")
             }
-            .onAppear {
-                proxy.scrollTo(selection, anchor: .center)
-            }
+            .scrollIndicators(.hidden)
         }
-        .frame(height: 36)
-    }
-
-    private func scrollPrevious(proxy: ScrollViewProxy) {
-        guard let currentIndex = options.firstIndex(where: { $0.systemName == selection }) else { return }
-        let prevIndex = max(0, currentIndex - 3)
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(options[prevIndex].systemName, anchor: .center)
-        }
-    }
-
-    private func scrollNext(proxy: ScrollViewProxy) {
-        guard let currentIndex = options.firstIndex(where: { $0.systemName == selection }) else { return }
-        let nextIndex = min(options.count - 1, currentIndex + 3)
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo(options[nextIndex].systemName, anchor: .center)
-        }
+        .padding(10)
+        .frame(width: 260, height: 280)
+        .background(BurritoTheme.raised)
+        .presentationBackground(BurritoTheme.raised)
     }
 }
 
