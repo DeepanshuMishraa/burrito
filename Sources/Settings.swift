@@ -768,12 +768,6 @@ private struct OwnershipSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                BurritoIcon(name: "shippingbox", size: 15)
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 36, height: 36)
-                    .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .burritoElevation(.control)
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
                         .font(.burritoUI(size: 14, weight: 450))
@@ -836,11 +830,6 @@ private struct LanguageCoverageCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            BurritoIcon(name: "checkmark.shield", size: 15)
-                .foregroundStyle(BurritoTheme.accent)
-                .frame(width: 34, height: 34)
-                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .burritoElevation(.control)
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
                     .font(.burritoUI(size: 13, weight: 450))
@@ -865,14 +854,6 @@ private struct CalendarConnectionSettingsRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            BurritoIcon(name: "calendar", size: 16)
-                .foregroundStyle(
-                    calendarAccess.state == .authorized ? BurritoTheme.accent : .secondary
-                )
-                .frame(width: 38, height: 38)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .burritoElevation(.control)
-
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
                     .font(.burritoUI(size: 14, weight: 450))

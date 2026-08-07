@@ -1946,7 +1946,7 @@ private struct ModelsView: View {
                             selectedTab = .speechToText
                         }
                     } label: {
-                        BurritoLabel("Speech to Text", systemImage: "waveform")
+                        Text("Speech to Text")
                             .font(.burritoUI(size: 12, weight: selectedTab == .speechToText ? 450 : 400))
                             .foregroundStyle(selectedTab == .speechToText ? .primary : .secondary)
                             .padding(.horizontal, 14)
@@ -1965,7 +1965,7 @@ private struct ModelsView: View {
                             selectedTab = .textModels
                         }
                     } label: {
-                        BurritoLabel("Text Models", systemImage: "sparkles")
+                        Text("Text Models")
                             .font(.burritoUI(size: 12, weight: selectedTab == .textModels ? 450 : 400))
                             .foregroundStyle(selectedTab == .textModels ? .primary : .secondary)
                             .padding(.horizontal, 14)
@@ -1995,14 +1995,6 @@ private struct ModelsView: View {
                         // SPEECH TO TEXT TAB
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 14) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(BurritoTheme.accentSoft)
-                                        .frame(width: 38, height: 38)
-                                    BurritoIcon(name: hasInstalledModels ? "waveform" : "apple.logo", size: 16)
-                                        .foregroundStyle(BurritoTheme.accent)
-                                }
-
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(hasInstalledModels ? "Downloaded models active" : "Apple Speech active")
                                         .font(.burritoUI(size: 13, weight: 450))
@@ -2045,12 +2037,9 @@ private struct ModelsView: View {
                                     ) {
                                         Task { await modelStore.install(variant) }
                                     }
-
-                                    if index < ParakeetModelVariant.allCases.count - 1 {
-                                        Divider().padding(.leading, 20)
-                                    }
                                 }
                             }
+                            .padding(.vertical, 6)
                             .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .burritoElevation(.surface)
                             .overlay {
@@ -2066,14 +2055,6 @@ private struct ModelsView: View {
                         // TEXT MODELS TAB
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 14) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(BurritoTheme.accentSoft)
-                                        .frame(width: 38, height: 38)
-                                    BurritoIcon(name: "sparkles", size: 16)
-                                        .foregroundStyle(BurritoTheme.accent)
-                                }
-
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Active Engine: \(activeEngineTitle)")
                                         .font(.burritoUI(size: 13, weight: 450))
@@ -2101,7 +2082,7 @@ private struct ModelsView: View {
                                     .foregroundStyle(.tertiary)
                             }
 
-                            VStack(spacing: 0) {
+                            VStack(spacing: 4) {
                                 GenerationModelCatalogRow(
                                     title: "Apple Intelligence",
                                     summary: "Built into macOS. Lightweight, private, and always available.",
@@ -2112,8 +2093,6 @@ private struct ModelsView: View {
                                 ) {
                                     languageModelStore.select(.apple)
                                 }
-
-                                Divider().padding(.leading, 20)
 
                                 ForEach(
                                     Array(LocalLanguageModelVariant.allCases.enumerated()),
@@ -2136,12 +2115,9 @@ private struct ModelsView: View {
                                             languageModelStore.cancelInstallation(variant)
                                         }
                                     }
-
-                                    if index < LocalLanguageModelVariant.allCases.count - 1 {
-                                        Divider().padding(.leading, 20)
-                                    }
                                 }
                             }
+                            .padding(.vertical, 6)
                             .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .burritoElevation(.surface)
                             .overlay {
@@ -2533,9 +2509,9 @@ private struct PermissionGateView: View {
                         .frame(maxWidth: 620, alignment: .leading)
                 }
 
-                VStack(spacing: 0) {
+                VStack(spacing: 4) {
                     PermissionRow(
-                        title: "Transcribe your voice",
+                        title: "Record microphone audio",
                         subtitle: "Microphone",
                         systemImage: "mic",
                         state: permissions.microphone,
@@ -2545,7 +2521,6 @@ private struct PermissionGateView: View {
                     ) {
                         Task { await permissions.requestMicrophone() }
                     }
-                    Divider().opacity(0.45)
                     PermissionRow(
                         title: "Transcribe computer audio",
                         subtitle: "System Audio",
@@ -2557,9 +2532,9 @@ private struct PermissionGateView: View {
                     ) {
                         permissions.requestSystemAudio()
                     }
-                    Divider().opacity(0.45)
                     CalendarPermissionRow(calendarAccess: calendarAccess)
                 }
+                .padding(.vertical, 6)
                 .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .burritoElevation(.surface)
                 .overlay {
@@ -3073,11 +3048,7 @@ private struct BurritoPopoverRowLabel: View {
 
 private struct BurritoPopoverDivider: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 0, style: .continuous)
-            .fill(BurritoTheme.softBorder)
-            .frame(height: 1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+        Color.clear.frame(height: 4)
     }
 }
 
@@ -4397,7 +4368,7 @@ private struct RecordingSetupView: View {
                 }
             }
 
-            VStack(spacing: 0) {
+            VStack(spacing: 4) {
                 RecordingTemplatePicker(
                     templates: templates,
                     selection: $templateID,
@@ -4405,25 +4376,22 @@ private struct RecordingSetupView: View {
                     openPicker: $openPicker
                 )
                 .zIndex(2)
-                Divider().padding(.leading, 12)
                 RecordingLanguagePicker(
                     selection: $language,
                     openPicker: $openPicker
                 )
                 .zIndex(1)
-                Divider().padding(.leading, 12)
                 RecordingModePicker(selection: recordingModeBinding)
                 if recordingMode == .listenAlong {
-                    Divider().padding(.leading, 12)
                     RecordingPlaybackRatePicker(selection: playbackRateBinding)
                 }
-                Divider().padding(.leading, 12)
                 BurritoToggleRow(
                     title: "Keep audio",
                     subtitle: "Retain recordings after transcription",
                     isOn: $retainsAudio
                 )
             }
+            .padding(.vertical, 6)
             .zIndex(2)
             .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .burritoElevation(.surface)
@@ -5930,7 +5898,6 @@ private struct MemoryChatView: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(height: 44)
-                Divider()
             }
 
             ScrollViewReader { proxy in
