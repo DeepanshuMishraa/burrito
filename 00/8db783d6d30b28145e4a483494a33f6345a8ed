@@ -1,0 +1,41 @@
+Sources/ContentView.swift
+  s_4afba08ece1fab::t_73cbb20e9777c6 5667-5670,5679-5690,5700
+  s_7dffc224c6ec4d::t_8eaa23b4c5a3fb 5701
+Tests/DomainTests.swift
+  s_4afba08ece1fab::t_2027b73acede8b 64-113
+  s_4afba08ece1fab::t_4b2ed096619bd6 114-137
+Tests/CoordinatorTests.swift
+  s_4afba08ece1fab::t_6072901ff06b76 148-150,164,907-942
+  s_4afba08ece1fab::t_04a6da038705fc 943-945
+Sources/LiveSpeechTranscriber.swift
+  s_4afba08ece1fab::t_4b2ed096619bd6 56-57,113-115,118-120
+  s_4afba08ece1fab::t_8509ac13305fed 53-55,58,67,112,116-117
+  s_4afba08ece1fab::t_124372b7815c69 59
+  s_7dffc224c6ec4d::t_e3243118d4f875 121
+Sources/AppCoordinator.swift
+  s_4afba08ece1fab::t_ede5ec4055fa2a 528-533
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "008db783d6d30b28145e4a483494a33f6345a8ed",
+  "prompts": {},
+  "sessions": {
+    "s_4afba08ece1fab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdb41-44f3-7463-93ba-1073ef056c9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    },
+    "s_7dffc224c6ec4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdbeb-15c0-7be2-926f-8cd24c672138",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
