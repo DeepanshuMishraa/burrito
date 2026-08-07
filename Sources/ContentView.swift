@@ -4941,8 +4941,7 @@ private struct TemplatesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let templates: [NoteTemplate]
 
-    @State private var showingEditor = false
-    @State private var editingTemplateID: UUID?
+    @State private var editorTarget: TemplateEditorTarget?
     @State private var deletingTemplateID: UUID?
 
     private var gridColumns: [GridItem] {
@@ -4968,8 +4967,7 @@ private struct TemplatesView: View {
                 Spacer()
 
                 Button {
-                    editingTemplateID = nil
-                    showingEditor = true
+                    editorTarget = .new
                 } label: {
                     BurritoLabel("New Template", systemImage: "plus")
                 }
@@ -4985,8 +4983,7 @@ private struct TemplatesView: View {
                         TemplateGridCard(
                             template: template,
                             edit: {
-                                editingTemplateID = template.id
-                                showingEditor = true
+                                editorTarget = .existing(template.id)
                             },
                             delete: template.isBuiltIn ? nil : {
                                 deletingTemplateID = template.id
@@ -5000,11 +4997,14 @@ private struct TemplatesView: View {
             .scrollIndicators(.hidden)
         }
         .background(BurritoTheme.canvas)
-        .sheet(isPresented: $showingEditor) {
+        .sheet(item: $editorTarget) { target in
             TemplateEditorView(
-                template: templates.first { $0.id == editingTemplateID }
+                template: target.templateID.flatMap { templateID in
+                    templates.first { $0.id == templateID }
+                }
             ) { name, symbol, instructions in
-                if let template = templates.first(where: { $0.id == editingTemplateID }) {
+                if let templateID = target.templateID,
+                   let template = templates.first(where: { $0.id == templateID }) {
                     template.name = name
                     template.symbol = symbol
                     template.instructions = instructions
@@ -5017,9 +5017,9 @@ private struct TemplatesView: View {
                     modelContext.insert(template)
                 }
                 try? modelContext.save()
-                showingEditor = false
-                editingTemplateID = nil
+                editorTarget = nil
             }
+            .id(target.id)
         }
         .overlay {
             if let template = templates.first(where: { $0.id == deletingTemplateID }) {
@@ -5038,6 +5038,25 @@ private struct TemplatesView: View {
                     )
                 }
             }
+        }
+    }
+}
+
+private enum TemplateEditorTarget: Identifiable {
+    case new
+    case existing(UUID)
+
+    var id: String {
+        switch self {
+        case .new: "new"
+        case .existing(let templateID): "existing-\(templateID.uuidString)"
+        }
+    }
+
+    var templateID: UUID? {
+        switch self {
+        case .new: nil
+        case .existing(let templateID): templateID
         }
     }
 }
