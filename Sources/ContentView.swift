@@ -7100,67 +7100,76 @@ private struct TemplateEditorView: View {
         self.save = save
         _name = State(initialValue: template?.name ?? "")
         _symbol = State(initialValue: template?.symbol ?? "note.text")
-        _instructions = State(initialValue: template?.instructions ?? "")
+        // PRE-POPULATE instructions from existing template or resolved built-in instructions
+        _instructions = State(
+            initialValue: template.map { BuiltInTemplate.resolvedInstructions(for: $0.snapshot) } ?? ""
+        )
     }
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(template == nil ? "New template" : "Edit template")
-                    .font(.burritoDisplay(size: 32, weight: .regular))
-                Text("Describe exactly how Burrito should organize the transcript.")
+        VStack(alignment: .leading, spacing: 18) {
+            // Header
+            VStack(alignment: .leading, spacing: 3) {
+                Text(template == nil ? "New Template" : "Edit Template")
+                    .font(.burritoUI(size: 18, weight: 450))
+                    .foregroundStyle(.primary)
+                Text("Describe how Burrito should organize meeting transcripts into notes.")
+                    .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                BurritoSectionLabel(title: "Name")
-                TextField("Meeting brief", text: $name)
+            // Name Field
+            VStack(alignment: .leading, spacing: 6) {
+                BurritoSectionLabel(title: "NAME")
+                TextField("e.g. Executive Summary", text: $name)
                     .textFieldStyle(.plain)
-                    .font(.burritoUI(size: 14))
-                    .padding(.horizontal, 13)
-                    .frame(height: 42)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .font(.burritoUI(size: 13))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .burritoElevation(.control)
                     .overlay {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(BurritoTheme.softBorder)
                     }
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                BurritoSectionLabel(title: "Symbol")
+            // Symbol Picker (Compact Horizontal Row)
+            VStack(alignment: .leading, spacing: 6) {
+                BurritoSectionLabel(title: "ICON SYMBOL")
                 TemplateSymbolPicker(selection: $symbol)
             }
 
-            VStack(alignment: .leading, spacing: 9) {
-                BurritoSectionLabel(title: "Instructions")
+            // Instructions Text Editor (Pre-filled!)
+            VStack(alignment: .leading, spacing: 6) {
+                BurritoSectionLabel(title: "INSTRUCTIONS")
                 TextEditor(text: $instructions)
-                    .font(.burritoUI(size: 14))
+                    .font(.burritoUI(size: 12))
                     .lineSpacing(4)
                     .scrollContentBackground(.hidden)
                     .burritoThinScrollers()
-                    .padding(12)
-                    .frame(minHeight: 190)
-                    .background(BurritoTheme.controlFill, in: Rectangle())
+                    .padding(10)
+                    .frame(height: 130)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .burritoElevation(.control)
                     .overlay {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(BurritoTheme.softBorder)
                     }
             }
 
-            HStack {
+            // Actions Footer
+            HStack(spacing: 10) {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Save") {
+                Button("Save Template") {
                     save(
                         name.trimmingCharacters(in: .whitespacesAndNewlines),
                         symbol.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -7171,138 +7180,69 @@ private struct TemplateEditorView: View {
                 .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.top, 4)
         }
-        .padding(28)
-        .frame(width: 600)
-        .background(BurritoTheme.paper)
+        .padding(22)
+        .frame(width: 460)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(BurritoTheme.softBorder)
+        }
     }
 }
 
 private struct TemplateSymbolPicker: View {
     @Binding var selection: String
-    @State private var query = ""
 
-    private let columns = Array(
-        repeating: GridItem(.flexible(minimum: 70), spacing: 4),
-        count: 6
-    )
-
-    private var symbols: [TemplateSymbolOption] {
-        TemplateSymbolOption.matching(query)
+    private var options: [TemplateSymbolOption] {
+        TemplateSymbolOption.all
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                BurritoIcon(name: selection, size: 15)
-                    .foregroundStyle(BurritoTheme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(BurritoTheme.accentSoft, in: Rectangle())
-                    .burritoElevation(.control)
-                    .accessibilityHidden(true)
-
-                Text(TemplateSymbolOption.title(for: selection))
-                    .font(.burritoUI(size: 12, weight: 450))
-                    .lineLimit(1)
-
-                Spacer()
-
-                HStack(spacing: 7) {
-                    BurritoIcon(name: "magnifyingglass", size: 10)
-                        .foregroundStyle(.tertiary)
-                    TextField("Search symbols", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.burritoUI(size: 12))
-                    if !query.isEmpty {
-                        Button {
-                            query = ""
-                        } label: {
-                            BurritoIcon(name: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(options) { option in
+                    Button {
+                        selection = option.systemName
+                    } label: {
+                        HStack(spacing: 5) {
+                            BurritoIcon(name: option.systemName, size: 12)
+                            Text(option.title)
+                                .font(.burritoUI(size: 11, weight: 450))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Clear symbol search")
-                    }
-                }
-                .padding(.horizontal, 9)
-                .frame(width: 220, height: 30)
-                .background(BurritoTheme.controlFill, in: Rectangle())
-                .burritoElevation(.control)
-            }
-            .padding(10)
-
-            Rectangle()
-                .fill(BurritoTheme.softBorder)
-                .frame(height: 1)
-
-            ScrollView {
-                if symbols.isEmpty {
-                    VStack(spacing: 5) {
-                        Text("No symbols found")
-                            .font(.burritoUI(size: 12, weight: 450))
-                        Text("Try a broader word such as work, study, or meeting.")
-                            .font(.burritoUI(size: 11, relativeTo: .caption))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 34)
-                } else {
-                    LazyVGrid(columns: columns, spacing: 4) {
-                        ForEach(symbols) { option in
-                            Button {
-                                selection = option.systemName
-                            } label: {
-                                VStack(spacing: 5) {
-                                    BurritoIcon(name: option.systemName, size: 15)
-                                    Text(option.title)
-                                        .font(.burritoUI(size: 9, weight: 450))
-                                        .lineLimit(1)
-                                }
-                                .foregroundStyle(
+                        .foregroundStyle(
+                            selection == option.systemName
+                                ? BurritoTheme.accentForeground
+                                : .secondary
+                        )
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(
+                            selection == option.systemName
+                                ? BurritoTheme.accent
+                                : BurritoTheme.controlFill,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                        .burritoElevation(.control, isActive: selection == option.systemName)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(
                                     selection == option.systemName
                                         ? BurritoTheme.accent
-                                        : Color.secondary
+                                        : BurritoTheme.softBorder
                                 )
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 48)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .background(
-                                selection == option.systemName
-                                    ? BurritoTheme.accentSoft
-                                    : Color.clear,
-                                in: Rectangle()
-                            )
-                            .burritoElevation(
-                                .control,
-                                isActive: selection == option.systemName
-                            )
-                            .overlay {
-                                if selection == option.systemName {
-                                    Rectangle()
-                                        .stroke(BurritoTheme.accent.opacity(0.45))
-                                }
-                            }
-                            .help(option.title)
-                            .accessibilityLabel(option.title)
-                            .accessibilityAddTraits(
-                                selection == option.systemName ? .isSelected : []
-                            )
                         }
                     }
-                    .padding(6)
+                    .buttonStyle(.plain)
                 }
             }
-            .scrollIndicators(.hidden)
-            .frame(height: 162)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 2)
         }
-        .background(BurritoTheme.controlFill.opacity(0.55), in: Rectangle())
-        .burritoElevation(.surface)
-        .overlay {
-            Rectangle()
-                .stroke(BurritoTheme.softBorder)
-        }
+        .scrollIndicators(.hidden)
+        .frame(height: 36)
     }
 }
 
