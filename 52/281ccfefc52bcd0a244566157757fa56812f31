@@ -1,0 +1,47 @@
+Sources/Domain.swift
+  s_4afba08ece1fab::t_305748f384d369 79,86-99
+Sources/ContentView.swift
+  s_4afba08ece1fab::t_305748f384d369 5643-5645,5701-5712
+Sources/SystemAudioCapture.swift
+  s_4afba08ece1fab::t_d45a7e5bf950a5 47,115
+Sources/LiveSpeechTranscriber.swift
+  s_4afba08ece1fab::t_8c6c624c8f5d7c 282,319,322-327
+  s_4afba08ece1fab::t_305748f384d369 45,53-54,57-64,68,76-89,133,147-149,178,209,245-246,249-253,276-279,281,283-298,300-303,305-308,310-318,320-321,328-342
+  s_4afba08ece1fab::t_fd31edcccca8d3 275
+Sources/AppCoordinator.swift
+  s_4afba08ece1fab::t_d45a7e5bf950a5 33-34,322-323,344,355-358,382,384-385,530-531,540-541,577-578,820-821,881,907-916
+  s_4afba08ece1fab::t_896027fcb3d5c1 383,457-458,467-468,511-512,528-529
+  s_4afba08ece1fab::t_158f0a9150d444 393,852-854
+  s_4afba08ece1fab::t_0882da46bb4bdf 917-918
+Sources/LocalSpeakerDiarizer.swift
+  s_4afba08ece1fab::t_43e6356166ac78 50-52
+  s_4afba08ece1fab::t_9ab6f8019e71c0 4-5,7-18,21-48,53-55,64-73,76-77
+  s_4afba08ece1fab::t_80944b1990cb1f 6
+  s_4afba08ece1fab::t_813b4ec111e082 19-20
+  s_4afba08ece1fab::t_b6ac396819dada 56-57
+  s_4afba08ece1fab::t_1540237ff2756e 74-75
+  s_4afba08ece1fab::t_caf2d9bb7e17a9 49
+Tests/DomainTests.swift
+  s_4afba08ece1fab::t_3365df0ff3d3a5 10-84
+Tests/CoordinatorTests.swift
+  s_4afba08ece1fab::t_447fd962557d3d 820-821
+  s_4afba08ece1fab::t_dd60fcd985c9a2 257-264,266-267,289,294,867,876,881-884,900-901
+  s_4afba08ece1fab::t_9311866f597d94 11-14,53-61,796-819,822-866,868-875,877-880,885-899,902
+  s_4afba08ece1fab::t_9af76bbd7e68aa 62-63,903
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "52281ccfefc52bcd0a244566157757fa56812f31",
+  "prompts": {},
+  "sessions": {
+    "s_4afba08ece1fab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdb41-44f3-7463-93ba-1073ef056c9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
