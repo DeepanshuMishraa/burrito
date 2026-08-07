@@ -1,0 +1,27 @@
+Sources/ContentView.swift
+  s_4afba08ece1fab::t_45c15598ca5e30 27-43,86,353,380-382,1001-1006
+  s_4afba08ece1fab::t_05795bcfa968df 1007
+Tests/AppSurfaceTests.swift
+  s_4afba08ece1fab::t_45c15598ca5e30 231-258
+  s_4afba08ece1fab::t_1be722d526e69d 230
+Sources/burritoApp.swift
+  s_4afba08ece1fab::t_45c15598ca5e30 164,192-195,234-237,276-279,336-360,408-412,419-442,445,448-449
+  s_4afba08ece1fab::t_25bca3989ba0e8 443-444,446-447
+  s_4afba08ece1fab::t_07c3e3d4f903c6 450-451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "707855b9d4454f3771304b8aec99f31cfe2ff1b3",
+  "prompts": {},
+  "sessions": {
+    "s_4afba08ece1fab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdb41-44f3-7463-93ba-1073ef056c9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
