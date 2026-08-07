@@ -177,30 +177,24 @@ private struct SettingsPane: View {
                     VStack(alignment: .leading, spacing: 8) {
                         BurritoSectionLabel(title: "APPEARANCE & TEMPLATES")
 
-                        VStack(spacing: 0) {
+                        VStack(spacing: 4) {
                             BurritoThemePicker(selection: $colorThemeRawValue)
-
-                            Divider().padding(.leading, 58)
 
                             BurritoFontPicker(
                                 selection: $fontChoiceRawValue,
                                 sizeSelection: $interfaceFontSizeRawValue
                             )
 
-                            Divider().padding(.leading, 58)
-
                             BurritoTemplatePicker(selection: $defaultTemplateID)
-
-                            Divider().padding(.leading, 58)
 
                             BurritoToggleRow(
                                 title: "Font smoothing",
                                 subtitle: "Use grayscale text anti-aliasing. Requires app restart.",
-                                symbol: "sparkles",
                                 isOn: $fontSmoothing,
                                 style: .settingsForm
                             )
                         }
+                        .padding(.vertical, 6)
                         .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .burritoElevation(.surface)
                         .overlay {
@@ -211,25 +205,22 @@ private struct SettingsPane: View {
                     VStack(alignment: .leading, spacing: 8) {
                         BurritoSectionLabel(title: "RECORDING & AUDIO")
 
-                        VStack(spacing: 0) {
+                        VStack(spacing: 4) {
                             BurritoToggleRow(
                                 title: "Include microphone by default",
                                 subtitle: "Capture microphone audio alongside system sound for new recordings.",
-                                symbol: "mic",
                                 isOn: $microphoneDefault,
                                 style: .settingsForm
                             )
 
-                            Divider().padding(.leading, 58)
-
                             BurritoToggleRow(
                                 title: "Keep audio backups",
                                 subtitle: "Retain local audio files after transcription to allow regenerating notes.",
-                                symbol: "folder",
                                 isOn: $retainAudioDefault,
                                 style: .settingsForm
                             )
                         }
+                        .padding(.vertical, 6)
                         .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .burritoElevation(.surface)
                         .overlay {
@@ -310,11 +301,6 @@ private struct BurritoTemplatePicker: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            BurritoIcon(name: selectedTemplate.symbol, size: 14)
-                .foregroundStyle(BurritoTheme.accent)
-                .frame(width: 28, height: 28)
-                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-
             VStack(alignment: .leading, spacing: 3) {
                 Text("Default note template")
                     .font(.burritoUI(size: 13, weight: 450))
@@ -389,8 +375,8 @@ private struct BurritoTemplatePicker: View {
                 .presentationBackground(BurritoTheme.raised)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 54)
+        .padding(.horizontal, 18)
+        .frame(height: 52)
     }
 }
 
@@ -413,8 +399,6 @@ private struct BurritoThemePicker: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ThemeSwatches(colors: selectedTheme.previewColors)
-
             VStack(alignment: .leading, spacing: 3) {
                 Text("Color theme")
                     .font(.burritoUI(size: 13, weight: 450))
@@ -477,8 +461,8 @@ private struct BurritoThemePicker: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 54)
+        .padding(.horizontal, 18)
+        .frame(height: 52)
         .onAppear {
             selection = selectedTheme.rawValue
         }
@@ -517,12 +501,6 @@ private struct BurritoFontPicker: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text("Ag")
-                .font(selectedFont.font(size: 17, weight: 450))
-                .foregroundStyle(BurritoTheme.accent)
-                .frame(width: 32, height: 32)
-                .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
             VStack(alignment: .leading, spacing: 3) {
                 Text("App font")
                     .font(.burritoUI(size: 13, weight: 450))
