@@ -1,0 +1,24 @@
+Tests/DomainTests.swift
+  s_de268814f883b9::t_388c473cd02017 1268-1272
+  s_de268814f883b9::t_5a0348fcddb1c4 1288,1294
+  s_de268814f883b9::t_06eb4cf35cb846 1069,1082-1085,1087,1109,1122-1125,1127,1145,1156,1172,1183,1195,1206,1252-1267,1273-1287,1289-1293,1295
+  s_de268814f883b9::t_23e90378129c87 1296
+docs/research/local-transcription.md
+  s_de268814f883b9::t_3edda195d2fc06 78,83-87,108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5e4c1dfa88cc1857b2504728e1819b2747853e67",
+  "prompts": {},
+  "sessions": {
+    "s_de268814f883b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd807-1c63-74d0-8347-e930c26e2add",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
