@@ -30,6 +30,8 @@ final class AppCoordinator {
     private var activeFiles: RecordingFiles?
     private var appendsToExistingNote = false
     private var timerTask: Task<Void, Never>?
+    private var pausedAt: Date?
+    private var accumulatedPausedDuration: TimeInterval = 0
 
     init(
         capture: any AudioCapturing,
@@ -317,6 +319,8 @@ final class AppCoordinator {
             elapsed = 0
             activity = .silent
             isPaused = false
+            pausedAt = nil
+            accumulatedPausedDuration = 0
             liveTranscript = capture.liveTranscript
             silentFor = 0
             smartStopStatus = .monitoring
@@ -337,6 +341,7 @@ final class AppCoordinator {
         switch await capture.pause() {
         case .success:
             isPaused = true
+            pausedAt = now()
             activity = .silent
         case .failure(let error):
             lastError = error
@@ -347,6 +352,10 @@ final class AppCoordinator {
         guard captureState.isRecording, isPaused else { return }
         switch await capture.resume() {
         case .success:
+            if let pausedAt {
+                accumulatedPausedDuration += max(0, now().timeIntervalSince(pausedAt))
+            }
+            pausedAt = nil
             isPaused = false
         case .failure(let error):
             lastError = error
@@ -366,12 +375,14 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = nil
         activity = .silent
-        isPaused = false
         silentFor = 0
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
-        let recordingDuration = now().timeIntervalSince(startedAt)
+        let recordingDuration = activeRecordingDuration(since: startedAt, at: now())
+        var processingWarnings: [String] = []
+        isPaused = false
+        pausedAt = nil
         note.updatedAt = .now
         try? context.save()
 
@@ -379,6 +390,7 @@ final class AppCoordinator {
             fail(note: note, error: error, context: context)
             return
         }
+        liveTranscript = capture.liveTranscript
         feedback.recordingStopped()
 
         guard capture.hasMeaningfulAudio else {
@@ -442,7 +454,8 @@ final class AppCoordinator {
             case .success(let attributed):
                 systemSegments = attributed
             case .failure(let error):
-                note.lastErrorMessage = error.recoveryMessage
+                processingWarnings.append(error.recoveryMessage)
+                note.lastErrorMessage = processingWarnings.joined(separator: "\n\n")
             }
         }
         microphoneSegments = SpeakerAttribution.assign(
@@ -451,7 +464,8 @@ final class AppCoordinator {
         )
 
         if case .failure(let error) = fileStore.removeTranscriptionAudio(for: files) {
-            note.lastErrorMessage = error.recoveryMessage
+            processingWarnings.append(error.recoveryMessage)
+            note.lastErrorMessage = processingWarnings.joined(separator: "\n\n")
         }
 
         note.processingStage = .organizing
@@ -494,7 +508,8 @@ final class AppCoordinator {
             )
         } else {
             if case .failure(let error) = fileStore.removeAudio(for: files) {
-                note.lastErrorMessage = error.recoveryMessage
+                processingWarnings.append(error.recoveryMessage)
+                note.lastErrorMessage = processingWarnings.joined(separator: "\n\n")
             } else {
                 note.systemAudioRelativePath = nil
                 note.microphoneAudioRelativePath = nil
@@ -510,6 +525,10 @@ final class AppCoordinator {
         } else {
             await generate(note: note, context: context)
         }
+        if note.lifecycle == .ready, !processingWarnings.isEmpty {
+            note.lastErrorMessage = processingWarnings.joined(separator: "\n\n")
+            try? context.save()
+        }
         activeFiles = nil
         activeNoteID = nil
         activeCalendarEvent = nil
@@ -518,7 +537,8 @@ final class AppCoordinator {
         elapsed = 0
         activity = .silent
         isPaused = false
-        liveTranscript = .preparing
+        pausedAt = nil
+        accumulatedPausedDuration = 0
         silentFor = 0
         smartStopStatus = .monitoring
     }
@@ -554,7 +574,8 @@ final class AppCoordinator {
         elapsed = 0
         activity = .silent
         isPaused = false
-        liveTranscript = .preparing
+        pausedAt = nil
+        accumulatedPausedDuration = 0
         silentFor = 0
         smartStopStatus = .monitoring
     }
@@ -796,6 +817,8 @@ final class AppCoordinator {
         captureState = .idle
         activity = .silent
         isPaused = false
+        pausedAt = nil
+        accumulatedPausedDuration = 0
         liveTranscript = .preparing
         silentFor = 0
         activeCalendarEvent = nil
@@ -826,6 +849,9 @@ final class AppCoordinator {
         activeCalendarEvent = nil
         appendsToExistingNote = false
         activity = .silent
+        isPaused = false
+        pausedAt = nil
+        accumulatedPausedDuration = 0
         silentFor = 0
         smartStopStatus = .monitoring
         timerTask?.cancel()
@@ -852,7 +878,7 @@ final class AppCoordinator {
                 let now = now()
                 let tickDuration = max(0, now.timeIntervalSince(lastTick))
                 lastTick = now
-                elapsed = now.timeIntervalSince(startedAt)
+                elapsed = activeRecordingDuration(since: startedAt, at: now)
                 liveTranscript = capture.liveTranscript
                 activity = isPaused ? .silent : capture.activity
                 if isPaused {
@@ -876,6 +902,18 @@ final class AppCoordinator {
                 }
             }
         }
+    }
+
+    private func activeRecordingDuration(since startedAt: Date, at currentDate: Date) -> TimeInterval {
+        let currentPauseDuration = pausedAt.map {
+            max(0, currentDate.timeIntervalSince($0))
+        } ?? 0
+        return max(
+            0,
+            currentDate.timeIntervalSince(startedAt)
+                - accumulatedPausedDuration
+                - currentPauseDuration
+        )
     }
 
     private static func systemSpeechAuthorization() async -> Bool {

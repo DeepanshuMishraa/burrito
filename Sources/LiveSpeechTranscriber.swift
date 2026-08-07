@@ -42,7 +42,7 @@ final class LiveTranscriptStore: Sendable {
         isFinal: Bool,
         finalizedThrough: TimeInterval
     ) {
-        let passage = LiveTranscriptPassage(
+        var passage = LiveTranscriptPassage(
             source: source,
             startTime: startTime,
             duration: duration,
@@ -50,11 +50,22 @@ final class LiveTranscriptStore: Sendable {
             isFinal: isFinal
         )
         state.withLock { state in
+            var shouldAppend = true
+            var reusedID: UUID?
             state.passages = state.passages.compactMap { existing in
                 guard existing.source == source else { return existing }
+                if Self.rangesOverlap(existing, passage) {
+                    if existing.isFinal && !isFinal {
+                        shouldAppend = false
+                        return existing
+                    }
+                    reusedID = reusedID ?? existing.id
+                    return nil
+                }
                 if !existing.isFinal,
                    existing.startTime + existing.duration <= finalizedThrough {
                     return LiveTranscriptPassage(
+                        id: existing.id,
                         source: existing.source,
                         startTime: existing.startTime,
                         duration: existing.duration,
@@ -62,10 +73,21 @@ final class LiveTranscriptStore: Sendable {
                         isFinal: true
                     )
                 }
-                guard Self.rangesOverlap(existing, passage) else { return existing }
-                return existing.isFinal && !isFinal ? existing : nil
+                return existing
             }
-            state.passages.append(passage)
+            if shouldAppend {
+                if let reusedID {
+                    passage = LiveTranscriptPassage(
+                        id: reusedID,
+                        source: passage.source,
+                        startTime: passage.startTime,
+                        duration: passage.duration,
+                        text: passage.text,
+                        isFinal: passage.isFinal
+                    )
+                }
+                state.passages.append(passage)
+            }
             if state.passages.count > 160 {
                 state.passages.removeFirst(state.passages.count - 160)
             }
@@ -108,8 +130,8 @@ final class LiveSpeechTranscriptionSession: Sendable {
             return .failure(error)
         }
 
+        var channels: [AudioSource: LiveSpeechChannel] = [:]
         do {
-            var channels: [AudioSource: LiveSpeechChannel] = [:]
             for source in sources {
                 channels[source] = try await LiveSpeechChannel(
                     locale: locale,
@@ -122,6 +144,9 @@ final class LiveSpeechTranscriptionSession: Sendable {
                 LiveSpeechTranscriptionSession(store: store, channels: channels)
             )
         } catch {
+            for channel in channels.values {
+                await channel.finish()
+            }
             let failure = BurritoError.transcriptionFailed(
                 details: "Live transcription could not start: \(error.localizedDescription)"
             )
@@ -150,8 +175,7 @@ private final class LiveSpeechChannel: Sendable {
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
     private let analysisTask: Task<Void, Never>
     private let resultsTask: Task<Void, Never>
-    private let analyzerFormat: AVAudioFormat
-    private let source: AudioSource
+    private let audioConverter: SpeechAudioConversion
     private let store: LiveTranscriptStore
 
     init(
@@ -182,8 +206,7 @@ private final class LiveSpeechChannel: Sendable {
 
         self.analyzer = analyzer
         self.continuation = pair.continuation
-        self.analyzerFormat = analyzerFormat
-        self.source = source
+        self.audioConverter = SpeechAudioConversion(outputFormat: analyzerFormat)
         self.store = store
         self.analysisTask = Task {
             do {
@@ -219,13 +242,15 @@ private final class LiveSpeechChannel: Sendable {
 
     func append(_ buffer: AVAudioPCMBuffer, presentationTime: CMTime) {
         do {
-            let converted = try SpeechAudioConversion.convert(
-                buffer,
-                to: analyzerFormat
-            )
-            continuation.yield(
+            let converted = try audioConverter.convert(buffer)
+            let result = continuation.yield(
                 AnalyzerInput(buffer: converted, bufferStartTime: presentationTime)
             )
+            if case .dropped = result {
+                store.markUnavailable(
+                    "Live transcription fell behind and skipped some audio. The recording is still being saved."
+                )
+            }
         } catch {
             store.markUnavailable(
                 "Live audio conversion stopped: \(error.localizedDescription). The recording is still being saved."
@@ -247,52 +272,74 @@ private final class LiveSpeechChannel: Sendable {
     }
 }
 
-private enum SpeechAudioConversion {
-    static func convert(
-        _ input: AVAudioPCMBuffer,
-        to outputFormat: AVAudioFormat
-    ) throws -> AVAudioPCMBuffer {
-        guard let converter = AVAudioConverter(from: input.format, to: outputFormat) else {
-            throw BurritoError.transcriptionFailed(
-                details: "The live audio format could not be converted for speech recognition."
-            )
-        }
-        let rateRatio = outputFormat.sampleRate / input.format.sampleRate
-        let capacity = AVAudioFrameCount(
-            ceil(Double(input.frameLength) * rateRatio) + 32
-        )
-        guard let output = AVAudioPCMBuffer(
-            pcmFormat: outputFormat,
-            frameCapacity: capacity
-        ) else {
-            throw BurritoError.transcriptionFailed(
-                details: "A live speech audio buffer could not be allocated."
-            )
-        }
+private final class SpeechAudioConversion: Sendable {
+    private struct State {
+        var inputFormat: AVAudioFormat?
+        var converter: AVAudioConverter?
+    }
 
-        let suppliedInput = Mutex(false)
-        var conversionError: NSError?
-        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            let shouldSupply = suppliedInput.withLock { supplied in
-                guard !supplied else { return false }
-                supplied = true
-                return true
+    private let outputFormat: AVAudioFormat
+    // AVAudioConverter is not Sendable; the mutex serializes all access to it.
+    private let state = Mutex(State())
+
+    init(outputFormat: AVAudioFormat) {
+        self.outputFormat = outputFormat
+    }
+
+    func convert(_ input: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
+        try state.withLock { state in
+            if state.inputFormat?.isEqual(input.format) != true {
+                guard let converter = AVAudioConverter(from: input.format, to: outputFormat) else {
+                    throw BurritoError.transcriptionFailed(
+                        details: "The live audio format could not be converted for speech recognition."
+                    )
+                }
+                state.inputFormat = input.format
+                state.converter = converter
             }
-            guard shouldSupply else {
-                inputStatus.pointee = .noDataNow
-                return nil
+            guard let converter = state.converter else {
+                throw BurritoError.transcriptionFailed(
+                    details: "The live audio converter is unavailable."
+                )
             }
-            inputStatus.pointee = .haveData
-            return input
-        }
-        if let conversionError {
-            throw conversionError
-        }
-        guard status != .error, output.frameLength > 0 else {
-            throw BurritoError.transcriptionFailed(
-                details: "Live audio conversion produced no speech samples."
+
+            let rateRatio = outputFormat.sampleRate / input.format.sampleRate
+            let capacity = AVAudioFrameCount(
+                ceil(Double(input.frameLength) * rateRatio) + 32
             )
+            guard let output = AVAudioPCMBuffer(
+                pcmFormat: outputFormat,
+                frameCapacity: capacity
+            ) else {
+                throw BurritoError.transcriptionFailed(
+                    details: "A live speech audio buffer could not be allocated."
+                )
+            }
+
+            let suppliedInput = Mutex(false)
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+                let shouldSupply = suppliedInput.withLock { supplied in
+                    guard !supplied else { return false }
+                    supplied = true
+                    return true
+                }
+                guard shouldSupply else {
+                    inputStatus.pointee = .noDataNow
+                    return nil
+                }
+                inputStatus.pointee = .haveData
+                return input
+            }
+            if let conversionError {
+                throw conversionError
+            }
+            guard status != .error, output.frameLength > 0 else {
+                throw BurritoError.transcriptionFailed(
+                    details: "Live audio conversion produced no speech samples."
+                )
+            }
+            return output
         }
-        return output
     }
 }

@@ -22,9 +22,6 @@ extension AudioCapturing {
             passages: []
         )
     }
-
-    func pause() async -> Result<Void, BurritoError> { .success(()) }
-    func resume() async -> Result<Void, BurritoError> { .success(()) }
 }
 
 struct AudioActivity: Equatable, Sendable {

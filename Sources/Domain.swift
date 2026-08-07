@@ -76,14 +76,27 @@ struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
 }
 
 struct LiveTranscriptPassage: Equatable, Identifiable, Sendable {
+    let id: UUID
     let source: AudioSource
     let startTime: TimeInterval
     let duration: TimeInterval
     let text: String
     let isFinal: Bool
 
-    var id: String {
-        "\(source.rawValue)-\(startTime)-\(duration)"
+    init(
+        id: UUID = UUID(),
+        source: AudioSource,
+        startTime: TimeInterval,
+        duration: TimeInterval,
+        text: String,
+        isFinal: Bool
+    ) {
+        self.id = id
+        self.source = source
+        self.startTime = startTime
+        self.duration = duration
+        self.text = text
+        self.isFinal = isFinal
     }
 }
 

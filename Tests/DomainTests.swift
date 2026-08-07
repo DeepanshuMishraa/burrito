@@ -7,6 +7,81 @@ import Testing
 import UserNotifications
 @testable import Burrito
 
+@Suite("Live transcript reconciliation")
+struct LiveTranscriptReconciliationTests {
+    @Test("A final result replaces an overlapping promoted partial")
+    func finalResultReplacesPromotedPartial() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Partial",
+            isFinal: false,
+            finalizedThrough: 0
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Final",
+            isFinal: true,
+            finalizedThrough: 1
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Final"])
+    }
+
+    @Test("A recognizer revision keeps its passage identity")
+    func recognizerRevisionKeepsIdentity() throws {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .microphone,
+            startTime: 2,
+            duration: 0.5,
+            text: "Hello",
+            isFinal: false,
+            finalizedThrough: 0
+        )
+        let partialID = try #require(store.snapshot.passages.first?.id)
+
+        store.apply(
+            source: .microphone,
+            startTime: 2,
+            duration: 1,
+            text: "Hello there",
+            isFinal: true,
+            finalizedThrough: 3
+        )
+
+        let passage = try #require(store.snapshot.passages.first)
+        #expect(store.snapshot.passages.count == 1)
+        #expect(passage.id == partialID)
+        #expect(passage.text == "Hello there")
+    }
+
+    @Test("Distinct passages with equal timing have distinct identities")
+    func equalTimingHasDistinctIdentity() {
+        let first = LiveTranscriptPassage(
+            source: .system,
+            startTime: 4,
+            duration: 1,
+            text: "First",
+            isFinal: true
+        )
+        let second = LiveTranscriptPassage(
+            source: .system,
+            startTime: 4,
+            duration: 1,
+            text: "Second",
+            isFinal: true
+        )
+
+        #expect(first.id != second.id)
+    }
+}
+
 @MainActor
 @Suite("Calendar access")
 struct CalendarAccessTests {

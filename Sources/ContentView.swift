@@ -5640,6 +5640,9 @@ private struct LiveTranscriptPanel: View {
                         if snapshot.passages.isEmpty {
                             liveTranscriptPlaceholder
                         } else {
+                            if case .unavailable(let reason) = snapshot.availability {
+                                liveTranscriptUnavailable(reason: reason)
+                            }
                             ForEach(snapshot.passages) { passage in
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 6) {
@@ -5695,14 +5698,18 @@ private struct LiveTranscriptPanel: View {
             .font(.burritoUI(size: 14, weight: 400))
             .foregroundStyle(.secondary)
         case .unavailable(let reason):
-            VStack(alignment: .leading, spacing: 5) {
-                Label("Live preview unavailable", systemImage: "exclamationmark.triangle")
-                    .font(.burritoUI(size: 14, weight: 450))
-                    .foregroundStyle(.secondary)
-                Text(reason)
-                    .font(.burritoUI(size: 11, weight: 400))
-                    .foregroundStyle(.tertiary)
-            }
+            liveTranscriptUnavailable(reason: reason)
+        }
+    }
+
+    private func liveTranscriptUnavailable(reason: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label("Live preview unavailable", systemImage: "exclamationmark.triangle")
+                .font(.burritoUI(size: 14, weight: 450))
+                .foregroundStyle(.secondary)
+            Text(reason)
+                .font(.burritoUI(size: 11, weight: 400))
+                .foregroundStyle(.tertiary)
         }
     }
 

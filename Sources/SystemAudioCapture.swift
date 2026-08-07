@@ -44,6 +44,7 @@ final class SystemAudioCapture: AudioCapturing {
             guard allowed else { return .failure(.microphonePermissionDenied) }
         }
 
+        var liveSession: LiveSpeechTranscriptionSession?
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false,
@@ -76,7 +77,6 @@ final class SystemAudioCapture: AudioCapturing {
             let sources: [AudioSource] = mode == .meeting
                 ? [.system, .microphone]
                 : [.system]
-            let liveSession: LiveSpeechTranscriptionSession?
             switch await LiveSpeechTranscriptionSession.make(
                 languageIdentifier: languageIdentifier,
                 sources: sources,
@@ -112,6 +112,7 @@ final class SystemAudioCapture: AudioCapturing {
             isActive = true
             return .success(())
         } catch {
+            await liveSession?.finish()
             return .failure(.captureFailed(details: error.localizedDescription))
         }
     }
