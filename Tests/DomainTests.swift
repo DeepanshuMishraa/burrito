@@ -61,6 +61,80 @@ struct LiveTranscriptReconciliationTests {
         #expect(passage.text == "Hello there")
     }
 
+    @Test("A partial extending beyond a final passage keeps its newer audio")
+    func extendingPartialKeepsNewerAudio() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 1
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 2,
+            text: "Already final and still speaking",
+            isFinal: false,
+            finalizedThrough: 1
+        )
+
+        #expect(store.snapshot.passages.count == 2)
+        #expect(store.snapshot.passages.contains { $0.text == "Already final" && $0.isFinal })
+        #expect(store.snapshot.passages.contains { $0.text == "Already final and still speaking" && !$0.isFinal })
+    }
+
+    @Test("A partial contained by a final passage is ignored as stale")
+    func containedPartialIsIgnored() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 2,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 2
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0.5,
+            duration: 0.5,
+            text: "Stale partial",
+            isFinal: false,
+            finalizedThrough: 2
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Already final"])
+    }
+
+    @Test("A partial extending only before a final passage is ignored as stale")
+    func earlierPartialIsIgnored() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 1,
+            duration: 2,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 3
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 3,
+            text: "Earlier audio only",
+            isFinal: false,
+            finalizedThrough: 3
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Already final"])
+    }
+
     @Test("Distinct passages with equal timing have distinct identities")
     func equalTimingHasDistinctIdentity() {
         let first = LiveTranscriptPassage(

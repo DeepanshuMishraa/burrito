@@ -525,8 +525,12 @@ final class AppCoordinator {
         } else {
             await generate(note: note, context: context)
         }
-        if note.lifecycle == .ready, !processingWarnings.isEmpty {
-            note.lastErrorMessage = processingWarnings.joined(separator: "\n\n")
+        if !processingWarnings.isEmpty {
+            var messages = processingWarnings
+            if let generationMessage = note.lastErrorMessage {
+                messages.insert(generationMessage, at: 0)
+            }
+            note.lastErrorMessage = messages.joined(separator: "\n\n")
             try? context.save()
         }
         activeFiles = nil

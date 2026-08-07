@@ -145,6 +145,9 @@ private final class TranscriptionInputSpy: Transcribing, Sendable {
 
 private struct GeneratorStub: NoteGenerating {
     var availabilityResult: Result<Void, BurritoError> = .success(())
+    var generationResult: Result<GeneratedNote, BurritoError> = .success(
+        GeneratedNote(title: "Generated", markdown: "# Generated")
+    )
     var suggestedTitle = "Generated title"
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
@@ -158,7 +161,7 @@ private struct GeneratorStub: NoteGenerating {
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
-        .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+        generationResult
     }
 
     func suggestTitle(
@@ -898,6 +901,45 @@ struct CoordinatorTests {
         let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
         #expect(note.lifecycle == .ready)
         #expect(note.lastErrorMessage?.contains(warning.recoveryMessage) == true)
+        #expect(note.lastErrorMessage?.contains(cleanupWarning.recoveryMessage) == true)
+    }
+
+    @Test("Failed generation preserves every nonfatal processing warning")
+    func failedGenerationPreservesProcessingWarnings() async throws {
+        let context = try makeContext()
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: root.appending(path: "system.m4a"))
+        let generationError = BurritoError.generationFailed(details: "The model is unavailable")
+        let diarizationWarning = BurritoError.speakerDiarizationFailed(details: "Model unavailable")
+        let cleanupWarning = BurritoError.storageFailed(details: "Temporary audio is locked")
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(generationResult: .failure(generationError)),
+            fileStore: FileStoreSpy(
+                root: root,
+                removeTranscriptionAudioResult: .failure(cleanupWarning)
+            ),
+            speakerDiarizer: SpeakerDiarizerFailureStub(error: diarizationWarning),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.lifecycle == .recoverable)
+        #expect(note.lastErrorMessage?.contains(generationError.recoveryMessage) == true)
+        #expect(note.lastErrorMessage?.contains(diarizationWarning.recoveryMessage) == true)
         #expect(note.lastErrorMessage?.contains(cleanupWarning.recoveryMessage) == true)
     }
 

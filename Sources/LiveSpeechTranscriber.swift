@@ -50,15 +50,21 @@ final class LiveTranscriptStore: Sendable {
             isFinal: isFinal
         )
         state.withLock { state in
-            var shouldAppend = true
+            let isStalePartial = !isFinal && state.passages.contains { existing in
+                existing.source == source
+                    && existing.isFinal
+                    && Self.rangesOverlap(existing, passage)
+                    && !Self.extendsBeyondFinalizedAudio(passage, existing)
+            }
+            let shouldAppend = !isStalePartial
             var reusedID: UUID?
             state.passages = state.passages.compactMap { existing in
                 guard existing.source == source else { return existing }
                 if Self.rangesOverlap(existing, passage) {
                     if existing.isFinal && !isFinal {
-                        shouldAppend = false
                         return existing
                     }
+                    guard !isStalePartial else { return existing }
                     reusedID = reusedID ?? existing.id
                     return nil
                 }
@@ -102,6 +108,16 @@ final class LiveTranscriptStore: Sendable {
         let leftEnd = left.startTime + max(left.duration, tolerance)
         let rightEnd = right.startTime + max(right.duration, tolerance)
         return left.startTime < rightEnd && right.startTime < leftEnd
+    }
+
+    private static func extendsBeyondFinalizedAudio(
+        _ update: LiveTranscriptPassage,
+        _ finalized: LiveTranscriptPassage
+    ) -> Bool {
+        let tolerance = 0.08
+        let updateEnd = update.startTime + max(update.duration, tolerance)
+        let finalizedEnd = finalized.startTime + max(finalized.duration, tolerance)
+        return updateEnd > finalizedEnd + tolerance
     }
 }
 

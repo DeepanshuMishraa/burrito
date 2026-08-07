@@ -5641,9 +5641,6 @@ private struct LiveTranscriptPanel: View {
                         if snapshot.passages.isEmpty {
                             liveTranscriptPlaceholder
                         } else {
-                            if case .unavailable(let reason) = snapshot.availability {
-                                liveTranscriptUnavailable(reason: reason)
-                            }
                             ForEach(snapshot.passages) { passage in
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 6) {
@@ -5667,6 +5664,10 @@ private struct LiveTranscriptPanel: View {
                                 .id(passage.id)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            if case .unavailable(let reason) = snapshot.availability {
+                                liveTranscriptUnavailable(reason: reason)
+                                    .id(Self.unavailableScrollID)
+                            }
                         }
                     }
                     .padding(16)
@@ -5675,7 +5676,18 @@ private struct LiveTranscriptPanel: View {
                 .onChange(of: snapshot.passages.last?.id) { _, id in
                     guard let id else { return }
                     withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(id, anchor: .bottom)
+                        if case .unavailable = snapshot.availability {
+                            proxy.scrollTo(Self.unavailableScrollID, anchor: .bottom)
+                        } else {
+                            proxy.scrollTo(id, anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: snapshot.availability) { _, availability in
+                    guard case .unavailable = availability,
+                          !snapshot.passages.isEmpty else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(Self.unavailableScrollID, anchor: .bottom)
                     }
                 }
             }
@@ -5684,6 +5696,8 @@ private struct LiveTranscriptPanel: View {
             .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
         }
     }
+
+    private static let unavailableScrollID = "live-transcript-unavailable"
 
     @ViewBuilder
     private var liveTranscriptPlaceholder: some View {
