@@ -1,0 +1,57 @@
+Sources/LiveSpeechTranscriber.swift
+  s_4afba08ece1fab::t_54464d89405a08 220,226-228
+  s_4afba08ece1fab::t_0ad643ebfffef0 2-4,6,14-15,17,20-29,31-33,35-51,54-64,66-67,71-74,76-85,87-147,149-152,154-168,171-172,174-184,186-219,221,229-246,297-298
+  s_4afba08ece1fab::t_1086acc83f8088 1,273,276-281
+  s_4afba08ece1fab::t_677a408d651d9d 222-225,247-272,274-275,282-296
+  s_4afba08ece1fab::t_0803e27f3767fe 5,7-13,16,18-19,30,34,52-53,65,68-70,75,86,148
+  s_4afba08ece1fab::t_7698ccae9d7aa0 153,169-170,173,185
+Sources/burritoApp.swift
+  s_4afba08ece1fab::t_25c307cef42595 211-221
+Sources/SystemAudioCapture.swift
+  s_4afba08ece1fab::t_4605b6f6ed6d67 31
+  s_4afba08ece1fab::t_3c628fd048d2c7 13-14,24-27,35-36,76-94,119-130,140,183-184,196-199,209,213-222,228-233,256,301-308,311
+Sources/ServiceProtocols.swift
+  s_4afba08ece1fab::t_79b682c815f2f5 7,13-14,18-29,47-50,52
+  s_4afba08ece1fab::t_106841f03c7a53 51
+  s_4afba08ece1fab::t_1575ed85fa5a2c 53
+Sources/LocalSpeakerDiarizer.swift
+  s_4afba08ece1fab::t_60e16149f7344f 2-3,5-11,14-29
+  s_4afba08ece1fab::t_0dd15c645ac1c0 1,4,12-13
+Sources/AppCoordinator.swift
+  s_4afba08ece1fab::t_0dd15c645ac1c0 41
+  s_4afba08ece1fab::t_32dfa4fb514c5a 434,452
+  s_4afba08ece1fab::t_83e4f25596ab54 16-17,27,51,319-320,335-355,369,432-433,435-451,520-521,556-557,798-799,856-860
+Sources/ContentView.swift
+  s_4afba08ece1fab::t_0accf11d030e39 2362,2368,2372-2377,2380,2386,2468,4226,4236
+  s_4afba08ece1fab::t_2680a3298a3d18 3960-3984,5511-5512,5523,5558-5565,5567-5599,5601,5603-5608,5623-5710
+  s_4afba08ece1fab::t_050057b28a758d 7607,7732-7742
+  s_4afba08ece1fab::t_37171dd3a5768a 6976-6978,7040-7065
+  s_4afba08ece1fab::t_4ce3e75db0aeb6 5711-5712
+Sources/Domain.swift
+  s_4afba08ece1fab::t_60e16149f7344f 451,483-484
+  s_4afba08ece1fab::t_79b682c815f2f5 78-178,424
+Tests/DomainTests.swift
+  s_4afba08ece1fab::t_8ea53f7eec16c7 250-278,280-307
+  s_4afba08ece1fab::t_0ae83185e975ef 279
+Tests/CoordinatorTests.swift
+  s_4afba08ece1fab::t_8ea53f7eec16c7 13-14,37-46,736-771
+  s_4afba08ece1fab::t_31b97cb09d3a02 772
+burrito.xcodeproj/project.pbxproj
+  s_4afba08ece1fab::t_edcd240d1b18d1 14,23,80-81,205,207,391,393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6c836d1c7a44b58717d65bda72bd0f56f9984e22",
+  "prompts": {},
+  "sessions": {
+    "s_4afba08ece1fab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdb41-44f3-7463-93ba-1073ef056c9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Deepanshu Mishra <d4deepanshu723@gmail.com>"
+    }
+  }
+}
