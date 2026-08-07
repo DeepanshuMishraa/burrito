@@ -285,11 +285,11 @@ extension Font {
     }
 
     @MainActor static func burritoDisplay(size: CGFloat, weight: CGFloat) -> Font {
-        spline(size: size, weight: weight)
+        burritoUI(size: size, weight: weight)
     }
 
     @MainActor
-    static func spline(
+    static func burritoUI(
         size: CGFloat,
         weight: Font.Weight = .regular
     ) -> Font {
@@ -299,7 +299,7 @@ extension Font {
         )
     }
 
-    @MainActor static func spline(size: CGFloat, weight: CGFloat) -> Font {
+    @MainActor static func burritoUI(size: CGFloat, weight: CGFloat) -> Font {
         BurritoFontChoice.selected.font(
             size: BurritoStyleStore.shared.scaledFontSize(size),
             weight: weight
@@ -307,7 +307,7 @@ extension Font {
     }
 
     @MainActor
-    static func spline(
+    static func burritoUI(
         size: CGFloat,
         weight: Font.Weight = .regular,
         relativeTo textStyle: Font.TextStyle
@@ -320,7 +320,7 @@ extension Font {
     }
 
     @MainActor
-    static func spline(
+    static func burritoUI(
         size: CGFloat,
         weight: CGFloat,
         relativeTo textStyle: Font.TextStyle
@@ -334,17 +334,6 @@ extension Font {
         )
     }
 
-    static func system(
-        size: CGFloat,
-        weight: CGFloat,
-        design: Font.Design = .default
-    ) -> Font {
-        return Font(BurritoFontMetrics.systemFont(
-            size: size,
-            weight: BurritoFontMetrics.platformWeight(for: weight),
-            design: design
-        ))
-    }
 }
 
 enum BurritoFontMetrics {
@@ -788,7 +777,7 @@ struct BurritoSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.spline(size: 10, weight: 450))
+            .font(.burritoUI(size: 10, weight: 450))
             .tracking(0.7)
             .foregroundStyle(.tertiary)
     }
@@ -800,7 +789,7 @@ struct BurritoPill: View {
 
     var body: some View {
         BurritoLabel(title, systemImage: systemImage)
-            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+            .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
@@ -863,15 +852,11 @@ struct BurritoToggleRow: View {
     }
 
     private var titleFont: Font {
-        style == .settingsForm
-            ? .spline(size: 13, weight: 450)
-            : .system(size: 13, weight: 450)
+        .burritoUI(size: 13, weight: 450)
     }
 
     private var subtitleFont: Font {
-        style == .settingsForm
-            ? .spline(size: 11, weight: .regular, relativeTo: .caption)
-            : .caption
+        .burritoUI(size: 11, weight: .regular, relativeTo: .caption)
     }
 
     @ViewBuilder
@@ -1051,14 +1036,14 @@ struct BurritoLanguagePicker: View {
             HStack(spacing: 12) {
                 if showsLabel {
                     Text("Language")
-                        .font(.spline(size: 13, weight: 450))
+                        .font(.burritoUI(size: 13, weight: 450))
                         .foregroundStyle(.primary)
                 }
 
                 Spacer()
 
                 Text(selectedLanguage.compactTitle)
-                    .font(.spline(size: 12, weight: .regular))
+                    .font(.burritoUI(size: 12, weight: .regular))
                     .foregroundStyle(.secondary)
 
                 BurritoIcon(name: "chevron.down", size: 8)
@@ -1120,7 +1105,7 @@ struct BurritoLanguagePicker: View {
         } label: {
             HStack(spacing: 9) {
                 Text(language.title)
-                    .font(.spline(size: 12, weight: .regular))
+                    .font(.burritoUI(size: 12, weight: .regular))
                     .foregroundStyle(.primary)
                 Spacer()
                 if selection == language.identifier {
