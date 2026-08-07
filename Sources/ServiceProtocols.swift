@@ -4,12 +4,27 @@ import Foundation
 protocol AudioCapturing: AnyObject {
     var activity: AudioActivity { get }
     var hasMeaningfulAudio: Bool { get }
+    var liveTranscript: LiveTranscriptSnapshot { get }
     func start(
         files: RecordingFiles,
         mode: RecordingMode,
         languageIdentifier: String
     ) async -> Result<Void, BurritoError>
+    func pause() async -> Result<Void, BurritoError>
+    func resume() async -> Result<Void, BurritoError>
     func stop() async -> Result<Void, BurritoError>
+}
+
+extension AudioCapturing {
+    var liveTranscript: LiveTranscriptSnapshot {
+        LiveTranscriptSnapshot(
+            availability: .unavailable(reason: "Live transcription is unavailable."),
+            passages: []
+        )
+    }
+
+    func pause() async -> Result<Void, BurritoError> { .success(()) }
+    func resume() async -> Result<Void, BurritoError> { .success(()) }
 }
 
 struct AudioActivity: Equatable, Sendable {
@@ -26,6 +41,13 @@ protocol Transcribing: Sendable {
     func transcribe(
         input: TranscriptionInput,
         languageIdentifier: String
+    ) async -> Result<[TranscriptSegment], BurritoError>
+}
+
+protocol SpeakerDiarizing: Sendable {
+    func assignSpeakers(
+        audioURL: URL,
+        to segments: [TranscriptSegment]
     ) async -> Result<[TranscriptSegment], BurritoError>
 }
 

@@ -247,6 +247,64 @@ struct NotificationAccessTests {
 
 @Suite("Transcript")
 struct TranscriptTests {
+    @Test("Diarization labels remote passages by strongest time overlap")
+    func assignsDetectedSpeakers() {
+        let transcript = [
+            TranscriptSegment(
+                source: .system,
+                startTime: 0,
+                duration: 4,
+                text: "First remote speaker"
+            ),
+            TranscriptSegment(
+                source: .system,
+                startTime: 4,
+                duration: 4,
+                text: "Second remote speaker"
+            ),
+            TranscriptSegment(
+                source: .microphone,
+                startTime: 1,
+                duration: 2,
+                text: "Local speaker"
+            ),
+        ]
+        let turns = [
+            SpeakerTurn(id: "cluster-b", startTime: 0, endTime: 3.8),
+            SpeakerTurn(id: "cluster-a", startTime: 4.1, endTime: 8),
+        ]
+
+        let attributed = SpeakerAttribution.assign(turns: turns, to: transcript)
+
+        #expect(attributed.map(\.speakerName) == ["Speaker 1", "Speaker 2", "You"])
+    }
+
+    @Test("Correcting a detected speaker renames every matching passage")
+    func renamesDetectedSpeaker() {
+        let first = TranscriptSegment(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "One",
+            speakerName: "Speaker 1"
+        )
+        let second = TranscriptSegment(
+            source: .system,
+            startTime: 2,
+            duration: 1,
+            text: "Two",
+            speakerName: "Speaker 1"
+        )
+
+        let renamed = SpeakerAttribution.rename(
+            speaker: "Speaker 1",
+            to: "Sam",
+            in: [first, second]
+        )
+
+        #expect(renamed.map(\.speakerName) == ["Sam", "Sam"])
+    }
+
     @Test("Generation text keeps stable passage references and corrected speakers")
     func rendersStableSourceReferences() {
         let id = UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")

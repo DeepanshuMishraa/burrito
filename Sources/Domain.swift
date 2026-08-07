@@ -75,6 +75,107 @@ struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+struct LiveTranscriptPassage: Equatable, Identifiable, Sendable {
+    let source: AudioSource
+    let startTime: TimeInterval
+    let duration: TimeInterval
+    let text: String
+    let isFinal: Bool
+
+    var id: String {
+        "\(source.rawValue)-\(startTime)-\(duration)"
+    }
+}
+
+enum LiveTranscriptionAvailability: Equatable, Sendable {
+    case preparing
+    case available
+    case unavailable(reason: String)
+}
+
+struct LiveTranscriptSnapshot: Equatable, Sendable {
+    var availability: LiveTranscriptionAvailability
+    var passages: [LiveTranscriptPassage]
+
+    static let preparing = LiveTranscriptSnapshot(
+        availability: .preparing,
+        passages: []
+    )
+}
+
+struct SpeakerTurn: Equatable, Sendable {
+    let id: String
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+}
+
+enum SpeakerAttribution {
+    static func assign(
+        turns: [SpeakerTurn],
+        to segments: [TranscriptSegment]
+    ) -> [TranscriptSegment] {
+        let orderedSpeakerIDs = turns
+            .sorted { $0.startTime < $1.startTime }
+            .reduce(into: [String]()) { result, turn in
+                if !result.contains(turn.id) {
+                    result.append(turn.id)
+                }
+            }
+        let labels = Dictionary(
+            uniqueKeysWithValues: orderedSpeakerIDs.enumerated().map {
+                ($0.element, "Speaker \($0.offset + 1)")
+            }
+        )
+
+        return segments.map { segment in
+            var attributed = segment
+            if segment.source == .microphone {
+                attributed.speakerName = "You"
+                return attributed
+            }
+            let segmentEnd = segment.startTime + segment.duration
+            let bestTurn = turns.max { left, right in
+                overlap(
+                    start: segment.startTime,
+                    end: segmentEnd,
+                    with: left
+                ) < overlap(
+                    start: segment.startTime,
+                    end: segmentEnd,
+                    with: right
+                )
+            }
+            if let bestTurn,
+               overlap(start: segment.startTime, end: segmentEnd, with: bestTurn) > 0 {
+                attributed.speakerName = labels[bestTurn.id]
+            }
+            return attributed
+        }
+    }
+
+    static func rename(
+        speaker original: String,
+        to replacement: String,
+        in segments: [TranscriptSegment]
+    ) -> [TranscriptSegment] {
+        let name = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+        return segments.map { segment in
+            guard segment.speakerName == original else { return segment }
+            var renamed = segment
+            renamed.speakerName = name.isEmpty ? nil : name
+            return renamed
+        }
+    }
+
+    private static func overlap(
+        start: TimeInterval,
+        end: TimeInterval,
+        with turn: SpeakerTurn
+    ) -> TimeInterval {
+        max(0, min(end, turn.endTime) - max(start, turn.startTime))
+    }
+}
+
 enum Transcript {
     static func merge(
         system: [TranscriptSegment],
@@ -320,6 +421,7 @@ enum SmartStopPolicy {
 enum ProcessingStage: String, Codable, CaseIterable, Sendable {
     case preparingAudio = "Preparing Audio"
     case transcribing = "Transcribing"
+    case identifyingSpeakers = "Identifying Speakers"
     case organizing = "Organizing"
     case generatingNotes = "Generating Notes"
 }
@@ -346,6 +448,7 @@ enum BurritoError: Error, Equatable, Sendable {
     case audioPreparationFailed(details: String)
     case mediaImportFailed(details: String)
     case transcriptionFailed(details: String)
+    case speakerDiarizationFailed(details: String)
     case generationFailed(details: String)
     case storageFailed(details: String)
 
@@ -377,6 +480,8 @@ enum BurritoError: Error, Equatable, Sendable {
             "Media import failed: \(details)"
         case .transcriptionFailed(let details):
             "Transcription failed: \(details). The audio is preserved so you can retry."
+        case .speakerDiarizationFailed(let details):
+            "Speaker identification did not finish: \(details). The transcript is preserved with audio-source labels; retry after checking your connection or edit speaker names manually."
         case .generationFailed(let details):
             "Note generation failed: \(details). The transcript and retained audio remain available; choose Generate Again."
         case .storageFailed(let details):

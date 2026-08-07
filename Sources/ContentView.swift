@@ -2359,25 +2359,31 @@ private struct ScooterGenerationLoader: View {
         switch stage {
         case .preparingAudio:
             (
-                "SECURING THE RECORDING · 1 OF 4",
+                "SECURING THE RECORDING · 1 OF 5",
                 "Packing up every sound",
                 "Closing the audio tracks cleanly so nothing gets lost between record and replay."
             )
         case .transcribing:
             (
-                "LOCAL TRANSCRIPTION · 2 OF 4",
+                "LOCAL TRANSCRIPTION · 2 OF 5",
                 "Re-listening with \(transcriptionEngine)",
                 "Rebuilding the transcript from the saved audio—not correcting the live preview."
             )
+        case .identifyingSpeakers:
+            (
+                "LOCAL SPEAKER ID · 3 OF 5",
+                "Separating the voices",
+                "Finding speaker turns on this Mac so you can review and correct names afterward."
+            )
         case .organizing:
             (
-                "SHAPING THE TRANSCRIPT · 3 OF 4",
+                "SHAPING THE TRANSCRIPT · 4 OF 5",
                 "Finding the thread",
                 "Merging voices, restoring chronology, and separating the useful signal from repetition."
             )
         case .generatingNotes:
             (
-                "WRITING YOUR NOTE · 4 OF 4",
+                "WRITING YOUR NOTE · 5 OF 5",
                 "Turning speech into something useful",
                 "Building the note while testing its title against the full conversation."
             )
@@ -2459,6 +2465,7 @@ private struct ScooterGenerationLoader: View {
         switch stage {
         case .preparingAudio: "Audio"
         case .transcribing: "Transcript"
+        case .identifyingSpeakers: "Speakers"
         case .organizing: "Structure"
         case .generatingNotes: "Note"
         }
@@ -3950,13 +3957,31 @@ private struct RecordingStatusView: View {
                 microphoneLevel: coordinator.activity.microphone
             )
 
-            RecordingControlButton(
-                isRecording: true,
-                elapsed: coordinator.elapsed,
-                systemLevel: coordinator.activity.system,
-                microphoneLevel: coordinator.activity.microphone,
-                action: stop
-            )
+            HStack(spacing: 12) {
+                Button {
+                    Task {
+                        if coordinator.isPaused {
+                            await coordinator.resume()
+                        } else {
+                            await coordinator.pause()
+                        }
+                    }
+                } label: {
+                    Label(
+                        coordinator.isPaused ? "Resume" : "Pause",
+                        systemImage: coordinator.isPaused ? "play.fill" : "pause.fill"
+                    )
+                }
+                .buttonStyle(.bordered)
+
+                RecordingControlButton(
+                    isRecording: true,
+                    elapsed: coordinator.elapsed,
+                    systemLevel: coordinator.activity.system,
+                    microphoneLevel: coordinator.activity.microphone,
+                    action: stop
+                )
+            }
             .padding(.bottom, 28)
         }
         .background(BurritoTheme.canvas)
@@ -4198,6 +4223,7 @@ private struct ProcessingRail: View {
         switch stage {
         case .preparingAudio: "Finishing the recording"
         case .transcribing: "Preparing the final transcript"
+        case .identifyingSpeakers: "Identifying speakers locally"
         case .organizing: isContinuation ? "Adding the continuation" : "Organizing the transcript"
         case .generatingNotes: isContinuation ? "Writing the new note section" : "Writing your notes"
         }
@@ -4207,6 +4233,7 @@ private struct ProcessingRail: View {
         switch stage {
         case .preparingAudio: "Securing the captured audio."
         case .transcribing: "Building the transcript from the saved audio."
+        case .identifyingSpeakers: "Separating speaker turns without uploading your recording."
         case .organizing:
             isContinuation
                 ? "Keeping the existing note and extending its transcript."
@@ -5481,6 +5508,8 @@ private struct RecordingNotepadView: View {
     let systemLevel: Double
     let microphoneLevel: Double
     let recordingMode: RecordingMode
+    let liveTranscript: LiveTranscriptSnapshot
+    let isPaused: Bool
 
     @FocusState private var notesFocused: Bool
 
@@ -5491,7 +5520,7 @@ private struct RecordingNotepadView: View {
                     Circle()
                         .fill(BurritoTheme.accent)
                         .frame(width: 7, height: 7)
-                    Text("RECORDING")
+                    Text(isPaused ? "PAUSED" : "RECORDING")
                         .font(.system(size: 10, weight: .init(450), design: .monospaced))
                 }
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .hourMinuteSecond)))
@@ -5526,45 +5555,57 @@ private struct RecordingNotepadView: View {
                     .textFieldStyle(.plain)
                     .font(.burritoDisplay(size: 34, weight: .init(400)))
 
-                NoteSourceLabel(
-                    title: "Your notes",
-                    detail: "Markdown · guides what Burrito writes",
-                    systemImage: "person.fill",
-                    isHuman: true
-                )
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        NoteSourceLabel(
+                            title: "Your notes",
+                            detail: "Markdown · guides what Burrito writes",
+                            systemImage: "person.fill",
+                            isHuman: true
+                        )
 
-                ZStack(alignment: .topLeading) {
-                    if userNotes.isEmpty {
-                        Text("Write Markdown—fragments, questions, headings, and lists are enough.")
-                            .font(.system(size: 15, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 8)
-                            .allowsHitTesting(false)
+                        ZStack(alignment: .topLeading) {
+                            if userNotes.isEmpty {
+                                Text("Write Markdown—fragments, questions, headings, and lists are enough.")
+                                    .font(.system(size: 14, design: .monospaced))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 8)
+                                    .allowsHitTesting(false)
+                            }
+
+                            TextEditor(text: $userNotes)
+                                .font(.system(size: 14, design: .monospaced))
+                                .lineSpacing(5)
+                                .scrollContentBackground(.hidden)
+                                .burritoThinScrollers()
+                                .focused($notesFocused)
+                                .accessibilityLabel("Your Markdown meeting notes")
+                                .accessibilityHint(
+                                    "Markdown is rendered after recording and guides Burrito's generated result"
+                                )
+                        }
+                        .padding(14)
+                        .background(BurritoTheme.raised, in: Rectangle())
+                        .burritoElevation(.surface)
+                        .overlay {
+                            Rectangle()
+                                .stroke(
+                                    notesFocused
+                                        ? BurritoTheme.accent.opacity(0.65)
+                                        : BurritoTheme.softBorder,
+                                    lineWidth: notesFocused ? 1.25 : 1
+                                )
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    TextEditor(text: $userNotes)
-                        .font(.system(size: 15, design: .monospaced))
-                        .lineSpacing(5)
-                        .scrollContentBackground(.hidden)
-                        .burritoThinScrollers()
-                        .focused($notesFocused)
-                        .accessibilityLabel("Your Markdown meeting notes")
-                        .accessibilityHint(
-                            "Markdown is rendered after recording and guides Burrito's generated result"
-                        )
-                }
-                .padding(14)
-                .background(BurritoTheme.raised, in: Rectangle())
-                .burritoElevation(.surface)
-                .overlay {
-                    Rectangle()
-                        .stroke(
-                            notesFocused
-                                ? BurritoTheme.accent.opacity(0.65)
-                                : BurritoTheme.softBorder,
-                            lineWidth: notesFocused ? 1.25 : 1
-                        )
+                    LiveTranscriptPanel(
+                        snapshot: liveTranscript,
+                        recordingMode: recordingMode,
+                        isPaused: isPaused
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .frame(maxWidth: 820, maxHeight: .infinity, alignment: .topLeading)
@@ -5575,6 +5616,96 @@ private struct RecordingNotepadView: View {
         }
         .onAppear {
             notesFocused = true
+        }
+    }
+}
+
+private struct LiveTranscriptPanel: View {
+    let snapshot: LiveTranscriptSnapshot
+    let recordingMode: RecordingMode
+    let isPaused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            NoteSourceLabel(
+                title: "Live transcript",
+                detail: isPaused ? "Paused" : "Private preview · on device",
+                systemImage: isPaused ? "pause.fill" : "waveform"
+            )
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if snapshot.passages.isEmpty {
+                            liveTranscriptPlaceholder
+                        } else {
+                            ForEach(snapshot.passages) { passage in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Text(speakerLabel(for: passage.source))
+                                            .font(.system(size: 10, weight: 550))
+                                            .foregroundStyle(
+                                                passage.source == .microphone
+                                                    ? BurritoTheme.sage
+                                                    : BurritoTheme.accent
+                                            )
+                                        Text(Duration.seconds(passage.startTime).formatted(.time(pattern: .minuteSecond)))
+                                            .font(.system(size: 9, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    Text(passage.text)
+                                        .font(.system(size: 14))
+                                        .lineSpacing(3)
+                                        .foregroundStyle(passage.isFinal ? .primary : .secondary)
+                                }
+                                .id(passage.id)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(16)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: snapshot.passages.last?.id) { _, id in
+                    guard let id else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(id, anchor: .bottom)
+                    }
+                }
+            }
+            .background(BurritoTheme.raised, in: Rectangle())
+            .burritoElevation(.surface)
+            .overlay { Rectangle().stroke(BurritoTheme.softBorder) }
+        }
+    }
+
+    @ViewBuilder
+    private var liveTranscriptPlaceholder: some View {
+        switch snapshot.availability {
+        case .preparing:
+            Label("Preparing live transcription…", systemImage: "waveform")
+                .foregroundStyle(.secondary)
+        case .available:
+            Label(
+                isPaused ? "Transcription will continue when you resume." : "Listening for speech…",
+                systemImage: isPaused ? "pause.circle" : "ear"
+            )
+            .foregroundStyle(.secondary)
+        case .unavailable(let reason):
+            VStack(alignment: .leading, spacing: 5) {
+                Label("Live preview unavailable", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func speakerLabel(for source: AudioSource) -> String {
+        switch source {
+        case .system: recordingMode == .meeting ? "Call" : "Mac audio"
+        case .microphone: "You"
         }
     }
 }
@@ -6842,7 +6973,9 @@ private struct NoteDetailView: View {
                     elapsed: coordinator.elapsed,
                     systemLevel: coordinator.activity.system,
                     microphoneLevel: coordinator.activity.microphone,
-                    recordingMode: note.recordingMode
+                    recordingMode: note.recordingMode,
+                    liveTranscript: coordinator.liveTranscript,
+                    isPaused: coordinator.isPaused
                 )
                 .transition(.opacity)
             } else if selectedTab == .notes {
@@ -6904,13 +7037,32 @@ private struct NoteDetailView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
                 if isRecordingThisNote {
-                    RecordingControlButton(
-                        isRecording: true,
-                        elapsed: coordinator.elapsed,
-                        systemLevel: coordinator.activity.system,
-                        microphoneLevel: coordinator.activity.microphone
-                    ) {
-                        Task { await coordinator.stop(context: modelContext) }
+                    HStack(spacing: 12) {
+                        Button {
+                            Task {
+                                if coordinator.isPaused {
+                                    await coordinator.resume()
+                                } else {
+                                    await coordinator.pause()
+                                }
+                            }
+                        } label: {
+                            Label(
+                                coordinator.isPaused ? "Resume recording" : "Pause recording",
+                                systemImage: coordinator.isPaused ? "play.fill" : "pause.fill"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                        RecordingControlButton(
+                            isRecording: true,
+                            elapsed: coordinator.elapsed,
+                            systemLevel: coordinator.activity.system,
+                            microphoneLevel: coordinator.activity.microphone
+                        ) {
+                            Task { await coordinator.stop(context: modelContext) }
+                        }
                     }
                 } else if let stage = note.processingStage {
                     ProcessingRail(
@@ -7452,7 +7604,7 @@ private struct TranscriptEditor: View {
                                         .font(.system(size: 10, weight: 450))
                                         .tracking(0.5)
                                         .foregroundStyle(sourceTint(for: segment.source))
-                                        .help("Edit this passage’s speaker name")
+                                        .help("Rename this speaker in every matching passage")
                                     Text(durationLabel(for: segment.duration))
                                         .font(.system(size: 9, design: .monospaced))
                                         .monospacedDigit()
@@ -7577,7 +7729,17 @@ private struct TranscriptEditor: View {
             set: { newValue in
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                segments[index].speakerName = trimmed.isEmpty ? nil : trimmed
+                let replacement = trimmed.isEmpty ? nil : trimmed
+                if let current = segments[index].speakerName, !current.isEmpty,
+                   let replacement {
+                    segments = SpeakerAttribution.rename(
+                        speaker: current,
+                        to: replacement,
+                        in: segments
+                    )
+                } else {
+                    segments[index].speakerName = replacement
+                }
                 note.replaceTranscript(with: segments, marksEdited: true)
             }
         )

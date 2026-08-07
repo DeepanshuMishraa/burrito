@@ -10,6 +10,8 @@ private final class CaptureSpyingStub: AudioCapturing {
     var hasMeaningfulAudio = true
     private(set) var starts = 0
     private(set) var stops = 0
+    private(set) var pauses = 0
+    private(set) var resumes = 0
     private(set) var languageIdentifiers: [String] = []
     private(set) var modes: [RecordingMode] = []
     var startResult: Result<Void, BurritoError> = .success(())
@@ -31,6 +33,16 @@ private final class CaptureSpyingStub: AudioCapturing {
     func stop() async -> Result<Void, BurritoError> {
         stops += 1
         return stopResult
+    }
+
+    func pause() async -> Result<Void, BurritoError> {
+        pauses += 1
+        return .success(())
+    }
+
+    func resume() async -> Result<Void, BurritoError> {
+        resumes += 1
+        return .success(())
     }
 }
 
@@ -719,6 +731,43 @@ struct CoordinatorTests {
 
         await coordinator.stop(context: context)
         #expect(coordinator.activity == .silent)
+    }
+
+    @Test("Recording can pause and resume without ending the note")
+    func pauseAndResumeRecording() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.pause()
+
+        #expect(coordinator.isPaused)
+        #expect(coordinator.captureState.isRecording)
+        #expect(capture.pauses == 1)
+
+        await coordinator.resume()
+
+        #expect(!coordinator.isPaused)
+        #expect(capture.resumes == 1)
+
+        await coordinator.stop(context: context)
     }
 
     @Test("Capture startup time does not count as recording silence")

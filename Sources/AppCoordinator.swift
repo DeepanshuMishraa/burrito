@@ -13,6 +13,8 @@ final class AppCoordinator {
     private(set) var silentFor: TimeInterval = 0
     private(set) var activeCalendarEvent: CalendarEventSnapshot?
     private(set) var smartStopStatus: SmartStopStatus = .monitoring
+    private(set) var isPaused = false
+    private(set) var liveTranscript = LiveTranscriptSnapshot.preparing
     private(set) var lastError: BurritoError?
     private(set) var isInstallingLanguageAsset = false
 
@@ -22,6 +24,7 @@ final class AppCoordinator {
     private let fileStore: any RecordingFileStore
     private let feedback: any AppFeedbackProviding
     private let mediaAudioExtractor: any MediaAudioExtracting
+    private let speakerDiarizer: any SpeakerDiarizing
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
     private let now: @MainActor @Sendable () -> Date
     private var activeFiles: RecordingFiles?
@@ -35,6 +38,7 @@ final class AppCoordinator {
         fileStore: any RecordingFileStore,
         feedback: any AppFeedbackProviding = SilentAppFeedback(),
         mediaAudioExtractor: any MediaAudioExtracting = LocalMediaAudioExtractor(),
+        speakerDiarizer: any SpeakerDiarizing = LocalSpeakerDiarizer(),
         requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization,
         now: @escaping @MainActor @Sendable () -> Date = { .now }
     ) {
@@ -44,6 +48,7 @@ final class AppCoordinator {
         self.fileStore = fileStore
         self.feedback = feedback
         self.mediaAudioExtractor = mediaAudioExtractor
+        self.speakerDiarizer = speakerDiarizer
         self.requestSpeechAuthorization = requestSpeechAuthorization
         self.now = now
     }
@@ -311,6 +316,8 @@ final class AppCoordinator {
             captureState = .recording(sessionID: sessionID, startedAt: now)
             elapsed = 0
             activity = .silent
+            isPaused = false
+            liveTranscript = capture.liveTranscript
             silentFor = 0
             smartStopStatus = .monitoring
             startTimer(startedAt: now)
@@ -321,6 +328,27 @@ final class AppCoordinator {
             try? context.save()
             activeNoteID = note.id
             captureState = .failed(sessionID: sessionID, message: error.recoveryMessage)
+            lastError = error
+        }
+    }
+
+    func pause() async {
+        guard captureState.isRecording, !isPaused else { return }
+        switch await capture.pause() {
+        case .success:
+            isPaused = true
+            activity = .silent
+        case .failure(let error):
+            lastError = error
+        }
+    }
+
+    func resume() async {
+        guard captureState.isRecording, isPaused else { return }
+        switch await capture.resume() {
+        case .success:
+            isPaused = false
+        case .failure(let error):
             lastError = error
         }
     }
@@ -338,6 +366,7 @@ final class AppCoordinator {
         timerTask?.cancel()
         timerTask = nil
         activity = .silent
+        isPaused = false
         silentFor = 0
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
@@ -399,6 +428,27 @@ final class AppCoordinator {
             }
             microphoneSegments = segments
         }
+
+        if note.recordingMode == .meeting,
+           let systemURL,
+           FileManager.default.fileExists(atPath: systemURL.path()),
+           !systemSegments.isEmpty {
+            note.processingStage = .identifyingSpeakers
+            try? context.save()
+            switch await speakerDiarizer.assignSpeakers(
+                audioURL: systemURL,
+                to: systemSegments
+            ) {
+            case .success(let attributed):
+                systemSegments = attributed
+            case .failure(let error):
+                note.lastErrorMessage = error.recoveryMessage
+            }
+        }
+        microphoneSegments = SpeakerAttribution.assign(
+            turns: [],
+            to: microphoneSegments
+        )
 
         if case .failure(let error) = fileStore.removeTranscriptionAudio(for: files) {
             note.lastErrorMessage = error.recoveryMessage
@@ -467,6 +517,8 @@ final class AppCoordinator {
         captureState = .idle
         elapsed = 0
         activity = .silent
+        isPaused = false
+        liveTranscript = .preparing
         silentFor = 0
         smartStopStatus = .monitoring
     }
@@ -501,6 +553,8 @@ final class AppCoordinator {
         captureState = .idle
         elapsed = 0
         activity = .silent
+        isPaused = false
+        liveTranscript = .preparing
         silentFor = 0
         smartStopStatus = .monitoring
     }
@@ -741,6 +795,8 @@ final class AppCoordinator {
     private func failBeforeRecording(_ error: BurritoError) {
         captureState = .idle
         activity = .silent
+        isPaused = false
+        liveTranscript = .preparing
         silentFor = 0
         activeCalendarEvent = nil
         smartStopStatus = .monitoring
@@ -797,8 +853,11 @@ final class AppCoordinator {
                 let tickDuration = max(0, now.timeIntervalSince(lastTick))
                 lastTick = now
                 elapsed = now.timeIntervalSince(startedAt)
-                activity = capture.activity
-                if max(activity.system, activity.microphone) >= 0.04 {
+                liveTranscript = capture.liveTranscript
+                activity = isPaused ? .silent : capture.activity
+                if isPaused {
+                    continue
+                } else if max(activity.system, activity.microphone) >= 0.04 {
                     silentFor = 0
                 } else {
                     silentFor += tickDuration
