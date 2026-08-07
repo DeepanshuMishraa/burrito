@@ -75,10 +75,16 @@ If the user says the source is playing at `r`, process only the system track wit
 | Captured source | Offline normalization rate |
 | --- | --- |
 | 1x | 1.0 |
+| 1.25x | 0.8 |
 | 1.5x | 0.667 |
 | 2x | 0.5 |
 | 2.5x | 0.4 |
 | 3x | 0.333 |
+| 4x | 0.25 |
+| 5x | 0.2 |
+| 6x | 0.167 |
+| 8x | 0.125 |
+| 10x | 0.1 |
 
 Use `AVAudioUnitTimePitch`, which changes playback rate and pitch independently and supports rates from 1/32 through 32. Render it through `AVAudioEngine` manual offline mode, which Apple explicitly supports for processing faster than real time. Keep pitch at zero. After time-stretch, downmix and resample once to the selected ASR model's required 16 kHz mono Float32 input. [AVAudioUnitTimePitch](https://developer.apple.com/documentation/avfaudio/avaudiounittimepitch), [rate](https://developer.apple.com/documentation/avfaudio/avaudiounittimepitch/rate), [offline audio processing](https://developer.apple.com/documentation/avfaudio/performing-offline-audio-processing), [AVAudioConverter sample-rate conversion](https://developer.apple.com/documentation/technotes/tn3136-avaudioconverter-performing-sample-rate-conversions)
 
@@ -99,7 +105,7 @@ The implemented UX accepts an explicit rate from 1× through 10× and persists t
 `Auto` should be a rescue mode, not an unverified promise:
 
 1. Run VAD and take the first 15–30 seconds of confident system speech.
-2. Produce candidate windows at 1.0, 0.667, 0.5, 0.4, and 0.333.
+2. Produce candidate windows for the supported presets: 1.0, 0.8, 0.667, 0.5, 0.4, 0.333, 0.25, 0.2, 0.167, 0.125, and 0.1.
 3. Transcribe candidates with the same final model.
 4. Score model confidence, repeated-token/compression anomalies, word rate, and agreement across overlapping windows.
 5. Select a non-1x candidate only when it beats 1x by a threshold established on the benchmark below.

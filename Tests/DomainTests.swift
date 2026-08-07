@@ -1066,9 +1066,7 @@ struct TranscriptionConfigurationTests {
 
     @Test("Accelerated audio is rendered as 16 kHz mono at natural tempo")
     func normalizesAcceleratedAudio() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceURL = root.appending(path: "source.caf")
         let outputDirectory = root.appending(path: "prepared", directoryHint: .isDirectory)
@@ -1081,24 +1079,12 @@ struct TranscriptionConfigurationTests {
             )
         )
         let frameCount: AVAudioFrameCount = 12_000
-        let buffer = try #require(
-            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+        let buffer = try makePCMBuffer(
+            format: format,
+            frameCount: frameCount,
+            frequency: 440
         )
-        buffer.frameLength = frameCount
-        let channels = try #require(buffer.floatChannelData)
-        for frame in 0..<Int(frameCount) {
-            let sample = Float(sin(2 * Double.pi * 440 * Double(frame) / 48_000))
-            channels[0][frame] = sample
-            channels[1][frame] = sample
-        }
-        var sourceFile: AVAudioFile? = try AVAudioFile(
-            forWriting: sourceURL,
-            settings: format.settings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
-        try sourceFile?.write(from: buffer)
-        sourceFile = nil
+        try writePCMBuffer(buffer, to: sourceURL)
 
         let normalizer = AudioTempoNormalizer(outputDirectory: outputDirectory)
         let result = await normalizer.prepare(
@@ -1120,9 +1106,7 @@ struct TranscriptionConfigurationTests {
 
     @Test("Original media import extracts a lossless transcription track")
     func extractsImportedMediaAudio() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let sourceURL = root.appending(path: "source.caf")
         let transcriptionURL = root.appending(path: "transcription.caf")
@@ -1135,24 +1119,12 @@ struct TranscriptionConfigurationTests {
             )
         )
         let frameCount: AVAudioFrameCount = 24_000
-        let buffer = try #require(
-            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+        let buffer = try makePCMBuffer(
+            format: format,
+            frameCount: frameCount,
+            frequency: 220
         )
-        buffer.frameLength = frameCount
-        let channels = try #require(buffer.floatChannelData)
-        for frame in 0..<Int(frameCount) {
-            let sample = Float(sin(2 * Double.pi * 220 * Double(frame) / 48_000))
-            channels[0][frame] = sample
-            channels[1][frame] = sample
-        }
-        var sourceFile: AVAudioFile? = try AVAudioFile(
-            forWriting: sourceURL,
-            settings: format.settings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
-        try sourceFile?.write(from: buffer)
-        sourceFile = nil
+        try writePCMBuffer(buffer, to: sourceURL)
 
         let result = await LocalMediaAudioExtractor().extract(
             sourceURL: sourceURL,
@@ -1170,9 +1142,7 @@ struct TranscriptionConfigurationTests {
 
     @Test("Imported media preserves a delayed audio-track start")
     func preservesImportedMediaTiming() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let transcriptionURL = root.appending(path: "transcription.caf")
         let format = try #require(
@@ -1183,10 +1153,7 @@ struct TranscriptionConfigurationTests {
                 interleaved: false
             )
         )
-        let buffer = try #require(
-            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 24_000)
-        )
-        buffer.frameLength = 24_000
+        let buffer = try makePCMBuffer(format: format, frameCount: 24_000)
         let writer = PCMFileWriter(url: transcriptionURL)
         try writer.write(
             buffer,
@@ -1202,9 +1169,7 @@ struct TranscriptionConfigurationTests {
 
     @Test("PCM writer ignores buffers after finishing")
     func ignoresLatePCMWrite() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let outputURL = root.appending(path: "output.caf")
         let format = try #require(
@@ -1215,10 +1180,7 @@ struct TranscriptionConfigurationTests {
                 interleaved: false
             )
         )
-        let buffer = try #require(
-            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160)
-        )
-        buffer.frameLength = 160
+        let buffer = try makePCMBuffer(format: format, frameCount: 160)
         let writer = PCMFileWriter(url: outputURL)
 
         try writer.write(buffer)
@@ -1230,9 +1192,7 @@ struct TranscriptionConfigurationTests {
 
     @Test("PCM writer preserves transcription timeline gaps")
     func preservesPCMWriterTimelineGaps() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let outputURL = root.appending(path: "output.caf")
         let format = try #require(
@@ -1243,10 +1203,7 @@ struct TranscriptionConfigurationTests {
                 interleaved: false
             )
         )
-        let buffer = try #require(
-            AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160)
-        )
-        buffer.frameLength = 160
+        let buffer = try makePCMBuffer(format: format, frameCount: 160)
         let writer = PCMFileWriter(url: outputURL)
 
         try writer.write(
@@ -1290,6 +1247,51 @@ struct TranscriptionConfigurationTests {
         #expect(TranscriptionLanguage.resolve("de-DE").title == "German")
         #expect(TranscriptionLanguage.resolve("unknown").identifier == "en-US")
     }
+}
+
+private func makeTemporaryDirectory() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
+}
+
+private func makePCMBuffer(
+    format: AVAudioFormat,
+    frameCount: AVAudioFrameCount,
+    frequency: Double? = nil
+) throws -> AVAudioPCMBuffer {
+    let buffer = try #require(
+        AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)
+    )
+    buffer.frameLength = frameCount
+    for audioBuffer in UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList) {
+        if let data = audioBuffer.mData {
+            memset(data, 0, Int(audioBuffer.mDataByteSize))
+        }
+    }
+    guard let frequency else { return buffer }
+
+    let channels = try #require(buffer.floatChannelData)
+    for frame in 0..<Int(frameCount) {
+        let sample = Float(
+            sin(2 * Double.pi * frequency * Double(frame) / format.sampleRate)
+        )
+        for channel in 0..<Int(format.channelCount) {
+            channels[channel][frame] = sample
+        }
+    }
+    return buffer
+}
+
+private func writePCMBuffer(_ buffer: AVAudioPCMBuffer, to url: URL) throws {
+    let file = try AVAudioFile(
+        forWriting: url,
+        settings: buffer.format.settings,
+        commonFormat: buffer.format.commonFormat,
+        interleaved: buffer.format.isInterleaved
+    )
+    try file.write(from: buffer)
 }
 
 private actor TranscriptionAudioPreparerSpy: TranscriptionAudioPreparing {
