@@ -55,14 +55,24 @@ private struct AppleSpeechTranscriber: Transcribing {
     }
 
     func transcribe(
-        fileURL: URL,
-        source: AudioSource,
+        input: TranscriptionInput,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
         let languageCheck = await verifyLanguage(languageIdentifier)
         if case .failure(let error) = languageCheck { return .failure(error) }
 
         do {
+            let fileURL: URL
+            let source: AudioSource
+            switch input {
+            case .natural(let inputURL, let inputSource),
+                 .importedMedia(let inputURL, let inputSource):
+                fileURL = inputURL
+                source = inputSource
+            case .systemCapture(let inputURL, _):
+                fileURL = inputURL
+                source = .system
+            }
             let requested = Locale(identifier: languageIdentifier)
             guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
                 return .failure(.unsupportedLanguage(identifier: languageIdentifier))
@@ -107,6 +117,11 @@ private struct AppleSpeechTranscriber: Transcribing {
 struct LocalTranscriber: Transcribing {
     private let apple = AppleSpeechTranscriber()
     private let parakeet = ParakeetTranscriber.shared
+    private let audioPreparer: any TranscriptionAudioPreparing
+
+    init(audioPreparer: any TranscriptionAudioPreparing = AudioTempoNormalizer()) {
+        self.audioPreparer = audioPreparer
+    }
 
     func requiresSpeechAuthorization(for identifier: String) -> Bool {
         selectedParakeetModel(for: identifier) == nil
@@ -124,22 +139,35 @@ struct LocalTranscriber: Transcribing {
     }
 
     func transcribe(
-        fileURL: URL,
-        source: AudioSource,
+        input: TranscriptionInput,
         languageIdentifier: String
     ) async -> Result<[TranscriptSegment], BurritoError> {
+        let languageCheck = await verifyLanguage(languageIdentifier)
+        if case .failure(let error) = languageCheck { return .failure(error) }
+
+        let preparation = await audioPreparer.prepare(input)
+        guard case .success(let prepared) = preparation else {
+            if case .failure(let error) = preparation { return .failure(error) }
+            return .failure(.audioPreparationFailed(details: "The audio preparation result was invalid."))
+        }
+        defer {
+            if let temporaryURL = prepared.temporaryFileURL {
+                try? FileManager.default.removeItem(at: temporaryURL)
+            }
+        }
+
         guard let variant = selectedParakeetModel(for: languageIdentifier) else {
-            return await apple.transcribe(
-                fileURL: fileURL,
-                source: source,
+            let result = await apple.transcribe(
+                input: .natural(fileURL: prepared.fileURL, source: prepared.source),
                 languageIdentifier: languageIdentifier
             )
+            return result.map(prepared.remap)
         }
 
         do {
             let segments = try await parakeet.transcribe(
-                fileURL: fileURL,
-                source: source,
+                fileURL: prepared.fileURL,
+                source: prepared.source,
                 variant: variant,
                 languageIdentifier: languageIdentifier
             )
@@ -151,7 +179,7 @@ struct LocalTranscriber: Transcribing {
                     )
                 )
             }
-            return .success(segments)
+            return .success(prepared.remap(segments))
         } catch {
             return .failure(
                 .transcriptionFailed(

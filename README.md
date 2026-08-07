@@ -11,6 +11,8 @@ Burrito records system audio with an optional microphone track, transcribes it l
 - Join upcoming calls and start event-linked recordings from Calendar
 - Keep meeting titles, times, organizers, attendees, and recurring history with each note
 - Transcribe after recording with Apple Speech or an optional local Parakeet model
+- Normalize explicitly selected 1–10× system-audio playback before transcription
+- Import original audio or video for playback-speed-independent transcription
 - Generate summaries, detailed notes, study guides, or meeting notes
 - Create custom note templates with your own instructions
 - Edit the transcript and notes in a focused, Granola-inspired workspace

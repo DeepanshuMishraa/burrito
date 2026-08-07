@@ -21,6 +21,7 @@ final class AppCoordinator {
     private let generator: any NoteGenerating
     private let fileStore: any RecordingFileStore
     private let feedback: any AppFeedbackProviding
+    private let mediaAudioExtractor: any MediaAudioExtracting
     private let requestSpeechAuthorization: @MainActor @Sendable () async -> Bool
     private let now: @MainActor @Sendable () -> Date
     private var activeFiles: RecordingFiles?
@@ -33,6 +34,7 @@ final class AppCoordinator {
         generator: any NoteGenerating,
         fileStore: any RecordingFileStore,
         feedback: any AppFeedbackProviding = SilentAppFeedback(),
+        mediaAudioExtractor: any MediaAudioExtracting = LocalMediaAudioExtractor(),
         requestSpeechAuthorization: @escaping @MainActor @Sendable () async -> Bool = AppCoordinator.systemSpeechAuthorization,
         now: @escaping @MainActor @Sendable () -> Date = { .now }
     ) {
@@ -41,8 +43,138 @@ final class AppCoordinator {
         self.generator = generator
         self.fileStore = fileStore
         self.feedback = feedback
+        self.mediaAudioExtractor = mediaAudioExtractor
         self.requestSpeechAuthorization = requestSpeechAuthorization
         self.now = now
+    }
+
+    func importMedia(
+        fileURL: URL,
+        options: RecordingOptions,
+        context: ModelContext
+    ) async -> Result<UUID, BurritoError> {
+        guard captureState == .idle else {
+            return .failure(.recordingAlreadyInProgress)
+        }
+        captureState = .preparing
+        lastError = nil
+
+        let modelAvailability = await generator.availability(
+            languageIdentifier: options.languageIdentifier
+        )
+        if case .failure(let error) = modelAvailability {
+            failBeforeRecording(error)
+            return .failure(error)
+        }
+        if transcriber.requiresSpeechAuthorization(for: options.languageIdentifier) {
+            guard await requestSpeechAuthorization() else {
+                let error = BurritoError.speechRecognitionPermissionDenied
+                failBeforeRecording(error)
+                return .failure(error)
+            }
+        }
+        let languageAvailability = await transcriber.verifyLanguage(options.languageIdentifier)
+        if case .failure(let error) = languageAvailability {
+            failBeforeRecording(error)
+            return .failure(error)
+        }
+
+        let sessionID = UUID()
+        guard case .success(let files) = fileStore.createSession(
+            id: sessionID,
+            mode: .listenAlong
+        ) else {
+            let error = BurritoError.storageFailed(
+                details: "A workspace for the imported media could not be created."
+            )
+            failBeforeRecording(error)
+            return .failure(error)
+        }
+        guard let transcriptionURL = files.systemTranscriptionURL else {
+            let error = BurritoError.storageFailed(
+                details: "The import workspace has no transcription destination."
+            )
+            failBeforeRecording(error)
+            return .failure(error)
+        }
+
+        let note = Note(
+            id: sessionID,
+            lifecycle: .processing,
+            title: fileURL.deletingPathExtension().lastPathComponent,
+            createdAt: now(),
+            languageIdentifier: options.languageIdentifier,
+            template: options.template,
+            recordingMode: .listenAlong,
+            // Imported original media is already at natural tempo; the capture-only rate is ignored.
+            playbackRate: .natural,
+            retainsAudio: options.retainsAudio
+        )
+        note.processingStage = .preparingAudio
+        context.insert(note)
+        do {
+            try context.save()
+        } catch {
+            let failure = BurritoError.storageFailed(details: error.localizedDescription)
+            failImport(note: note, files: files, error: failure, context: context)
+            return .failure(failure)
+        }
+
+        let extraction = await mediaAudioExtractor.extract(
+            sourceURL: fileURL,
+            transcriptionURL: transcriptionURL,
+            retainedAudioURL: options.retainsAudio ? files.systemAudioURL : nil
+        )
+        guard case .success(let importedAudio) = extraction else {
+            if case .failure(let error) = extraction {
+                failImport(note: note, files: files, error: error, context: context)
+                return .failure(error)
+            }
+            let error = BurritoError.mediaImportFailed(details: "The extraction result was invalid.")
+            failImport(note: note, files: files, error: error, context: context)
+            return .failure(error)
+        }
+
+        note.duration = importedAudio.duration
+        note.processingStage = .transcribing
+        try? context.save()
+        let transcription = await transcriber.transcribe(
+            input: .importedMedia(fileURL: transcriptionURL, source: .system),
+            languageIdentifier: note.languageIdentifier
+        )
+        guard case .success(let segments) = transcription else {
+            if case .failure(let error) = transcription {
+                failImport(note: note, files: files, error: error, context: context)
+                return .failure(error)
+            }
+            let error = BurritoError.transcriptionFailed(details: "The import transcript was unavailable.")
+            failImport(note: note, files: files, error: error, context: context)
+            return .failure(error)
+        }
+
+        note.processingStage = .organizing
+        note.replaceTranscript(with: segments, marksEdited: true)
+        if options.retainsAudio {
+            note.systemAudioRelativePath = files.systemAudioURL.map(
+                fileStore.relativePath(for:)
+            )
+            if case .failure(let error) = fileStore.removeTranscriptionAudio(for: files) {
+                note.lastErrorMessage = error.recoveryMessage
+            }
+        } else if case .failure(let error) = fileStore.removeAudio(for: files) {
+            note.lastErrorMessage = error.recoveryMessage
+        }
+        try? context.save()
+
+        await generate(note: note, context: context)
+        captureState = .idle
+        if note.lifecycle == .ready {
+            return .success(note.id)
+        }
+        let error = lastError ?? .generationFailed(
+            details: "The transcript is preserved, but note generation did not finish. Retry generation from the note."
+        )
+        return .failure(error)
     }
 
     static func live() -> AppCoordinator {
@@ -145,6 +277,7 @@ final class AppCoordinator {
                 languageIdentifier: options.languageIdentifier,
                 template: options.template,
                 recordingMode: recordingMode,
+                playbackRate: options.playbackRate,
                 retainsAudio: options.retainsAudio,
                 calendarEvent: destination.calendarEvent
             )
@@ -231,10 +364,14 @@ final class AppCoordinator {
         try? context.save()
 
         var systemSegments: [TranscriptSegment] = []
-        if let systemURL = files.systemAudioURL {
+        let systemURL = existingPCMURL(files.systemTranscriptionURL)
+            ?? files.systemAudioURL
+        if let systemURL {
             let systemResult = await transcriber.transcribe(
-                fileURL: systemURL,
-                source: .system,
+                input: .systemCapture(
+                    fileURL: systemURL,
+                    playbackRate: note.playbackRate
+                ),
                 languageIdentifier: note.languageIdentifier
             )
             guard case .success(let segments) = systemResult else {
@@ -247,10 +384,11 @@ final class AppCoordinator {
         }
 
         var microphoneSegments: [TranscriptSegment] = []
-        if let microphoneURL = files.microphoneAudioURL {
+        let microphoneURL = existingPCMURL(files.microphoneTranscriptionURL)
+            ?? files.microphoneAudioURL
+        if let microphoneURL {
             let microphoneResult = await transcriber.transcribe(
-                fileURL: microphoneURL,
-                source: .microphone,
+                input: .natural(fileURL: microphoneURL, source: .microphone),
                 languageIdentifier: note.languageIdentifier
             )
             guard case .success(let segments) = microphoneResult else {
@@ -260,6 +398,10 @@ final class AppCoordinator {
                 return
             }
             microphoneSegments = segments
+        }
+
+        if case .failure(let error) = fileStore.removeTranscriptionAudio(for: files) {
+            note.lastErrorMessage = error.recoveryMessage
         }
 
         note.processingStage = .organizing
@@ -327,6 +469,11 @@ final class AppCoordinator {
         activity = .silent
         silentFor = 0
         smartStopStatus = .monitoring
+    }
+
+    private func existingPCMURL(_ url: URL?) -> URL? {
+        guard let url, FileManager.default.fileExists(atPath: url.path()) else { return nil }
+        return url
     }
 
     private func finishSilentRecording(
@@ -598,6 +745,18 @@ final class AppCoordinator {
         activeCalendarEvent = nil
         smartStopStatus = .monitoring
         lastError = error
+    }
+
+    private func failImport(
+        note: Note,
+        files: RecordingFiles,
+        error: BurritoError,
+        context: ModelContext
+    ) {
+        _ = fileStore.removeAudio(for: files)
+        context.delete(note)
+        try? context.save()
+        failBeforeRecording(error)
     }
 
     private func fail(note: Note, error: BurritoError, context: ModelContext) {

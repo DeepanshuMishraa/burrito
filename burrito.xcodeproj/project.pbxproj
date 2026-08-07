@@ -18,6 +18,7 @@
 		2169822823AD17A5D5D02865 /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */; };
 		2C7993E84252BAF80DD73906 /* AITesting in Frameworks */ = {isa = PBXBuildFile; productRef = 95676C287AC51B2EA5887B1D /* AITesting */; };
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
+		3C1DFA2ABD10929B61F443B7 /* AudioPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9444472CEA7E986538CF33CB /* AudioPreparation.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
@@ -50,6 +51,7 @@
 		D712EE334DC9C9D6F1D94AA5 /* MarkdownDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */; };
 		D95F3F765A3719270CFF7EF1 /* SplineSansMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 274EC5D921E491849A165B14 /* SplineSansMono-Variable.ttf */; };
 		E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */; };
+		E96C64B1767649E0F2709D44 /* MediaAudioExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 810EC966AC8C4B423D2B109B /* MediaAudioExtractor.swift */; };
 		EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */; };
 		EE09F05A5364BA09E154CB94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */; };
 		EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DACDC881191EC0950114922B /* Geist-Variable.ttf */; };
@@ -99,9 +101,11 @@
 		78A20AF8BC980AFBBC930B6C /* burrito.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = burrito.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Scooter-loader.json"; sourceTree = "<group>"; };
 		80312D2153FF4924DF498F98 /* CoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorTests.swift; sourceTree = "<group>"; };
+		810EC966AC8C4B423D2B109B /* MediaAudioExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaAudioExtractor.swift; sourceTree = "<group>"; };
 		82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Regular.ttf"; sourceTree = "<group>"; };
 		8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSans-Variable.ttf"; sourceTree = "<group>"; };
 		8932061A0CA5A58DCC622228 /* Domain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domain.swift; sourceTree = "<group>"; };
+		9444472CEA7E986538CF33CB /* AudioPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreparation.swift; sourceTree = "<group>"; };
 		9F27CD15A054415C3F40F273 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
 		A012C13A161767957F1B4B7A /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Variable.ttf"; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -184,6 +188,7 @@
 				00A639102CCFABB8A22A07D3 /* AppCommands.swift */,
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
 				9F27CD15A054415C3F40F273 /* AppFeedback.swift */,
+				9444472CEA7E986538CF33CB /* AudioPreparation.swift */,
 				25328314F1FFC002350B88B8 /* burritoApp.swift */,
 				C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */,
 				76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */,
@@ -196,6 +201,7 @@
 				45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */,
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
+				810EC966AC8C4B423D2B109B /* MediaAudioExtractor.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
 				38EC4CD89C9CC805FF666CE0 /* Ownership.swift */,
 				0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */,
@@ -367,6 +373,7 @@
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
+				3C1DFA2ABD10929B61F443B7 /* AudioPreparation.swift in Sources */,
 				FF572A0E3F92A01E29FB71A4 /* BurritoIcons.swift in Sources */,
 				07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */,
 				B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */,
@@ -378,6 +385,7 @@
 				C6EDDEC5266C8138C5F53C4C /* LocalLanguageModels.swift in Sources */,
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
+				E96C64B1767649E0F2709D44 /* MediaAudioExtractor.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
 				9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */,
 				5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */,

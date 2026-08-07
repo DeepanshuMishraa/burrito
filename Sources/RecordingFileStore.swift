@@ -22,6 +22,10 @@ struct LocalRecordingFileStore: RecordingFileStore {
                     systemAudioURL: directory.appending(path: "system.m4a"),
                     microphoneAudioURL: mode == .meeting
                         ? directory.appending(path: "microphone.m4a")
+                        : nil,
+                    systemTranscriptionURL: directory.appending(path: "system-transcription.caf"),
+                    microphoneTranscriptionURL: mode == .meeting
+                        ? directory.appending(path: "microphone-transcription.caf")
                         : nil
                 )
             )
@@ -42,9 +46,16 @@ struct LocalRecordingFileStore: RecordingFileStore {
     }
 
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
+        remove(files.allURLs)
+    }
+
+    func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
+        remove(files.transcriptionURLs)
+    }
+
+    private func remove(_ urls: [URL]) -> Result<Void, BurritoError> {
         do {
-            for url in [files.systemAudioURL, files.microphoneAudioURL].compactMap({ $0 })
-            where FileManager.default.fileExists(atPath: url.path()) {
+            for url in urls where FileManager.default.fileExists(atPath: url.path()) {
                 try FileManager.default.removeItem(at: url)
             }
             return .success(())

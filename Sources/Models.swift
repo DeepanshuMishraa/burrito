@@ -70,6 +70,7 @@ final class Note {
     var systemAudioRelativePath: String?
     var microphoneAudioRelativePath: String?
     var recordingModeRawValue: String?
+    var playbackRateValue: Double = PlaybackRate.natural.rawValue
     var retainsAudio: Bool
     var transcriptRevision: Int
     var generatedFromTranscriptRevision: Int
@@ -89,6 +90,7 @@ final class Note {
         languageIdentifier: String,
         template: TemplateSnapshot,
         recordingMode: RecordingMode = .listenAlong,
+        playbackRate: PlaybackRate = .natural,
         retainsAudio: Bool,
         calendarEvent: CalendarEventSnapshot? = nil
     ) {
@@ -112,6 +114,7 @@ final class Note {
         self.systemAudioRelativePath = nil
         self.microphoneAudioRelativePath = nil
         self.recordingModeRawValue = recordingMode.rawValue
+        self.playbackRateValue = playbackRate.rawValue
         self.retainsAudio = retainsAudio
         self.transcriptRevision = 0
         self.generatedFromTranscriptRevision = 0
@@ -145,6 +148,11 @@ final class Note {
         set { recordingModeRawValue = newValue.rawValue }
     }
 
+    var playbackRate: PlaybackRate {
+        get { PlaybackRate(rawValue: playbackRateValue) ?? .natural }
+        set { playbackRateValue = newValue.rawValue }
+    }
+
     var calendarEvent: CalendarEventSnapshot? {
         get {
             calendarEventData.flatMap {
@@ -161,7 +169,8 @@ final class Note {
             template: templateSnapshot,
             languageIdentifier: languageIdentifier,
             mode: recordingMode,
-            retainsAudio: retainsAudio
+            retainsAudio: retainsAudio,
+            playbackRate: playbackRate
         )
     }
 

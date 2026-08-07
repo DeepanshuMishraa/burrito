@@ -131,8 +131,13 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     let hasMicrophone: Bool
     private let systemWriter: AudioSampleWriter?
     private let microphoneWriter: AudioSampleWriter?
+    private let systemTranscriptionWriter: PCMFileWriter?
+    private let microphoneTranscriptionWriter: PCMFileWriter?
     private let lock = NSLock()
     private var streamError: Error?
+    private var systemTranscriptionError: Error?
+    private var microphoneTranscriptionError: Error?
+    private var transcriptionTimelineOrigin: CMTime?
     private var systemLevel = 0.0
     private var microphoneLevel = 0.0
     private var meaningfulAudioDuration = 0.0
@@ -154,6 +159,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         self.microphoneWriter = try files.microphoneAudioURL.map {
             try AudioSampleWriter(url: $0, channelCount: 1)
         }
+        self.systemTranscriptionWriter = files.systemTranscriptionURL.map { PCMFileWriter(url: $0) }
+        self.microphoneTranscriptionWriter = files.microphoneTranscriptionURL.map { PCMFileWriter(url: $0) }
         self.hasMicrophone = files.microphoneAudioURL != nil
         super.init()
     }
@@ -184,6 +191,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
 
     func finish() async throws {
         let captureError = lock.withLock { streamError }
+        systemTranscriptionWriter?.finish()
+        microphoneTranscriptionWriter?.finish()
         if let captureError { throw captureError }
         try await systemWriter?.finish()
         try await microphoneWriter?.finish()
@@ -228,6 +237,13 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
                 return copy
             }
             let level = AudioLevel.measure(buffer)
+            writeTranscription(
+                buffer,
+                presentationTime: transcriptionPresentationTime(
+                    sampleBuffer.presentationTimeStamp
+                ),
+                source: source
+            )
             updateLevel(
                 level,
                 duration: Double(buffer.frameLength) / buffer.format.sampleRate,
@@ -237,6 +253,54 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
             lock.withLock {
                 streamError = streamError ?? error
             }
+        }
+    }
+
+    private func writeTranscription(
+        _ buffer: AVAudioPCMBuffer,
+        presentationTime: CMTime,
+        source: AudioSource
+    ) {
+        do {
+            switch source {
+            case .system:
+                try systemTranscriptionWriter?.write(
+                    buffer,
+                    presentationTime: presentationTime
+                )
+            case .microphone:
+                try microphoneTranscriptionWriter?.write(
+                    buffer,
+                    presentationTime: presentationTime
+                )
+            }
+        } catch {
+            lock.withLock {
+                switch source {
+                case .system:
+                    systemTranscriptionError = systemTranscriptionError ?? error
+                case .microphone:
+                    microphoneTranscriptionError = microphoneTranscriptionError ?? error
+                }
+            }
+            switch source {
+            case .system:
+                systemTranscriptionWriter?.discard()
+            case .microphone:
+                microphoneTranscriptionWriter?.discard()
+            }
+        }
+    }
+
+    private func transcriptionPresentationTime(_ presentationTime: CMTime) -> CMTime {
+        lock.withLock {
+            guard presentationTime.isValid, presentationTime.isNumeric else { return .zero }
+            guard let origin = transcriptionTimelineOrigin else {
+                transcriptionTimelineOrigin = presentationTime
+                return .zero
+            }
+            guard CMTimeCompare(presentationTime, origin) >= 0 else { return .zero }
+            return CMTimeSubtract(presentationTime, origin)
         }
     }
 
@@ -256,6 +320,100 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
                 microphoneLevel = AudioLevel.smoothed(previous: microphoneLevel, next: measuredLevel)
             }
         }
+    }
+}
+
+final class PCMFileWriter: @unchecked Sendable {
+    private let url: URL
+    private let lock = NSLock()
+    private var file: AVAudioFile?
+    private var isFinished = false
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    func write(_ buffer: AVAudioPCMBuffer) throws {
+        try write(buffer, presentationTime: nil)
+    }
+
+    func write(_ buffer: AVAudioPCMBuffer, presentationTime: CMTime) throws {
+        try write(buffer, presentationTime: Optional(presentationTime))
+    }
+
+    private func write(
+        _ buffer: AVAudioPCMBuffer,
+        presentationTime: CMTime?
+    ) throws {
+        try lock.withLock {
+            guard !isFinished else { return }
+            let destination: AVAudioFile
+            if let file {
+                destination = file
+            } else {
+                let newFile = try AVAudioFile(
+                    forWriting: url,
+                    settings: buffer.format.settings,
+                    commonFormat: buffer.format.commonFormat,
+                    interleaved: buffer.format.isInterleaved
+                )
+                file = newFile
+                destination = newFile
+            }
+            if let presentationTime {
+                try writeSilence(
+                    until: presentationTime,
+                    format: buffer.format,
+                    destination: destination
+                )
+            }
+            try destination.write(from: buffer)
+        }
+    }
+
+    private func writeSilence(
+        until presentationTime: CMTime,
+        format: AVAudioFormat,
+        destination: AVAudioFile
+    ) throws {
+        let seconds = presentationTime.seconds
+        guard seconds.isFinite, seconds > 0 else { return }
+        let presentationFrame = AVAudioFramePosition(
+            (seconds * format.sampleRate).rounded()
+        )
+        var remainingFrames = presentationFrame - destination.length
+        while remainingFrames > 0 {
+            let frameCount = AVAudioFrameCount(min(remainingFrames, 4_096))
+            guard let silence = AVAudioPCMBuffer(
+                pcmFormat: format,
+                frameCapacity: frameCount
+            ) else {
+                throw BurritoError.captureFailed(
+                    details: "A transcription silence buffer could not be allocated."
+                )
+            }
+            silence.frameLength = frameCount
+            for audioBuffer in UnsafeMutableAudioBufferListPointer(
+                silence.mutableAudioBufferList
+            ) {
+                guard let data = audioBuffer.mData else { continue }
+                memset(data, 0, Int(audioBuffer.mDataByteSize))
+            }
+            try destination.write(from: silence)
+            remainingFrames -= AVAudioFramePosition(frameCount)
+        }
+    }
+
+    func finish() {
+        lock.withLock {
+            isFinished = true
+            file = nil
+        }
+    }
+
+    func discard() {
+        finish()
+        try? FileManager.default.removeItem(at: url)
     }
 }
 
