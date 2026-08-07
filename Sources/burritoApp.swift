@@ -208,6 +208,17 @@ private struct BurritoMenuBarMenu: View {
                 }
             }
 
+            Button(coordinator.isPaused ? "Resume Recording" : "Pause Recording") {
+                Task {
+                    if coordinator.isPaused {
+                        await coordinator.resume()
+                    } else {
+                        await coordinator.pause()
+                    }
+                }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+
             Button("Stop and Build Note") {
                 Task { await coordinator.stop(context: modelContext) }
             }

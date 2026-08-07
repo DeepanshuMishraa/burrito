@@ -8,8 +8,14 @@ import Testing
 private final class CaptureSpyingStub: AudioCapturing {
     var activity = AudioActivity.silent
     var hasMeaningfulAudio = true
+    var liveTranscript = LiveTranscriptSnapshot(
+        availability: .unavailable(reason: "Live transcription is unavailable."),
+        passages: []
+    )
     private(set) var starts = 0
     private(set) var stops = 0
+    private(set) var pauses = 0
+    private(set) var resumes = 0
     private(set) var languageIdentifiers: [String] = []
     private(set) var modes: [RecordingMode] = []
     var startResult: Result<Void, BurritoError> = .success(())
@@ -31,6 +37,27 @@ private final class CaptureSpyingStub: AudioCapturing {
     func stop() async -> Result<Void, BurritoError> {
         stops += 1
         return stopResult
+    }
+
+    func pause() async -> Result<Void, BurritoError> {
+        pauses += 1
+        return .success(())
+    }
+
+    func resume() async -> Result<Void, BurritoError> {
+        resumes += 1
+        return .success(())
+    }
+}
+
+private struct SpeakerDiarizerFailureStub: SpeakerDiarizing {
+    let error: BurritoError
+
+    func assignSpeakers(
+        audioURL: URL,
+        to segments: [TranscriptSegment]
+    ) async -> Result<[TranscriptSegment], BurritoError> {
+        .failure(error)
     }
 }
 
@@ -118,6 +145,9 @@ private final class TranscriptionInputSpy: Transcribing, Sendable {
 
 private struct GeneratorStub: NoteGenerating {
     var availabilityResult: Result<Void, BurritoError> = .success(())
+    var generationResult: Result<GeneratedNote, BurritoError> = .success(
+        GeneratedNote(title: "Generated", markdown: "# Generated")
+    )
     var suggestedTitle = "Generated title"
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
@@ -131,7 +161,7 @@ private struct GeneratorStub: NoteGenerating {
         template: TemplateSnapshot,
         languageIdentifier: String
     ) async -> Result<GeneratedNote, BurritoError> {
-        .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+        generationResult
     }
 
     func suggestTitle(
@@ -227,9 +257,17 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
     let removeCount = Mutex(0)
     let removeTranscriptionCount = Mutex(0)
     let root: URL
+    let removeAudioResult: Result<Void, BurritoError>
+    let removeTranscriptionAudioResult: Result<Void, BurritoError>
 
-    init(root: URL) {
+    init(
+        root: URL,
+        removeAudioResult: Result<Void, BurritoError> = .success(()),
+        removeTranscriptionAudioResult: Result<Void, BurritoError> = .success(())
+    ) {
         self.root = root
+        self.removeAudioResult = removeAudioResult
+        self.removeTranscriptionAudioResult = removeTranscriptionAudioResult
     }
 
     func createSession(id: UUID, mode: RecordingMode) -> Result<RecordingFiles, BurritoError> {
@@ -251,12 +289,12 @@ private final class FileStoreSpy: RecordingFileStore, Sendable {
 
     func removeAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
         removeCount.withLock { $0 += 1 }
-        return .success(())
+        return removeAudioResult
     }
 
     func removeTranscriptionAudio(for files: RecordingFiles) -> Result<Void, BurritoError> {
         removeTranscriptionCount.withLock { $0 += 1 }
-        return .success(())
+        return removeTranscriptionAudioResult
     }
 }
 
@@ -719,6 +757,190 @@ struct CoordinatorTests {
 
         await coordinator.stop(context: context)
         #expect(coordinator.activity == .silent)
+    }
+
+    @Test("Recording can pause and resume without ending the note")
+    func pauseAndResumeRecording() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.pause()
+
+        #expect(coordinator.isPaused)
+        #expect(coordinator.captureState.isRecording)
+        #expect(capture.pauses == 1)
+
+        await coordinator.resume()
+
+        #expect(!coordinator.isPaused)
+        #expect(capture.resumes == 1)
+
+        await coordinator.stop(context: context)
+    }
+
+    @Test("Paused wall-clock time is excluded from the recording duration")
+    func pausedTimeIsExcludedFromDuration() async throws {
+        let context = try makeContext()
+        let clock = Mutex(Date(timeIntervalSinceReferenceDate: 100))
+        let capture = CaptureSpyingStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true },
+            now: { clock.withLock { $0 } }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 110) }
+        await coordinator.pause()
+        clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 140) }
+        try await Task.sleep(for: .milliseconds(120))
+        #expect(coordinator.elapsed == 10)
+        await coordinator.resume()
+        clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 150) }
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.duration == 20)
+    }
+
+    @Test("Stopping preserves the final live transcript snapshot")
+    func stopPreservesFinalLiveTranscript() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+        let finalSnapshot = LiveTranscriptSnapshot(
+            availability: .available,
+            passages: [
+                LiveTranscriptPassage(
+                    source: .system,
+                    startTime: 0,
+                    duration: 2,
+                    text: "Final passage",
+                    isFinal: true
+                ),
+            ]
+        )
+
+        await coordinator.start(options: options, context: context)
+        capture.liveTranscript = finalSnapshot
+        await coordinator.stop(context: context)
+
+        #expect(coordinator.liveTranscript == finalSnapshot)
+    }
+
+    @Test("Successful generation preserves every nonfatal processing warning")
+    func generationPreservesDiarizationWarning() async throws {
+        let context = try makeContext()
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: root.appending(path: "system.m4a"))
+        let warning = BurritoError.speakerDiarizationFailed(details: "Model unavailable")
+        let cleanupWarning = BurritoError.storageFailed(details: "Temporary audio is locked")
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(
+                root: root,
+                removeTranscriptionAudioResult: .failure(cleanupWarning)
+            ),
+            speakerDiarizer: SpeakerDiarizerFailureStub(error: warning),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.lifecycle == .ready)
+        #expect(note.lastErrorMessage?.contains(warning.recoveryMessage) == true)
+        #expect(note.lastErrorMessage?.contains(cleanupWarning.recoveryMessage) == true)
+    }
+
+    @Test("Failed generation preserves every nonfatal processing warning")
+    func failedGenerationPreservesProcessingWarnings() async throws {
+        let context = try makeContext()
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: root.appending(path: "system.m4a"))
+        let generationError = BurritoError.generationFailed(details: "The model is unavailable")
+        let diarizationWarning = BurritoError.speakerDiarizationFailed(details: "Model unavailable")
+        let cleanupWarning = BurritoError.storageFailed(details: "Temporary audio is locked")
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(generationResult: .failure(generationError)),
+            fileStore: FileStoreSpy(
+                root: root,
+                removeTranscriptionAudioResult: .failure(cleanupWarning)
+            ),
+            speakerDiarizer: SpeakerDiarizerFailureStub(error: diarizationWarning),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize."),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.lifecycle == .recoverable)
+        #expect(note.lastErrorMessage?.contains(generationError.recoveryMessage) == true)
+        #expect(note.lastErrorMessage?.contains(diarizationWarning.recoveryMessage) == true)
+        #expect(note.lastErrorMessage?.contains(cleanupWarning.recoveryMessage) == true)
     }
 
     @Test("Capture startup time does not count as recording silence")

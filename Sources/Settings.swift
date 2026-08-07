@@ -75,11 +75,11 @@ struct BurritoSettingsView: View {
                 HStack(alignment: .center, spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Settings")
-                            .font(.spline(size: 26, weight: 450))
+                            .font(.burritoUI(size: 26, weight: 450))
                             .foregroundStyle(.primary)
 
                         Text("Preferences and data ownership on this Mac")
-                            .font(.spline(size: 13, weight: .regular, relativeTo: .subheadline))
+                            .font(.burritoUI(size: 13, weight: .regular, relativeTo: .subheadline))
                             .foregroundStyle(.secondary)
                     }
 
@@ -99,7 +99,7 @@ struct BurritoSettingsView: View {
                                 }
                             } label: {
                                 BurritoLabel(tab.title, systemImage: tab.symbol)
-                                    .font(.spline(size: 12, weight: selected == tab ? 450 : 400))
+                                    .font(.burritoUI(size: 12, weight: selected == tab ? 450 : 400))
                                     .foregroundStyle(selected == tab ? .primary : .secondary)
                                     .lineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
@@ -339,10 +339,10 @@ private struct BurritoThemePicker: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Color theme")
-                    .font(.spline(size: 13, weight: 450))
+                    .font(.burritoUI(size: 13, weight: 450))
                     .foregroundStyle(.primary)
                 Text("Choose a color palette for Burrito.")
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
@@ -353,7 +353,7 @@ private struct BurritoThemePicker: View {
             } label: {
                 HStack(spacing: 6) {
                     Text(selectedTheme.title)
-                        .font(.spline(size: 12, weight: 450))
+                        .font(.burritoUI(size: 12, weight: 450))
                         .foregroundStyle(BurritoTheme.accent)
                     BurritoIcon(name: "chevron.down", size: 8)
                         .foregroundStyle(.tertiary)
@@ -388,7 +388,7 @@ private struct BurritoThemePicker: View {
                         } leading: {
                             ThemeSwatches(colors: theme.previewColors)
                             Text(theme.title)
-                                .font(.spline(size: 12, weight: 450))
+                                .font(.burritoUI(size: 12, weight: 450))
                                 .foregroundStyle(.primary)
                         }
                         .accessibilityLabel(theme.title)
@@ -447,10 +447,10 @@ private struct BurritoFontPicker: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("App font")
-                    .font(.spline(size: 13, weight: 450))
+                    .font(.burritoUI(size: 13, weight: 450))
                     .foregroundStyle(.primary)
                 Text("Choose a typeface for interface and notes.")
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
@@ -462,7 +462,7 @@ private struct BurritoFontPicker: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(selectedFont.title)
-                            .font(.spline(size: 12, weight: 450))
+                            .font(.burritoUI(size: 12, weight: 450))
                             .foregroundStyle(BurritoTheme.accent)
                         BurritoIcon(name: "chevron.down", size: 8)
                             .foregroundStyle(.tertiary)
@@ -494,7 +494,7 @@ private struct BurritoFontPicker: View {
                             if !categoryFonts.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(category.title)
-                                        .font(.spline(size: 9, weight: 600))
+                                        .font(.burritoUI(size: 9, weight: 600))
                                         .tracking(0.8)
                                         .foregroundStyle(.tertiary)
                                         .padding(.horizontal, 10)
@@ -544,13 +544,13 @@ private struct BurritoFontPicker: View {
                     TextField("", value: sizeBinding, format: .number.grouping(.never))
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.center)
-                        .font(.spline(size: 12, weight: 450))
+                        .font(.burritoUI(size: 12, weight: 450))
                         .foregroundStyle(BurritoTheme.accent)
                         .frame(width: 34)
                         .accessibilityLabel("Interface font size in pixels")
 
                     Text("px")
-                        .font(.spline(size: 10, weight: 450))
+                        .font(.burritoUI(size: 10, weight: 450))
                         .foregroundStyle(.tertiary)
                         .padding(.trailing, 6)
 
@@ -616,7 +616,7 @@ private struct SearchablePickerPopup<Content: View>: View {
                     .accessibilityHidden(true)
                 TextField(prompt, text: $query)
                     .textFieldStyle(.plain)
-                    .font(.spline(size: 12, weight: 400))
+                    .font(.burritoUI(size: 12, weight: 400))
                 if !query.isEmpty {
                     Button {
                         query = ""
@@ -720,9 +720,9 @@ private struct OwnershipSettingsCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your library, in open files")
-                        .font(.spline(size: 14, weight: 450))
+                        .font(.burritoUI(size: 14, weight: 450))
                     Text("Export versioned JSON, readable Markdown, transcripts, templates, folders, and retained audio.")
-                        .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                        .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -754,7 +754,7 @@ private struct OwnershipSettingsCard: View {
                     }
                     Text(status.message)
                 }
-                .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                 .foregroundStyle(
                     status.isFailure ? Color.red : Color.secondary
                 )
@@ -762,7 +762,7 @@ private struct OwnershipSettingsCard: View {
             }
 
             Text("Imports skip matching IDs and never overwrite local edits.")
-                .font(.spline(size: 10, weight: .regular, relativeTo: .caption2))
+                .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption2))
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
@@ -787,9 +787,9 @@ private struct LanguageCoverageCard: View {
                 .burritoElevation(.control)
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(language.title) · \(language.engineCoverage.title)")
-                    .font(.spline(size: 13, weight: 450))
+                    .font(.burritoUI(size: 13, weight: 450))
                 Text(language.engineCoverage.detail)
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -819,9 +819,9 @@ private struct CalendarConnectionSettingsRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Apple Calendar")
-                    .font(.spline(size: 14, weight: 450))
+                    .font(.burritoUI(size: 14, weight: 450))
                 Text(detail)
-                    .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                     .foregroundStyle(.secondary)
             }
 
@@ -854,7 +854,7 @@ private struct CalendarConnectionSettingsRow: View {
                 .frame(width: 120)
         case .authorized:
             BurritoLabel("Connected", systemImage: "checkmark")
-                .font(.spline(size: 13, weight: 450))
+                .font(.burritoUI(size: 13, weight: 450))
                 .foregroundStyle(BurritoTheme.accent)
         case .denied:
             Button("Open System Settings") {
@@ -885,7 +885,7 @@ private struct SettingsActionButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.spline(size: 12, weight: 450))
+            .font(.burritoUI(size: 12, weight: 450))
             .padding(.horizontal, 14)
             .frame(height: 34)
             .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -969,7 +969,7 @@ private struct SettingsFootnote: View {
 
     var body: some View {
         BurritoLabel(text, systemImage: "lock.shield")
-            .font(.spline(size: 11, weight: .regular, relativeTo: .caption))
+            .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
             .foregroundStyle(.secondary)
     }
 }

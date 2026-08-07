@@ -7,6 +7,155 @@ import Testing
 import UserNotifications
 @testable import Burrito
 
+@Suite("Live transcript reconciliation")
+struct LiveTranscriptReconciliationTests {
+    @Test("A final result replaces an overlapping promoted partial")
+    func finalResultReplacesPromotedPartial() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Partial",
+            isFinal: false,
+            finalizedThrough: 0
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Final",
+            isFinal: true,
+            finalizedThrough: 1
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Final"])
+    }
+
+    @Test("A recognizer revision keeps its passage identity")
+    func recognizerRevisionKeepsIdentity() throws {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .microphone,
+            startTime: 2,
+            duration: 0.5,
+            text: "Hello",
+            isFinal: false,
+            finalizedThrough: 0
+        )
+        let partialID = try #require(store.snapshot.passages.first?.id)
+
+        store.apply(
+            source: .microphone,
+            startTime: 2,
+            duration: 1,
+            text: "Hello there",
+            isFinal: true,
+            finalizedThrough: 3
+        )
+
+        let passage = try #require(store.snapshot.passages.first)
+        #expect(store.snapshot.passages.count == 1)
+        #expect(passage.id == partialID)
+        #expect(passage.text == "Hello there")
+    }
+
+    @Test("A partial extending beyond a final passage keeps its newer audio")
+    func extendingPartialKeepsNewerAudio() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 1
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 2,
+            text: "Already final and still speaking",
+            isFinal: false,
+            finalizedThrough: 1
+        )
+
+        #expect(store.snapshot.passages.count == 2)
+        #expect(store.snapshot.passages.contains { $0.text == "Already final" && $0.isFinal })
+        #expect(store.snapshot.passages.contains { $0.text == "Already final and still speaking" && !$0.isFinal })
+    }
+
+    @Test("A partial contained by a final passage is ignored as stale")
+    func containedPartialIsIgnored() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 2,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 2
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0.5,
+            duration: 0.5,
+            text: "Stale partial",
+            isFinal: false,
+            finalizedThrough: 2
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Already final"])
+    }
+
+    @Test("A partial extending only before a final passage is ignored as stale")
+    func earlierPartialIsIgnored() {
+        let store = LiveTranscriptStore()
+        store.apply(
+            source: .system,
+            startTime: 1,
+            duration: 2,
+            text: "Already final",
+            isFinal: true,
+            finalizedThrough: 3
+        )
+
+        store.apply(
+            source: .system,
+            startTime: 0,
+            duration: 3,
+            text: "Earlier audio only",
+            isFinal: false,
+            finalizedThrough: 3
+        )
+
+        #expect(store.snapshot.passages.map(\.text) == ["Already final"])
+    }
+
+    @Test("Distinct passages with equal timing have distinct identities")
+    func equalTimingHasDistinctIdentity() {
+        let first = LiveTranscriptPassage(
+            source: .system,
+            startTime: 4,
+            duration: 1,
+            text: "First",
+            isFinal: true
+        )
+        let second = LiveTranscriptPassage(
+            source: .system,
+            startTime: 4,
+            duration: 1,
+            text: "Second",
+            isFinal: true
+        )
+
+        #expect(first.id != second.id)
+    }
+}
+
 @MainActor
 @Suite("Calendar access")
 struct CalendarAccessTests {
@@ -247,6 +396,64 @@ struct NotificationAccessTests {
 
 @Suite("Transcript")
 struct TranscriptTests {
+    @Test("Diarization labels remote passages by strongest time overlap")
+    func assignsDetectedSpeakers() {
+        let transcript = [
+            TranscriptSegment(
+                source: .system,
+                startTime: 0,
+                duration: 4,
+                text: "First remote speaker"
+            ),
+            TranscriptSegment(
+                source: .system,
+                startTime: 4,
+                duration: 4,
+                text: "Second remote speaker"
+            ),
+            TranscriptSegment(
+                source: .microphone,
+                startTime: 1,
+                duration: 2,
+                text: "Local speaker"
+            ),
+        ]
+        let turns = [
+            SpeakerTurn(id: "cluster-b", startTime: 0, endTime: 3.8),
+            SpeakerTurn(id: "cluster-a", startTime: 4.1, endTime: 8),
+        ]
+
+        let attributed = SpeakerAttribution.assign(turns: turns, to: transcript)
+
+        #expect(attributed.map(\.speakerName) == ["Speaker 1", "Speaker 2", "You"])
+    }
+
+    @Test("Correcting a detected speaker renames every matching passage")
+    func renamesDetectedSpeaker() {
+        let first = TranscriptSegment(
+            source: .system,
+            startTime: 0,
+            duration: 1,
+            text: "One",
+            speakerName: "Speaker 1"
+        )
+        let second = TranscriptSegment(
+            source: .system,
+            startTime: 2,
+            duration: 1,
+            text: "Two",
+            speakerName: "Speaker 1"
+        )
+
+        let renamed = SpeakerAttribution.rename(
+            speaker: "Speaker 1",
+            to: "Sam",
+            in: [first, second]
+        )
+
+        #expect(renamed.map(\.speakerName) == ["Sam", "Sam"])
+    }
+
     @Test("Generation text keeps stable passage references and corrected speakers")
     func rendersStableSourceReferences() {
         let id = UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")

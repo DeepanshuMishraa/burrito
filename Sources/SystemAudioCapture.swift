@@ -10,6 +10,8 @@ final class SystemAudioCapture: AudioCapturing {
     private var output: CaptureOutput?
     private var isActive = false
     private var capturedMeaningfulAudio = false
+    private var liveTranscriptStore = LiveTranscriptStore()
+    private var lastLiveTranscript = LiveTranscriptSnapshot.preparing
 
     var activity: AudioActivity {
         isActive ? output?.activity ?? .silent : .silent
@@ -19,13 +21,19 @@ final class SystemAudioCapture: AudioCapturing {
         output?.hasMeaningfulAudio ?? capturedMeaningfulAudio
     }
 
+    var liveTranscript: LiveTranscriptSnapshot {
+        isActive ? liveTranscriptStore.snapshot : lastLiveTranscript
+    }
+
     func start(
         files: RecordingFiles,
         mode: RecordingMode,
-        languageIdentifier _: String
+        languageIdentifier: String
     ) async -> Result<Void, BurritoError> {
         guard !isActive else { return .failure(.recordingAlreadyInProgress) }
         capturedMeaningfulAudio = false
+        liveTranscriptStore = LiveTranscriptStore()
+        lastLiveTranscript = .preparing
 
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             return .failure(.screenRecordingPermissionDenied)
@@ -36,6 +44,7 @@ final class SystemAudioCapture: AudioCapturing {
             guard allowed else { return .failure(.microphonePermissionDenied) }
         }
 
+        var liveSession: LiveSpeechTranscriptionSession?
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false,
@@ -65,7 +74,24 @@ final class SystemAudioCapture: AudioCapturing {
             configuration.queueDepth = 1
             configuration.showsCursor = false
 
-            let newOutput = try CaptureOutput(files: files)
+            let sources: [AudioSource] = mode == .meeting
+                ? [.system, .microphone]
+                : [.system]
+            switch await LiveSpeechTranscriptionSession.make(
+                languageIdentifier: languageIdentifier,
+                sources: sources,
+                store: liveTranscriptStore
+            ) {
+            case .success(let session):
+                liveSession = session
+            case .failure:
+                liveSession = nil
+            }
+
+            let newOutput = try CaptureOutput(
+                files: files,
+                liveTranscription: liveSession
+            )
             let newStream = SCStream(filter: filter, configuration: configuration, delegate: newOutput)
             try newStream.addStreamOutput(
                 newOutput,
@@ -86,8 +112,21 @@ final class SystemAudioCapture: AudioCapturing {
             isActive = true
             return .success(())
         } catch {
+            await liveSession?.finish()
             return .failure(.captureFailed(details: error.localizedDescription))
         }
+    }
+
+    func pause() async -> Result<Void, BurritoError> {
+        guard let output, isActive else { return .failure(.noActiveRecording) }
+        output.setPaused(true)
+        return .success(())
+    }
+
+    func resume() async -> Result<Void, BurritoError> {
+        guard let output, isActive else { return .failure(.noActiveRecording) }
+        output.setPaused(false)
+        return .success(())
     }
 
     func stop() async -> Result<Void, BurritoError> {
@@ -99,6 +138,7 @@ final class SystemAudioCapture: AudioCapturing {
             try await stream.stopCapture()
             try await output.finish()
             capturedMeaningfulAudio = output.hasMeaningfulAudio
+            lastLiveTranscript = liveTranscriptStore.snapshot
             self.stream = nil
             self.output = nil
             isActive = false
@@ -141,6 +181,8 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
     private var systemLevel = 0.0
     private var microphoneLevel = 0.0
     private var meaningfulAudioDuration = 0.0
+    private var isPaused = false
+    private let liveTranscription: LiveSpeechTranscriptionSession?
 
     var hasMeaningfulAudio: Bool {
         lock.withLock { meaningfulAudioDuration >= 0.25 }
@@ -152,7 +194,10 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         }
     }
 
-    init(files: RecordingFiles) throws {
+    init(
+        files: RecordingFiles,
+        liveTranscription: LiveSpeechTranscriptionSession?
+    ) throws {
         self.systemWriter = try files.systemAudioURL.map {
             try AudioSampleWriter(url: $0, channelCount: 2)
         }
@@ -162,7 +207,18 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         self.systemTranscriptionWriter = files.systemTranscriptionURL.map { PCMFileWriter(url: $0) }
         self.microphoneTranscriptionWriter = files.microphoneTranscriptionURL.map { PCMFileWriter(url: $0) }
         self.hasMicrophone = files.microphoneAudioURL != nil
+        self.liveTranscription = liveTranscription
         super.init()
+    }
+
+    func setPaused(_ paused: Bool) {
+        lock.withLock {
+            isPaused = paused
+            if paused {
+                systemLevel = 0
+                microphoneLevel = 0
+            }
+        }
     }
 
     func stream(
@@ -170,7 +226,12 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard sampleBuffer.isValid, CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        guard sampleBuffer.isValid,
+              CMSampleBufferDataIsReady(sampleBuffer),
+              !lock.withLock({ isPaused })
+        else {
+            return
+        }
         switch type {
         case .audio:
             systemWriter?.append(sampleBuffer)
@@ -193,6 +254,7 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
         let captureError = lock.withLock { streamError }
         systemTranscriptionWriter?.finish()
         microphoneTranscriptionWriter?.finish()
+        await liveTranscription?.finish()
         if let captureError { throw captureError }
         try await systemWriter?.finish()
         try await microphoneWriter?.finish()
@@ -237,11 +299,17 @@ private final class CaptureOutput: NSObject, SCStreamOutput, SCStreamDelegate, @
                 return copy
             }
             let level = AudioLevel.measure(buffer)
+            let presentationTime = transcriptionPresentationTime(
+                sampleBuffer.presentationTimeStamp
+            )
+            liveTranscription?.append(
+                buffer,
+                presentationTime: presentationTime,
+                source: source
+            )
             writeTranscription(
                 buffer,
-                presentationTime: transcriptionPresentationTime(
-                    sampleBuffer.presentationTimeStamp
-                ),
+                presentationTime: presentationTime,
                 source: source
             )
             updateLevel(
