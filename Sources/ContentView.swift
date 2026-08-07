@@ -4558,6 +4558,7 @@ private struct RecordingPlaybackRatePicker: View {
                 Spacer(minLength: 12)
                 Text(selection.formatted(.number.precision(.fractionLength(0...2))) + "×")
                     .font(.burritoUI(size: 12, weight: 550))
+                    .monospacedDigit()
                     .foregroundStyle(selection > 1 ? BurritoTheme.accent : .secondary)
                     .frame(width: 52, alignment: .trailing)
             }
@@ -5655,6 +5656,7 @@ private struct LiveTranscriptPanel: View {
                                             )
                                         Text(Duration.seconds(passage.startTime).formatted(.time(pattern: .minuteSecond)))
                                             .font(.burritoUI(size: 9, weight: 400))
+                                            .monospacedDigit()
                                             .foregroundStyle(.tertiary)
                                     }
                                     Text(passage.text)
