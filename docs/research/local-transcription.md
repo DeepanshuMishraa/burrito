@@ -7,7 +7,10 @@ Use a **language-aware, two-pass local pipeline**:
 1. On stop, produce the final transcript with:
    - **English:** Parakeet TDT 0.6B v2 through FluidAudio/Core ML.
    - **Parakeet v3 languages:** Parakeet TDT 0.6B v3 through FluidAudio/Core ML.
-   - **Hindi and every unsupported locale:** Apple's `SpeechAnalyzer` accurate final preset.
+   - **Hindi and every unsupported locale:** Apple's accurate final
+     `SpeechTranscriber.Preset.transcription` configuration. Burrito uses its
+     timestamp-bearing `timeIndexedTranscriptionWithAlternatives` variant within
+     a `SpeechAnalyzer` session.
 2. Before final ASR, normalize known accelerated system audio back toward natural speech tempo with pitch-preserving offline time-stretch. Do not modify the microphone track.
 3. Ask for an explicit playback rate from 1× through 10×. Consider `Auto` only after confidence and stability thresholds pass a representative benchmark.
 4. Keep lossless PCM from capture through normalization and ASR. Encode AAC only for retained playback audio.
@@ -30,7 +33,7 @@ At 3x, the player’s time-stretching algorithm may already have discarded or sm
 
 Burrito captures system and optional microphone audio with ScreenCaptureKit. It writes temporary lossless PCM alongside optional AAC, then transcribes after recording ([`SystemAudioCapture.swift`](../../Sources/SystemAudioCapture.swift)). For system capture above 1×, it performs pitch-preserving inverse-tempo rendering to 16 kHz mono before local ASR and maps timestamps back to the capture clock ([`AudioPreparation.swift`](../../Sources/AudioPreparation.swift), [`LocalTranscriber.swift`](../../Sources/LocalTranscriber.swift)).
 
-The recording sheet exposes an explicit 1×–10× source rate. Burrito never applies that rate to the microphone track. The temporary PCM files are deleted after transcription; AAC remains the retained user-facing format when requested.
+The recording sheet accepts custom source rates throughout the 1.0×–10.0× range. Its menu offers the non-consecutive presets 1×, 1.25×, 1.5×, 2×, 2.5×, 3×, 4×, 5×, 6×, 8×, and 10×; 7× and 9× remain available as custom values rather than menu presets. Burrito never applies that rate to the microphone track. The temporary PCM files are deleted after transcription; AAC remains the retained user-facing format when requested.
 
 Direct media import extracts the original local audio track to PCM and bypasses capture-rate normalization ([`MediaAudioExtractor.swift`](../../Sources/MediaAudioExtractor.swift)). This makes transcription independent of player speed, although no ASR system can promise perfect recognition for every source.
 
@@ -40,7 +43,7 @@ ScreenCaptureKit exposes captured audio samples and lets Burrito choose sample r
 
 | Option | Accuracy evidence | Apple-silicon speed | Integration and license | 2x/3x conclusion |
 | --- | --- | --- | --- | --- |
-| Apple `SpeechAnalyzer` / `SpeechTranscriber` | Apple describes the model as on-device, fast, accurate, and designed for live, long-form, conversational, and distant audio. Apple publishes no WER or accelerated-speech result. | System-managed model; no app model download or app-process memory footprint. | Already integrated; assets are installed and updated by the OS. Native Swift API. | Keep for unsupported-language fallback. No evidence of 3x robustness. |
+| Apple `SpeechTranscriber` via `SpeechAnalyzer` | Apple describes the model as on-device, fast, accurate, and designed for live, long-form, conversational, and distant audio. Apple publishes no WER or accelerated-speech result. | System-managed model; no app model download or app-process memory footprint. | Already integrated; assets are installed and updated by the OS. Native Swift API. | Keep for unsupported-language fallback. No evidence of 3x robustness. |
 | Parakeet TDT 0.6B v2 | NVIDIA reports 6.05% average WER across its eight English Open-ASR sets and 1.69% on LibriSpeech test-clean. Its required input is 16 kHz mono. | FluidAudio reports 2.1% LibriSpeech test-clean WER and 145.8x overall RTFx for its Core ML conversion on an M4 Pro. This is the runtime author's benchmark, not an independent result. | FluidAudio is native Swift/SPM and Apache-2.0. Parakeet weights are CC BY 4.0, so attribution must ship with the app. | Best first production candidate for Burrito's English final pass. Still requires speed-perturbed testing. |
 | Parakeet TDT 0.6B v3 | NVIDIA reports 6.34% average English-leaderboard WER and supports 25 European languages with punctuation and timestamps. | FluidAudio reports about 156x overall RTFx and 2.5% LibriSpeech test-clean WER on M4 Pro for its Core ML conversion. | Same native Swift path and licenses as v2. NVIDIA's supported deployment is Linux/NVIDIA hardware; FluidAudio's Core ML conversion is the macOS-enabling layer. | Use for supported non-English locales. It does **not** support Hindi, so it cannot replace Apple Speech globally. |
 | Parakeet TDT-CTC 110M | FluidAudio reports 3.01% LibriSpeech test-clean WER and 96.5x RTFx on M2. | Smaller and iOS-compatible according to FluidAudio. | Native FluidAudio/Core ML. | Interesting low-footprint tier, but the published evidence is too narrow to prefer it over v2 for Burrito's quality-first final pass. |
@@ -100,7 +103,7 @@ For example, a word located at 20 seconds in system audio expanded with `n = 0.5
 
 ### Unknown playback rate
 
-The implemented UX accepts an explicit rate from 1× through 10× and persists the last selection. `Auto` is not implemented in this release; it remains future work below.
+The implemented UX accepts custom rates throughout 1.0×–10.0× and persists the last selection. Its menu uses the non-consecutive presets listed above. `Auto` is not implemented in this release; it remains future work below.
 
 `Auto` should be a rescue mode, not an unverified promise:
 
@@ -118,22 +121,34 @@ For a fast first implementation, skip `Auto`: ask for playback speed and prove t
 ## Proposed production flow
 
 ```text
-ScreenCaptureKit PCM or imported original media
-  ├─ microphone PCM ───────────────┐
-  └─ system PCM                    │
-       └─ on stop                  │
-            ├─ VAD / silence gate │
+ScreenCaptureKit
+  ├─ microphone PCM ───────────────────────────┐
+  └─ system PCM                                │
+       └─ on stop                              │
+            ├─ VAD / silence gate             │
             ├─ inverse time-stretch when rate > 1
-            ├─ 16 kHz mono Float32
-            └─ language router
-                 ├─ en-* → Parakeet v2
-                 ├─ supported v3 locale → Parakeet v3
-                 └─ hi-IN / unsupported → SpeechAnalyzer
-                                    │
-                    timestamp merge┘
-                            ↓
-                    final transcript
+            └─ 16 kHz mono Float32              │
+                                                └─ language router
+                                                     ├─ en-* → Parakeet v2
+                                                     ├─ supported v3 locale → Parakeet v3
+                                                     └─ hi-IN / unsupported → Apple SpeechTranscriber
+                                                                        ↓
+                                                              timestamp merge
+                                                                        ↓
+                                                                final transcript
+
+Imported original media
+  └─ extract original local audio track
+       └─ language router
+            ├─ en-* → Parakeet v2
+            ├─ supported v3 locale → Parakeet v3
+            └─ hi-IN / unsupported → Apple SpeechTranscriber
+                               ↓
+                       final transcript
 ```
+
+Apple transcription uses a `SpeechTranscriber` module; `SpeechAnalyzer` manages
+the analysis session that feeds audio to that module.
 
 Keep microphone and system segments separate until after ASR. A video at 3x does not imply that the person speaking into the microphone is speaking at 3x.
 
