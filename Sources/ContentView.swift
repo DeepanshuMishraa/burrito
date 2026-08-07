@@ -7201,48 +7201,92 @@ private struct TemplateSymbolPicker: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal) {
+        ScrollViewReader { proxy in
             HStack(spacing: 6) {
-                ForEach(options) { option in
-                    Button {
-                        selection = option.systemName
-                    } label: {
-                        HStack(spacing: 5) {
-                            BurritoIcon(name: option.systemName, size: 12)
-                            Text(option.title)
-                                .font(.burritoUI(size: 11, weight: 450))
-                        }
-                        .foregroundStyle(
-                            selection == option.systemName
-                                ? BurritoTheme.accentForeground
-                                : .secondary
-                        )
-                        .padding(.horizontal, 10)
-                        .frame(height: 30)
-                        .background(
-                            selection == option.systemName
-                                ? BurritoTheme.accent
-                                : BurritoTheme.controlFill,
-                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        )
-                        .burritoElevation(.control, isActive: selection == option.systemName)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(
+                Button {
+                    scrollPrevious(proxy: proxy)
+                } label: {
+                    BurritoIcon(name: "chevron.left", size: 10)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 30)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Previous icons")
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(options) { option in
+                            Button {
+                                selection = option.systemName
+                            } label: {
+                                HStack(spacing: 5) {
+                                    BurritoIcon(name: option.systemName, size: 12)
+                                    Text(option.title)
+                                        .font(.burritoUI(size: 11, weight: 450))
+                                }
+                                .foregroundStyle(
+                                    selection == option.systemName
+                                        ? BurritoTheme.accentForeground
+                                        : .secondary
+                                )
+                                .padding(.horizontal, 10)
+                                .frame(height: 30)
+                                .background(
                                     selection == option.systemName
                                         ? BurritoTheme.accent
-                                        : BurritoTheme.softBorder
+                                        : BurritoTheme.controlFill,
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 )
+                                .burritoElevation(.control, isActive: selection == option.systemName)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(
+                                            selection == option.systemName
+                                                ? BurritoTheme.accent
+                                                : BurritoTheme.softBorder
+                                        )
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .id(option.systemName)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
                 }
+
+                Button {
+                    scrollNext(proxy: proxy)
+                } label: {
+                    BurritoIcon(name: "chevron.right", size: 10)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 30)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Next icons")
             }
-            .padding(.vertical, 2)
-            .padding(.horizontal, 2)
+            .onAppear {
+                proxy.scrollTo(selection, anchor: .center)
+            }
         }
-        .scrollIndicators(.hidden)
         .frame(height: 36)
+    }
+
+    private func scrollPrevious(proxy: ScrollViewProxy) {
+        guard let currentIndex = options.firstIndex(where: { $0.systemName == selection }) else { return }
+        let prevIndex = max(0, currentIndex - 3)
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(options[prevIndex].systemName, anchor: .center)
+        }
+    }
+
+    private func scrollNext(proxy: ScrollViewProxy) {
+        guard let currentIndex = options.firstIndex(where: { $0.systemName == selection }) else { return }
+        let nextIndex = min(options.count - 1, currentIndex + 3)
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(options[nextIndex].systemName, anchor: .center)
+        }
     }
 }
 
