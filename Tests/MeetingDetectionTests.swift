@@ -3,6 +3,22 @@ import Testing
 
 @Suite("Note-taking detection")
 struct MeetingDetectionTests {
+    @Test("Uses Core Audio identity for unregistered helper processes")
+    func resolvesUnregisteredAudioHelperIdentity() {
+        #expect(
+            AudioProcessIdentity.bundleIdentifier(
+                audioBundleIdentifier: "net.imput.helium.helper",
+                runningApplicationBundleIdentifier: nil
+            ) == "net.imput.helium.helper"
+        )
+        #expect(
+            AudioProcessIdentity.belongsToSameApplicationFamily(
+                "net.imput.helium.helper",
+                "net.imput.helium"
+            )
+        )
+    }
+
     @Test("Detection requires completed onboarding and all permissions")
     func requiresOnboardingAndPermissions() {
         #expect(
@@ -145,6 +161,47 @@ struct MeetingDetectionTests {
                 sourceID: "chrome",
                 applicationName: "Google Chrome",
                 kind: .listenAlong
+            )
+        )
+    }
+
+    @Test("Detects Helium helper media playback")
+    func detectsHeliumMediaPlayback() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.imput.helium.helper",
+                applicationName: "Helium Helper",
+                windowTitles: ["Swift concurrency tutorial — YouTube"],
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(
+            detected == DetectedNoteTakingSession(
+                sourceID: "helium",
+                applicationName: "Helium",
+                kind: .listenAlong
+            )
+        )
+    }
+
+    @Test("Detects Google Meet in Helium")
+    func detectsHeliumMeeting() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.imput.helium.helper",
+                applicationName: "Helium Helper",
+                windowTitles: ["Daily sync — Google Meet"],
+                isUsingMicrophone: true,
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(
+            detected == DetectedNoteTakingSession(
+                sourceID: "helium",
+                applicationName: "Helium",
+                kind: .meeting
             )
         )
     }

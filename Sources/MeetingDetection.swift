@@ -13,6 +13,34 @@ struct AudioProcessActivity: Equatable, Sendable {
     let isPlayingAudio: Bool
 }
 
+enum AudioProcessIdentity {
+    static func bundleIdentifier(
+        audioBundleIdentifier: String?,
+        runningApplicationBundleIdentifier: String?
+    ) -> String? {
+        let candidates: [String?] = [
+            audioBundleIdentifier,
+            runningApplicationBundleIdentifier,
+        ]
+        for candidate in candidates {
+            guard let candidate else { continue }
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
+    static func belongsToSameApplicationFamily(_ lhs: String, _ rhs: String) -> Bool {
+        let lhs = lhs.lowercased()
+        let rhs = rhs.lowercased()
+        return lhs == rhs
+            || lhs.hasPrefix(rhs + ".")
+            || rhs.hasPrefix(lhs + ".")
+    }
+}
+
 enum DetectedNoteTakingKind: String, Equatable, Sendable {
     case meeting
     case listenAlong
@@ -173,6 +201,11 @@ enum NoteTakingSessionClassifier {
             id: "brave",
             name: "Brave",
             bundleIdentifierPrefixes: ["com.brave.browser"]
+        ),
+        ApplicationFamily(
+            id: "helium",
+            name: "Helium",
+            bundleIdentifierPrefixes: ["net.imput.helium"]
         ),
     ]
 
@@ -338,6 +371,7 @@ enum NoteTakingSessionClassifier {
 private struct AudioWindowSnapshot {
     let processIdentifier: pid_t
     let ownerName: String
+    let bundleIdentifier: String?
     let title: String
 }
 
@@ -361,6 +395,9 @@ private enum AudioWindowReader {
             return AudioWindowSnapshot(
                 processIdentifier: processNumber.int32Value,
                 ownerName: ownerName,
+                bundleIdentifier: NSRunningApplication(
+                    processIdentifier: processNumber.int32Value
+                )?.bundleIdentifier,
                 title: title
             )
         }
@@ -373,27 +410,29 @@ private struct CoreAudioProcessActivityReader {
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
 
-        return Self.audioProcessObjectIDs().compactMap { objectID in
-            let isUsingMicrophone = Self.uint32Property(
-                objectID: objectID,
-                selector: kAudioProcessPropertyIsRunningInput
-            ).map { $0 != 0 } ?? false
-            let isPlayingAudio = Self.uint32Property(
-                objectID: objectID,
-                selector: kAudioProcessPropertyIsRunningOutput
-            ).map { $0 != 0 } ?? false
+        let audioProcesses = (try? AudioHardwareSystem.shared.processes) ?? []
+        return audioProcesses.compactMap { audioProcess in
+            let isUsingMicrophone = (try? audioProcess.isRunningInput) ?? false
+            let isPlayingAudio = (try? audioProcess.isRunningOutput) ?? false
             guard isUsingMicrophone || isPlayingAudio,
-                  let processIdentifier = Self.processIdentifier(objectID: objectID),
-                  let application = NSRunningApplication(
-                    processIdentifier: processIdentifier
-                  ),
-                  let bundleIdentifier = application.bundleIdentifier,
+                  let processIdentifier = try? audioProcess.pid
+            else {
+                return nil
+            }
+
+            let application = NSRunningApplication(
+                processIdentifier: processIdentifier
+            )
+            guard let bundleIdentifier = AudioProcessIdentity.bundleIdentifier(
+                audioBundleIdentifier: try? audioProcess.bundleID,
+                runningApplicationBundleIdentifier: application?.bundleIdentifier
+            ),
                   bundleIdentifier != ownBundleIdentifier
             else {
                 return nil
             }
 
-            let applicationName = application.localizedName ?? bundleIdentifier
+            let applicationName = application?.localizedName ?? bundleIdentifier
             let normalizedApplicationName = Self.normalize(applicationName)
             let isApplicationFrontmost = Self.isSameApplicationFamily(
                 bundleIdentifier: bundleIdentifier,
@@ -402,6 +441,14 @@ private struct CoreAudioProcessActivityReader {
             )
             let relatedTitles = windows.compactMap { window -> String? in
                 if window.processIdentifier == processIdentifier {
+                    return window.title
+                }
+                if let windowBundleIdentifier = window.bundleIdentifier,
+                   AudioProcessIdentity.belongsToSameApplicationFamily(
+                    bundleIdentifier,
+                    windowBundleIdentifier
+                   )
+                {
                     return window.title
                 }
                 let normalizedOwnerName = Self.normalize(window.ownerName)
@@ -432,9 +479,10 @@ private struct CoreAudioProcessActivityReader {
         guard let application else { return false }
 
         if let frontmostBundleIdentifier = application.bundleIdentifier,
-           bundleIdentifier == frontmostBundleIdentifier
-            || bundleIdentifier.hasPrefix(frontmostBundleIdentifier + ".")
-            || frontmostBundleIdentifier.hasPrefix(bundleIdentifier + ".")
+           AudioProcessIdentity.belongsToSameApplicationFamily(
+            bundleIdentifier,
+            frontmostBundleIdentifier
+           )
         {
             return true
         }
@@ -454,87 +502,6 @@ private struct CoreAudioProcessActivityReader {
         value.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-    private static func audioProcessObjectIDs() -> [AudioObjectID] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyProcessObjectList,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &dataSize
-        ) == noErr,
-              dataSize > 0
-        else {
-            return []
-        }
-
-        let count = Int(dataSize) / MemoryLayout<AudioObjectID>.size
-        var objectIDs = Array(repeating: kAudioObjectUnknown, count: count)
-        let status = objectIDs.withUnsafeMutableBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return OSStatus(-1)
-            }
-            return AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &address,
-                0,
-                nil,
-                &dataSize,
-                baseAddress
-            )
-        }
-        return status == noErr ? objectIDs : []
-    }
-
-    private static func uint32Property(
-        objectID: AudioObjectID,
-        selector: AudioObjectPropertySelector
-    ) -> UInt32? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var value: UInt32 = 0
-        var dataSize = UInt32(MemoryLayout<UInt32>.size)
-        guard AudioObjectGetPropertyData(
-            objectID,
-            &address,
-            0,
-            nil,
-            &dataSize,
-            &value
-        ) == noErr else {
-            return nil
-        }
-        return value
-    }
-
-    private static func processIdentifier(objectID: AudioObjectID) -> pid_t? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyPID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var value = pid_t(0)
-        var dataSize = UInt32(MemoryLayout<pid_t>.size)
-        guard AudioObjectGetPropertyData(
-            objectID,
-            &address,
-            0,
-            nil,
-            &dataSize,
-            &value
-        ) == noErr else {
-            return nil
-        }
-        return value
-    }
 }
 
 @MainActor
