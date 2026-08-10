@@ -67,17 +67,16 @@ struct DetectedNoteTakingSession: Equatable, Identifiable, Sendable {
 final class DetectedRecordingRequestHandler {
     static let shared = DetectedRecordingRequestHandler()
 
-    private var handler: ((RecordingMode) -> Void)?
+    private var handler: ((RecordingMode) async -> Bool)?
 
-    func configure(_ handler: @escaping (RecordingMode) -> Void) {
+    func configure(_ handler: @escaping (RecordingMode) async -> Bool) {
         self.handler = handler
     }
 
     @discardableResult
-    func startRecording(mode: RecordingMode) -> Bool {
+    func startRecording(mode: RecordingMode) async -> Bool {
         guard let handler else { return false }
-        handler(mode)
-        return true
+        return await handler(mode)
     }
 }
 
@@ -87,9 +86,10 @@ enum DetectedRecordingLauncher {
         mode: RecordingMode,
         coordinator: AppCoordinator,
         context: ModelContext,
-        defaults: UserDefaults = .standard
-    ) {
-        guard coordinator.captureState == .idle else { return }
+        defaults: UserDefaults = .standard,
+        openMainWindow: () -> Void = { MainWindowRouter.shared.open() }
+    ) async -> Bool {
+        guard coordinator.captureState == .idle else { return false }
 
         let defaultTemplateID = defaults.string(forKey: "defaultTemplateID")
             ?? BuiltInTemplate.summary.rawValue
@@ -103,21 +103,24 @@ enum DetectedRecordingLauncher {
             ?? "en-US"
         let retainsAudio = defaults.bool(forKey: "retainAudioDefault")
 
-        Task {
-            await coordinator.start(
-                options: RecordingOptions(
-                    template: template,
-                    languageIdentifier: languageIdentifier,
-                    mode: mode,
-                    retainsAudio: retainsAudio
-                ),
-                destination: .newNote,
-                context: context
-            )
-            if let activeNoteID = coordinator.activeNoteID {
-                NoteSelectionInbox.shared.submit(activeNoteID)
-            }
+        await coordinator.start(
+            options: RecordingOptions(
+                template: template,
+                languageIdentifier: languageIdentifier,
+                mode: mode,
+                retainsAudio: retainsAudio
+            ),
+            destination: .newNote,
+            context: context
+        )
+        guard coordinator.captureState.isRecording,
+              let activeNoteID = coordinator.activeNoteID
+        else {
+            return false
         }
+        NoteSelectionInbox.shared.submit(activeNoteID)
+        openMainWindow()
+        return true
     }
 }
 
@@ -623,10 +626,12 @@ final class NoteTakingDetectionController {
         case .listenAlong:
             .listenAlong
         }
-        guard DetectedRecordingRequestHandler.shared.startRecording(mode: mode) else {
-            return
+        Task { [weak self] in
+            guard await DetectedRecordingRequestHandler.shared.startRecording(mode: mode) else {
+                return
+            }
+            self?.dismissCurrentSession()
         }
-        dismissCurrentSession()
     }
 
     private func dismissCurrentSession() {

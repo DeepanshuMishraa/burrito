@@ -315,6 +315,69 @@ private func sampleCalendarEvent() -> CalendarEventSnapshot {
 @MainActor
 @Suite("Recording coordinator")
 struct CoordinatorTests {
+    @Test("Detected recording opens the new note only after capture starts")
+    func detectedRecordingOpensStartedNote() async throws {
+        let context = try makeContext()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        var openedMainWindow = false
+        _ = NoteSelectionInbox.shared.consume()
+
+        let accepted = await DetectedRecordingLauncher.start(
+            mode: .listenAlong,
+            coordinator: coordinator,
+            context: context,
+            openMainWindow: { openedMainWindow = true }
+        )
+
+        #expect(accepted)
+        #expect(coordinator.captureState.isRecording)
+        #expect(NoteSelectionInbox.shared.pendingNoteID == coordinator.activeNoteID)
+        #expect(openedMainWindow)
+
+        _ = NoteSelectionInbox.shared.consume()
+        await coordinator.stop(context: context)
+    }
+
+    @Test("Detected recording rejects a non-idle coordinator without opening")
+    func detectedRecordingRejectsNonIdleCoordinator() async throws {
+        let context = try makeContext()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+        await coordinator.start(options: options, context: context)
+        var openedMainWindow = false
+
+        let accepted = await DetectedRecordingLauncher.start(
+            mode: .listenAlong,
+            coordinator: coordinator,
+            context: context,
+            openMainWindow: { openedMainWindow = true }
+        )
+
+        #expect(!accepted)
+        #expect(!openedMainWindow)
+
+        await coordinator.stop(context: context)
+    }
+
     @Test("Selected playback rate applies only to captured system audio")
     func routesPlaybackRateToSystemAudio() async throws {
         let context = try makeContext()

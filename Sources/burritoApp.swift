@@ -56,7 +56,7 @@ struct burritoApp: App {
         self.container = container
         NoteTakingDetectionController.shared.configure(coordinator: coordinator)
         DetectedRecordingRequestHandler.shared.configure { mode in
-            DetectedRecordingLauncher.start(
+            await DetectedRecordingLauncher.start(
                 mode: mode,
                 coordinator: coordinator,
                 context: container.mainContext
@@ -442,8 +442,9 @@ private struct BurritoMenuBarMenu: View {
     }
 
     private func openMainWindow() {
-        openWindow(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
+        MainWindowRouter.shared.open(using: {
+            openWindow(id: "main")
+        })
     }
 }
 

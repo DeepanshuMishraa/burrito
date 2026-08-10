@@ -309,21 +309,32 @@ struct MeetingDetectionTests {
 @MainActor
 struct DetectedRecordingRequestHandlerTests {
     @Test("Routes recording requests without a window subscriber")
-    func routesRecordingRequest() {
+    func routesRecordingRequest() async {
         let handler = DetectedRecordingRequestHandler()
         var receivedModes: [RecordingMode] = []
-        handler.configure { receivedModes.append($0) }
+        handler.configure {
+            receivedModes.append($0)
+            return true
+        }
 
-        let accepted = handler.startRecording(mode: .listenAlong)
+        let accepted = await handler.startRecording(mode: .listenAlong)
 
         #expect(accepted)
         #expect(receivedModes == [.listenAlong])
     }
 
     @Test("Keeps the prompt actionable until a recording handler exists")
-    func rejectsUnconfiguredRequest() {
+    func rejectsUnconfiguredRequest() async {
         let handler = DetectedRecordingRequestHandler()
 
-        #expect(!handler.startRecording(mode: .meeting))
+        #expect(!(await handler.startRecording(mode: .meeting)))
+    }
+
+    @Test("Keeps the prompt actionable when recording launch is rejected")
+    func propagatesRejectedLaunch() async {
+        let handler = DetectedRecordingRequestHandler()
+        handler.configure { _ in false }
+
+        #expect(!(await handler.startRecording(mode: .meeting)))
     }
 }
