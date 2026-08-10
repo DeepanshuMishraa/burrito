@@ -16,6 +16,7 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updater.start()
+        Task { await updater.checkIfDue() }
     }
 }
 

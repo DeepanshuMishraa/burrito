@@ -352,9 +352,6 @@ struct ContentView: View {
             handlePendingRecordingDestination()
             handlePendingNoteSelection()
         }
-        .task {
-            await updater.checkIfDue()
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 permissions.refresh()
