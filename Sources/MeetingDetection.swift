@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import CoreAudio
 import QuartzCore
 import SwiftData
@@ -606,8 +605,6 @@ private struct CoreAudioProcessActivityReader {
         let windows = AudioWindowReader.snapshots()
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        let cameraIsInUse = CameraActivityReader.isCameraInUse
-
         let audioProcesses = (try? AudioHardwareSystem.shared.processes) ?? []
         var activities: [AudioProcessActivity] = audioProcesses.compactMap {
             audioProcess -> AudioProcessActivity? in
@@ -651,7 +648,7 @@ private struct CoreAudioProcessActivityReader {
                 activeWindowTitle: isApplicationFrontmost ? relatedTitles.first : nil,
                 isApplicationFrontmost: isApplicationFrontmost,
                 isUsingMicrophone: isUsingMicrophone,
-                isUsingCamera: cameraIsInUse && isApplicationFrontmost,
+                isUsingCamera: false,
                 isPlayingAudio: isPlayingAudio
             )
         }
@@ -662,7 +659,7 @@ private struct CoreAudioProcessActivityReader {
                     activity.bundleIdentifier
                 )
         }
-        guard systemConferenceMicrophoneIsActive || cameraIsInUse,
+        guard systemConferenceMicrophoneIsActive,
               let frontmostApplication,
               let frontmostBundleIdentifier = frontmostApplication.bundleIdentifier,
               frontmostBundleIdentifier != ownBundleIdentifier,
@@ -692,7 +689,7 @@ private struct CoreAudioProcessActivityReader {
                 activeWindowTitle: relatedTitles.first,
                 isApplicationFrontmost: true,
                 isUsingMicrophone: systemConferenceMicrophoneIsActive,
-                isUsingCamera: cameraIsInUse,
+                isUsingCamera: false,
                 isPlayingAudio: false
             )
         )
@@ -759,19 +756,6 @@ private struct CoreAudioProcessActivityReader {
         value.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-}
-
-private enum CameraActivityReader {
-    static var isCameraInUse: Bool {
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .external],
-            mediaType: .video,
-            position: .unspecified
-        )
-        return discovery.devices.contains { device in
-            device.isInUseByAnotherApplication
-        }
-    }
 }
 
 @MainActor
