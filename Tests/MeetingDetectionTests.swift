@@ -61,6 +61,20 @@ struct MeetingDetectionTests {
         )
     }
 
+    @Test("Detects a frontmost dedicated meeting app using the camera")
+    func detectsDedicatedMeetingAppCamera() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.whatsapp.WhatsApp",
+                applicationName: "WhatsApp",
+                isUsingCamera: true
+            ),
+        ])
+
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "WhatsApp")
+    }
+
     @Test("Meeting detection wins over simultaneous media playback")
     func prioritizesMeetingDetection() {
         let detected = NoteTakingSessionClassifier.detect(in: [
@@ -98,8 +112,68 @@ struct MeetingDetectionTests {
         #expect(detected?.applicationName == "Google Chrome")
     }
 
-    @Test("Excludes meeting websites from Listen Along detection")
-    func excludesMeetingWebsiteAudio() {
+    @Test("Treats an unrecognized browser room using the microphone as a meeting")
+    func detectsUnrecognizedBrowserCall() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.apple.Safari",
+                applicationName: "Safari",
+                windowTitles: ["Customer room"],
+                isUsingMicrophone: true,
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "Safari")
+    }
+
+    @Test("Detects a muted meeting website from its active call audio")
+    func detectsMutedBrowserMeeting() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "company.thebrowser.dia.helper",
+                applicationName: "Dia Helper",
+                windowTitles: ["Design review — Google Meet"],
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "Dia")
+    }
+
+    @Test("Detects a meeting website using the camera")
+    func detectsBrowserMeetingCamera() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "company.thebrowser.dia",
+                applicationName: "Dia",
+                windowTitles: ["Design review — Google Meet"],
+                isUsingCamera: true
+            ),
+        ])
+
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "Dia")
+    }
+
+    @Test("Does not attribute global camera use to an unknown browser page")
+    func ignoresUnattributedBrowserCamera() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.apple.Safari",
+                applicationName: "Safari",
+                windowTitles: ["Documentation"],
+                isUsingCamera: true
+            ),
+        ])
+
+        #expect(detected == nil)
+    }
+
+    @Test("Classifies meeting website audio as a meeting")
+    func classifiesMeetingWebsiteAudio() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.apple.Safari",
@@ -110,11 +184,12 @@ struct MeetingDetectionTests {
             ),
         ])
 
-        #expect(detected == nil)
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "Safari")
     }
 
-    @Test("Mixed browser windows are ignored when the audio source is ambiguous")
-    func ignoresAmbiguousBrowserWindows() {
+    @Test("Uses the active meeting window when a browser has mixed windows")
+    func usesActiveMeetingWindow() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.google.Chrome.helper",
@@ -127,11 +202,11 @@ struct MeetingDetectionTests {
             ),
         ])
 
-        #expect(detected == nil)
+        #expect(detected?.kind == .meeting)
     }
 
-    @Test("A background browser window cannot drive media classification")
-    func ignoresBackgroundBrowserWindow() {
+    @Test("Detects background browser playback without guessing its tab")
+    func detectsBackgroundBrowserPlaybackWithoutGuessingItsTab() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.google.Chrome.helper",
@@ -142,7 +217,13 @@ struct MeetingDetectionTests {
             ),
         ])
 
-        #expect(detected == nil)
+        #expect(
+            detected == DetectedNoteTakingSession(
+                sourceID: "chrome",
+                applicationName: "Google Chrome",
+                kind: .listenAlong
+            )
+        )
     }
 
     @Test("Detects browser media playback for Listen Along")
@@ -270,8 +351,8 @@ struct MeetingDetectionTests {
         #expect(first?.id != second?.id)
     }
 
-    @Test("Does not treat microphone-active browser audio as media playback")
-    func ignoresMicrophoneActiveBrowserAudio() {
+    @Test("Treats microphone-active unknown browser audio as a meeting")
+    func classifiesMicrophoneActiveBrowserAudio() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.google.Chrome.helper",
@@ -282,11 +363,11 @@ struct MeetingDetectionTests {
             ),
         ])
 
-        #expect(detected == nil)
+        #expect(detected?.kind == .meeting)
     }
 
-    @Test("Ignores an unrecognized microphone-active browser without playback")
-    func ignoresUnrecognizedMicrophoneSiteWithoutPlayback() {
+    @Test("Detects an unrecognized microphone-active browser without playback")
+    func detectsUnrecognizedMicrophoneSiteWithoutPlayback() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.apple.Safari",
@@ -296,7 +377,8 @@ struct MeetingDetectionTests {
             ),
         ])
 
-        #expect(detected == nil)
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "Safari")
     }
 
     @Test("Detects supported local video players for Listen Along")
@@ -357,6 +439,7 @@ struct MeetingDetectionTests {
         activeWindowTitle: String? = nil,
         isApplicationFrontmost: Bool = true,
         isUsingMicrophone: Bool = false,
+        isUsingCamera: Bool = false,
         isPlayingAudio: Bool = false
     ) -> AudioProcessActivity {
         AudioProcessActivity(
@@ -366,8 +449,61 @@ struct MeetingDetectionTests {
             activeWindowTitle: activeWindowTitle ?? windowTitles.first,
             isApplicationFrontmost: isApplicationFrontmost,
             isUsingMicrophone: isUsingMicrophone,
+            isUsingCamera: isUsingCamera,
             isPlayingAudio: isPlayingAudio
         )
+    }
+}
+
+@Suite("Note-taking detection stability")
+struct NoteTakingDetectionStabilityTests {
+    private let meeting = DetectedNoteTakingSession(
+        sourceID: "zoom",
+        applicationName: "Zoom",
+        kind: .meeting
+    )
+
+    @Test("Requires a stable signal before beginning a session")
+    func requiresStableStart() {
+        var stabilizer = NoteTakingSessionStabilizer(
+            samplesToBegin: 2,
+            samplesToEnd: 3
+        )
+
+        #expect(stabilizer.update(with: meeting) == nil)
+        #expect(stabilizer.update(with: meeting) == meeting)
+    }
+
+    @Test("Keeps a session through brief missing samples")
+    func toleratesBriefDropout() {
+        var stabilizer = NoteTakingSessionStabilizer(
+            samplesToBegin: 2,
+            samplesToEnd: 3
+        )
+        _ = stabilizer.update(with: meeting)
+        _ = stabilizer.update(with: meeting)
+
+        #expect(stabilizer.update(with: nil) == meeting)
+        #expect(stabilizer.update(with: nil) == meeting)
+        #expect(stabilizer.update(with: nil) == nil)
+    }
+
+    @Test("A changed signal must stabilize before replacing the active session")
+    func stabilizesSessionChanges() {
+        let media = DetectedNoteTakingSession(
+            sourceID: "safari",
+            applicationName: "Safari",
+            kind: .listenAlong
+        )
+        var stabilizer = NoteTakingSessionStabilizer(
+            samplesToBegin: 2,
+            samplesToEnd: 3
+        )
+        _ = stabilizer.update(with: meeting)
+        _ = stabilizer.update(with: meeting)
+
+        #expect(stabilizer.update(with: media) == meeting)
+        #expect(stabilizer.update(with: media) == media)
     }
 }
 

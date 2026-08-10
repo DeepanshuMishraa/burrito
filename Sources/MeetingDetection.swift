@@ -11,6 +11,7 @@ struct AudioProcessActivity: Equatable, Sendable {
     let activeWindowTitle: String?
     let isApplicationFrontmost: Bool
     let isUsingMicrophone: Bool
+    let isUsingCamera: Bool
     let isPlayingAudio: Bool
 }
 
@@ -89,6 +90,65 @@ struct DetectedNoteTakingSession: Equatable, Identifiable, Sendable {
         [kind.rawValue, sourceID, activityIdentifier]
             .compactMap { $0 }
             .joined(separator: ":")
+    }
+}
+
+struct NoteTakingSessionStabilizer {
+    private let samplesToBegin: Int
+    private let samplesToEnd: Int
+    private var activeSession: DetectedNoteTakingSession?
+    private var candidateSession: DetectedNoteTakingSession?
+    private var candidateSampleCount = 0
+    private var missingSampleCount = 0
+
+    init(samplesToBegin: Int, samplesToEnd: Int) {
+        self.samplesToBegin = max(1, samplesToBegin)
+        self.samplesToEnd = max(1, samplesToEnd)
+    }
+
+    mutating func update(
+        with detectedSession: DetectedNoteTakingSession?
+    ) -> DetectedNoteTakingSession? {
+        guard let detectedSession else {
+            candidateSession = nil
+            candidateSampleCount = 0
+            guard activeSession != nil else { return nil }
+            missingSampleCount += 1
+            if missingSampleCount >= samplesToEnd {
+                activeSession = nil
+                missingSampleCount = 0
+            }
+            return activeSession
+        }
+
+        missingSampleCount = 0
+        guard detectedSession != activeSession else {
+            candidateSession = nil
+            candidateSampleCount = 0
+            return activeSession
+        }
+
+        if candidateSession == detectedSession {
+            candidateSampleCount += 1
+        } else {
+            candidateSession = detectedSession
+            candidateSampleCount = 1
+        }
+        guard candidateSampleCount >= samplesToBegin else {
+            return activeSession
+        }
+
+        activeSession = detectedSession
+        candidateSession = nil
+        candidateSampleCount = 0
+        return activeSession
+    }
+
+    mutating func reset() {
+        activeSession = nil
+        candidateSession = nil
+        candidateSampleCount = 0
+        missingSampleCount = 0
     }
 }
 
@@ -220,6 +280,11 @@ enum NoteTakingSessionClassifier {
             bundleIdentifierPrefixes: ["company.thebrowser.browser"]
         ),
         ApplicationFamily(
+            id: "dia",
+            name: "Dia",
+            bundleIdentifierPrefixes: ["company.thebrowser.dia"]
+        ),
+        ApplicationFamily(
             id: "edge",
             name: "Microsoft Edge",
             bundleIdentifierPrefixes: ["com.microsoft.edgemac"]
@@ -322,7 +387,7 @@ enum NoteTakingSessionClassifier {
     private static func detectMeeting(
         in processes: [AudioProcessActivity]
     ) -> DetectedNoteTakingSession? {
-        for process in processes where process.isUsingMicrophone {
+        for process in processes where process.isUsingMicrophone || process.isUsingCamera {
             let bundleIdentifier = process.bundleIdentifier.lowercased()
 
             if let application = dedicatedMeetingApplications.first(where: {
@@ -335,6 +400,38 @@ enum NoteTakingSessionClassifier {
                 )
             }
 
+            guard let browser = browserApplications.first(where: {
+                matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
+            }) else {
+                continue
+            }
+            if process.isUsingCamera, !process.isUsingMicrophone {
+                guard process.isApplicationFrontmost,
+                      let activeWindowTitle = process.activeWindowTitle,
+                      hasMeetingWindow([activeWindowTitle])
+                else {
+                    continue
+                }
+            }
+            if process.isApplicationFrontmost,
+               let activeWindowTitle = process.activeWindowTitle,
+               hasMediaWindow([activeWindowTitle]),
+               !hasMeetingWindow([activeWindowTitle])
+            {
+                continue
+            }
+            return DetectedNoteTakingSession(
+                sourceID: browser.id,
+                applicationName: browser.name,
+                kind: .meeting,
+                activityIdentifier: process.activeWindowTitle.flatMap { title in
+                    hasMeetingWindow([title]) ? activityIdentifier(for: title) : nil
+                }
+            )
+        }
+
+        for process in processes where process.isPlayingAudio {
+            let bundleIdentifier = process.bundleIdentifier.lowercased()
             guard let browser = browserApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }), process.isApplicationFrontmost,
@@ -396,13 +493,16 @@ enum NoteTakingSessionClassifier {
             }) {
                 // Core Audio cannot identify which browser window produced audio.
                 // Use the active window only as session context, never as audio attribution.
-                guard process.isApplicationFrontmost,
-                      let activeWindowTitle = process.activeWindowTitle,
-                      !hasMeetingWindow([activeWindowTitle]),
-                      !process.isUsingMicrophone
-                        || hasMediaWindow([activeWindowTitle])
-                else {
-                    continue
+                let activeWindowTitle = process.isApplicationFrontmost
+                    ? process.activeWindowTitle
+                    : nil
+                if let activeWindowTitle {
+                    guard !hasMeetingWindow([activeWindowTitle]),
+                          !process.isUsingMicrophone
+                            || hasMediaWindow([activeWindowTitle])
+                    else {
+                        continue
+                    }
                 }
                 return DetectedNoteTakingSession(
                     sourceID: browser.id,
@@ -505,7 +605,6 @@ private struct CoreAudioProcessActivityReader {
         let windows = AudioWindowReader.snapshots()
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
-
         let audioProcesses = (try? AudioHardwareSystem.shared.processes) ?? []
         var activities: [AudioProcessActivity] = audioProcesses.compactMap {
             audioProcess -> AudioProcessActivity? in
@@ -549,6 +648,7 @@ private struct CoreAudioProcessActivityReader {
                 activeWindowTitle: isApplicationFrontmost ? relatedTitles.first : nil,
                 isApplicationFrontmost: isApplicationFrontmost,
                 isUsingMicrophone: isUsingMicrophone,
+                isUsingCamera: false,
                 isPlayingAudio: isPlayingAudio
             )
         }
@@ -588,7 +688,8 @@ private struct CoreAudioProcessActivityReader {
                 windowTitles: relatedTitles,
                 activeWindowTitle: relatedTitles.first,
                 isApplicationFrontmost: true,
-                isUsingMicrophone: true,
+                isUsingMicrophone: systemConferenceMicrophoneIsActive,
+                isUsingCamera: false,
                 isPlayingAudio: false
             )
         )
@@ -661,18 +762,20 @@ private struct CoreAudioProcessActivityReader {
 final class NoteTakingDetectionController {
     static let shared = NoteTakingDetectionController()
 
-    private static let pollInterval = Duration.seconds(2)
+    private static let pollInterval = Duration.seconds(1)
     private static let presentationDuration = Duration.seconds(10)
-    private static let missingSamplesToEndSession = 1
 
     private let prompt = NoteTakingPromptPanelController()
     private weak var coordinator: AppCoordinator?
     private var monitoringTask: Task<Void, Never>?
     private var autoDismissTask: Task<Void, Never>?
+    private var stabilizer = NoteTakingSessionStabilizer(
+        samplesToBegin: 2,
+        samplesToEnd: 3
+    )
     private var currentSession: DetectedNoteTakingSession?
     private var presentedSessionID: String?
     private var dismissedSessionID: String?
-    private var missingSampleCount = 0
 
     private init() {}
 
@@ -712,18 +815,15 @@ final class NoteTakingDetectionController {
     }
 
     private func refresh(processes: [AudioProcessActivity]) {
-        guard let detectedSession = NoteTakingSessionClassifier.detect(
-            in: processes
-        ) else {
-            missingSampleCount += 1
-            if missingSampleCount >= Self.missingSamplesToEndSession {
+        let classifiedSession = NoteTakingSessionClassifier.detect(in: processes)
+        guard let detectedSession = stabilizer.update(with: classifiedSession) else {
+            if currentSession != nil {
                 resetSession()
                 prompt.hide()
             }
             return
         }
 
-        missingSampleCount = 0
         if currentSession?.id != detectedSession.id {
             autoDismissTask?.cancel()
             currentSession = detectedSession
@@ -795,10 +895,10 @@ final class NoteTakingDetectionController {
     private func resetSession() {
         autoDismissTask?.cancel()
         autoDismissTask = nil
+        stabilizer.reset()
         currentSession = nil
         presentedSessionID = nil
         dismissedSessionID = nil
-        missingSampleCount = 0
     }
 }
 
@@ -810,7 +910,7 @@ private final class NoteTakingPromptPanelController {
 
     init() {
         panel = NoteTakingPromptPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 504, height: 96),
+            contentRect: NSRect(x: 0, y: 0, width: 452, height: 88),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -906,7 +1006,7 @@ private final class NoteTakingPromptPanelController {
         let panelSize = panel.frame.size
         return NSRect(
             x: visibleFrame.midX - (panelSize.width / 2),
-            y: visibleFrame.minY + 28,
+            y: visibleFrame.minY + 20,
             width: panelSize.width,
             height: panelSize.height
         )
@@ -920,6 +1020,7 @@ private final class NoteTakingPromptPanel: NSPanel {
 
 private struct NoteTakingPromptView: View {
     @Environment(BurritoStyleStore.self) private var styleStore
+    @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
     @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
         BurritoAppearance.system.rawValue
 
@@ -933,30 +1034,27 @@ private struct NoteTakingPromptView: View {
 
     private var title: String {
         switch session.kind {
-        case .meeting: "Meeting detected"
-        case .listenAlong: "Audio detected"
+        case .meeting: "Take notes for this meeting?"
+        case .listenAlong: "Take notes while you listen?"
         }
     }
 
     private var subtitle: String {
         switch session.kind {
-        case .meeting: "Live in \(session.applicationName)"
-        case .listenAlong: "Playing in \(session.applicationName)"
+        case .meeting: "Microphone or call audio is active in \(session.applicationName)"
+        case .listenAlong: "Media is playing in \(session.applicationName)"
         }
     }
 
     private var symbol: String {
         switch session.kind {
-        case .meeting: "video.fill"
-        case .listenAlong: "play.rectangle.fill"
+        case .meeting: "person.wave.2.fill"
+        case .listenAlong: "waveform"
         }
     }
 
     private var actionTitle: String {
-        switch session.kind {
-        case .meeting: "Start meeting note"
-        case .listenAlong: "Start taking notes"
-        }
+        "Start"
     }
 
     private var actionHint: String {
@@ -967,74 +1065,66 @@ private struct NoteTakingPromptView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(BurritoTheme.accent)
-                .frame(width: 34, height: 34)
-                .background(
-                    BurritoTheme.accentSoft,
-                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                )
+        ZStack {
+            let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+            if reducesTransparency {
+                shape.fill(BurritoTheme.raised)
+            } else {
+                shape.fill(.regularMaterial)
+            }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.burritoUI(size: 14, weight: 620, relativeTo: .headline))
-                    .foregroundStyle(BurritoTheme.foreground)
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(BurritoTheme.sage)
-                        .frame(width: 6, height: 6)
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(BurritoTheme.accent)
+                    .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.burritoUI(size: 13, weight: 620, relativeTo: .headline))
+                        .foregroundStyle(BurritoTheme.foreground)
                     Text(subtitle)
                         .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            }
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 8)
 
-            Button(action: start) {
-                HStack(spacing: 7) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(actionTitle)
+                Button(action: start) {
+                    Label(actionTitle, systemImage: "record.circle")
                         .font(.burritoUI(size: 12, weight: 620, relativeTo: .callout))
+                        .padding(.horizontal, 2)
                 }
-                .foregroundStyle(BurritoTheme.accentForeground)
-                .padding(.horizontal, 14)
-                .frame(height: 38)
-                .background(
-                    BurritoTheme.accent,
-                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                )
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.defaultAction)
-            .accessibilityHint(actionHint)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 8))
+                .controlSize(.large)
+                .tint(BurritoTheme.accent)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityHint(actionHint)
 
-            Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                Button(action: dismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                .help("Not now")
+                .accessibilityLabel("Dismiss note-taking prompt")
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
-            .help("Not now")
-            .accessibilityLabel("Dismiss note-taking prompt")
+            .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 14)
-        .frame(width: 488, height: 80)
-        .background(
-            BurritoTheme.raised,
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
+        .frame(width: 436, height: 72)
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(BurritoTheme.softBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.primary.opacity(0.10), lineWidth: 0.5)
         }
-        .burritoElevation(.floating)
+        .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
         .padding(8)
         .preferredColorScheme(appearance.colorScheme)
         .font(.burritoUI(size: 13, weight: .regular))
