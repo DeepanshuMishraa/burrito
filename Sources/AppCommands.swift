@@ -10,12 +10,6 @@ extension Notification.Name {
     static let burritoOpenSettings = Notification.Name("burrito.open-settings")
     static let burritoStopRecording = Notification.Name("burrito.stop-recording")
     static let burritoKeepRecording = Notification.Name("burrito.keep-recording")
-    static let burritoStartDetectedMeeting = Notification.Name(
-        "burrito.start-detected-meeting"
-    )
-    static let burritoStartDetectedListenAlong = Notification.Name(
-        "burrito.start-detected-listen-along"
-    )
 }
 
 struct BurritoCommands: Commands {

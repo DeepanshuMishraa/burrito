@@ -75,6 +75,25 @@ struct MeetingDetectionTests {
         #expect(detected == nil)
     }
 
+    @Test("A separate meeting window does not suppress browser media playback")
+    func allowsMediaAlongsideMeetingWindow() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.google.Chrome.helper",
+                applicationName: "Google Chrome Helper",
+                windowTitles: [
+                    "Weekly review — Google Meet",
+                    "Swift concurrency tutorial — YouTube",
+                ],
+                foregroundWindowTitle: "Swift concurrency tutorial — YouTube",
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected?.kind == .listenAlong)
+        #expect(detected?.applicationName == "Google Chrome")
+    }
+
     @Test("Detects browser media playback for Listen Along")
     func detectsBrowserMediaPlayback() {
         let detected = NoteTakingSessionClassifier.detect(in: [
@@ -150,6 +169,7 @@ struct MeetingDetectionTests {
         bundleIdentifier: String,
         applicationName: String,
         windowTitles: [String] = [],
+        foregroundWindowTitle: String? = nil,
         isUsingMicrophone: Bool = false,
         isPlayingAudio: Bool = false
     ) -> AudioProcessActivity {
@@ -157,8 +177,32 @@ struct MeetingDetectionTests {
             bundleIdentifier: bundleIdentifier,
             applicationName: applicationName,
             windowTitles: windowTitles,
+            foregroundWindowTitle: foregroundWindowTitle ?? windowTitles.first,
             isUsingMicrophone: isUsingMicrophone,
             isPlayingAudio: isPlayingAudio
         )
+    }
+}
+
+@Suite("Detected recording routing")
+@MainActor
+struct DetectedRecordingRequestHandlerTests {
+    @Test("Routes recording requests without a window subscriber")
+    func routesRecordingRequest() {
+        let handler = DetectedRecordingRequestHandler()
+        var receivedModes: [RecordingMode] = []
+        handler.configure { receivedModes.append($0) }
+
+        let accepted = handler.startRecording(mode: .listenAlong)
+
+        #expect(accepted)
+        #expect(receivedModes == [.listenAlong])
+    }
+
+    @Test("Keeps the prompt actionable until a recording handler exists")
+    func rejectsUnconfiguredRequest() {
+        let handler = DetectedRecordingRequestHandler()
+
+        #expect(!handler.startRecording(mode: .meeting))
     }
 }

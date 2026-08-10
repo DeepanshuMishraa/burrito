@@ -29,16 +29,30 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct burritoApp: App {
     @NSApplicationDelegateAdaptor(BurritoAppDelegate.self) private var appDelegate
-    @State private var coordinator = AppCoordinator.live()
+    @State private var coordinator: AppCoordinator
     @State private var calendarAccess = CalendarAccess()
 
-    private let container: ModelContainer = {
+    private let container: ModelContainer
+
+    @MainActor
+    init() {
+        let coordinator = AppCoordinator.live()
+        let container: ModelContainer
         do {
-            return try ModelContainer(for: Note.self, Folder.self, NoteTemplate.self)
+            container = try ModelContainer(for: Note.self, Folder.self, NoteTemplate.self)
         } catch {
             fatalError("Burrito could not create its local data store: \(error.localizedDescription)")
         }
-    }()
+        _coordinator = State(initialValue: coordinator)
+        self.container = container
+        DetectedRecordingRequestHandler.shared.configure { mode in
+            DetectedRecordingLauncher.start(
+                mode: mode,
+                coordinator: coordinator,
+                context: container.mainContext
+            )
+        }
+    }
 
     var body: some Scene {
         WindowGroup("Burrito", id: "main") {

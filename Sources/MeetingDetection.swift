@@ -1,12 +1,14 @@
 import AppKit
 import CoreAudio
 import QuartzCore
+import SwiftData
 import SwiftUI
 
 struct AudioProcessActivity: Equatable, Sendable {
     let bundleIdentifier: String
     let applicationName: String
     let windowTitles: [String]
+    let foregroundWindowTitle: String?
     let isUsingMicrophone: Bool
     let isPlayingAudio: Bool
 }
@@ -22,6 +24,69 @@ struct DetectedNoteTakingSession: Equatable, Identifiable, Sendable {
     let kind: DetectedNoteTakingKind
 
     var id: String { "\(kind.rawValue):\(sourceID)" }
+}
+
+@MainActor
+final class DetectedRecordingRequestHandler {
+    static let shared = DetectedRecordingRequestHandler()
+
+    private var handler: ((RecordingMode) -> Void)?
+
+    func configure(_ handler: @escaping (RecordingMode) -> Void) {
+        self.handler = handler
+    }
+
+    @discardableResult
+    func startRecording(mode: RecordingMode) -> Bool {
+        guard let handler else { return false }
+        handler(mode)
+        return true
+    }
+}
+
+@MainActor
+enum DetectedRecordingLauncher {
+    static func start(
+        mode: RecordingMode,
+        coordinator: AppCoordinator,
+        context: ModelContext,
+        defaults: UserDefaults = .standard
+    ) {
+        guard coordinator.captureState == .idle else { return }
+
+        let defaultTemplateID = defaults.string(forKey: "defaultTemplateID")
+            ?? BuiltInTemplate.summary.rawValue
+        let builtIn = mode == .meeting
+            ? BuiltInTemplate.meeting
+            : BuiltInTemplate(rawValue: defaultTemplateID) ?? .summary
+        let templates = (try? context.fetch(FetchDescriptor<NoteTemplate>())) ?? []
+        let template = templates.first(where: {
+            $0.builtInID == builtIn.rawValue
+        })?.snapshot ?? TemplateSnapshot(
+            name: builtIn.name,
+            symbol: builtIn.symbol,
+            instructions: builtIn.instructions
+        )
+        let languageIdentifier = defaults.string(forKey: "transcriptionLanguage")
+            ?? "en-US"
+        let retainsAudio = defaults.bool(forKey: "retainAudioDefault")
+
+        Task {
+            await coordinator.start(
+                options: RecordingOptions(
+                    template: template,
+                    languageIdentifier: languageIdentifier,
+                    mode: mode,
+                    retainsAudio: retainsAudio
+                ),
+                destination: .newNote,
+                context: context
+            )
+            if let activeNoteID = coordinator.activeNoteID {
+                NoteSelectionInbox.shared.submit(activeNoteID)
+            }
+        }
+    }
 }
 
 enum NoteTakingSessionClassifier {
@@ -221,7 +286,10 @@ enum NoteTakingSessionClassifier {
             if let browser = browserApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }) {
-                guard !hasMeetingWindow(process.windowTitles) else { continue }
+                let foregroundIsMeeting = process.foregroundWindowTitle.map {
+                    hasMeetingWindow([$0])
+                } ?? false
+                guard !foregroundIsMeeting else { continue }
                 return DetectedNoteTakingSession(
                     sourceID: browser.id,
                     applicationName: browser.name,
@@ -335,6 +403,7 @@ private struct CoreAudioProcessActivityReader {
                 bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 windowTitles: relatedTitles,
+                foregroundWindowTitle: relatedTitles.first,
                 isUsingMicrophone: isUsingMicrophone,
                 isPlayingAudio: isPlayingAudio
             )
@@ -517,14 +586,16 @@ final class NoteTakingDetectionController {
 
     private func startNoteTaking() {
         guard let kind = currentSession?.kind else { return }
-        dismissCurrentSession()
-        let notificationName: Notification.Name = switch kind {
+        let mode: RecordingMode = switch kind {
         case .meeting:
-            .burritoStartDetectedMeeting
+            .meeting
         case .listenAlong:
-            .burritoStartDetectedListenAlong
+            .listenAlong
         }
-        NotificationCenter.default.post(name: notificationName, object: nil)
+        guard DetectedRecordingRequestHandler.shared.startRecording(mode: mode) else {
+            return
+        }
+        dismissCurrentSession()
     }
 
     private func dismissCurrentSession() {
