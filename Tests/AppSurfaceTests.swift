@@ -246,6 +246,20 @@ struct AppSurfaceTests {
         #expect(inbox.pendingNoteID == nil)
     }
 
+    @MainActor
+    @Test("Main-window routing opens and activates the app")
+    func mainWindowRoutingOpensAndActivates() {
+        var events: [String] = []
+        let router = MainWindowRouter(
+            activateAction: { events.append("activate") }
+        )
+        router.configure { events.append("open") }
+
+        router.open()
+
+        #expect(events == ["open", "activate"])
+    }
+
     @Test("Menu notes are grouped into today, yesterday, and earlier")
     func menuNotesUseRelativeDateSections() throws {
         var calendar = Calendar(identifier: .gregorian)

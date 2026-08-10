@@ -197,7 +197,10 @@ final class AppCoordinator {
     func recoverInterruptedNotes(context: ModelContext) {
         do {
             let notes = try context.fetch(FetchDescriptor<Note>())
-            for note in notes where note.lifecycle == .recording || note.lifecycle == .processing {
+            for note in notes
+            where (note.lifecycle == .recording || note.lifecycle == .processing)
+                && note.id != activeNoteID
+            {
                 note.lifecycle = .recoverable
                 note.processingStage = nil
                 note.lastErrorMessage = "Burrito closed before this recording finished. Existing audio is preserved; retry processing when ready."

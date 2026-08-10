@@ -36,6 +36,7 @@
 		876EBC0A154DE03197E09713 /* JetBrainsMono-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76702ED506D5D605AF155CC9 /* JetBrainsMono-Variable.ttf */; };
 		8BE602A56D651B0C195847C7 /* Inter-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A012C13A161767957F1B4B7A /* Inter-Variable.ttf */; };
 		8DD90EB3E57A4A884DDC5D19 /* IBMPlexSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8358A41F270D908BD0B6FA34 /* IBMPlexSans-Variable.ttf */; };
+		8F2484B692C6221A4CCF4792 /* MeetingDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1BD5D3190B117216873A29 /* MeetingDetectionTests.swift */; };
 		9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EC4CD89C9CC805FF666CE0 /* Ownership.swift */; };
 		93EF08AAF07D7A665D252B64 /* IBMPlexMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */; };
 		A1488781F5EBC3437B286749 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C785E411A246A02F5F4825A /* Models.swift */; };
@@ -43,6 +44,7 @@
 		B7D317F3B9435FF938795AEA /* BurritoThemeRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */; };
 		B8A7182040DBB156AABEE199 /* IBMPlexMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */; };
 		BCC7B0DCC941C3A72F79FA59 /* AI in Frameworks */ = {isa = PBXBuildFile; productRef = BF1585C55A8225C58A754212 /* AI */; };
+		BCDB3DA7C54E74EC48FAC9CB /* MeetingDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 041EC6D931A86B4E4ABF5A8C /* MeetingDetection.swift */; };
 		BD326EA7DA4E505AEBBA3735 /* PermissionAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */; };
 		BDC61112693353B564687C7D /* Scooter-loader.json in Resources */ = {isa = PBXBuildFile; fileRef = 7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */; };
 		C6EDDEC5266C8138C5F53C4C /* LocalLanguageModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */; };
@@ -79,6 +81,7 @@
 		00A639102CCFABB8A22A07D3 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
 		02E71FAA52FEB9F4BA5F2BCA /* LocalSpeakerDiarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeakerDiarizer.swift; sourceTree = "<group>"; };
 		0330074E0BDD3575BC85AB46 /* LiveSpeechTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSpeechTranscriber.swift; sourceTree = "<group>"; };
+		041EC6D931A86B4E4ABF5A8C /* MeetingDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetection.swift; sourceTree = "<group>"; };
 		0A2216874DB0B52B8350E522 /* DomainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainTests.swift; sourceTree = "<group>"; };
 		0AF8A8EDA61A6C29F78BDDC1 /* IBMPlexMono-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-SemiBold.ttf"; sourceTree = "<group>"; };
 		0BDE8F1CD8C4856AF049BD1D /* BurritoUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManager.swift; sourceTree = "<group>"; };
@@ -97,6 +100,7 @@
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
+		6F1BD5D3190B117216873A29 /* MeetingDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetectionTests.swift; sourceTree = "<group>"; };
 		7211E00C48D1C94EA50AEEF7 /* PermissionAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAccess.swift; sourceTree = "<group>"; };
 		728318FB3CB86222B61B8235 /* RecordingFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFileStore.swift; sourceTree = "<group>"; };
 		765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocumentTests.swift; sourceTree = "<group>"; };
@@ -162,6 +166,7 @@
 				80312D2153FF4924DF498F98 /* CoordinatorTests.swift */,
 				0A2216874DB0B52B8350E522 /* DomainTests.swift */,
 				765A76FFE073BF431D3C3B18 /* MarkdownDocumentTests.swift */,
+				6F1BD5D3190B117216873A29 /* MeetingDetectionTests.swift */,
 				0FF9B105635159132C223C46 /* PersistenceAndStorageTests.swift */,
 			);
 			path = Tests;
@@ -208,6 +213,7 @@
 				288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */,
 				BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */,
 				810EC966AC8C4B423D2B109B /* MediaAudioExtractor.swift */,
+				041EC6D931A86B4E4ABF5A8C /* MeetingDetection.swift */,
 				6C785E411A246A02F5F4825A /* Models.swift */,
 				38EC4CD89C9CC805FF666CE0 /* Ownership.swift */,
 				0E9C652232B959149F47D968 /* ParakeetTranscriber.swift */,
@@ -394,6 +400,7 @@
 				EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */,
 				D357BF2CB53C08D17B248CAF /* MarkdownDocument.swift in Sources */,
 				E96C64B1767649E0F2709D44 /* MediaAudioExtractor.swift in Sources */,
+				BCDB3DA7C54E74EC48FAC9CB /* MeetingDetection.swift in Sources */,
 				A1488781F5EBC3437B286749 /* Models.swift in Sources */,
 				9058BE6BC733FAE5E177B99A /* Ownership.swift in Sources */,
 				5815868E6549D6AA3FBA21D4 /* ParakeetTranscriber.swift in Sources */,
@@ -415,6 +422,7 @@
 				FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */,
 				0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */,
 				D712EE334DC9C9D6F1D94AA5 /* MarkdownDocumentTests.swift in Sources */,
+				8F2484B692C6221A4CCF4792 /* MeetingDetectionTests.swift in Sources */,
 				73029D5F013BA4858EE8784F /* PersistenceAndStorageTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

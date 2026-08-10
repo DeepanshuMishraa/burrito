@@ -5,6 +5,8 @@ import SwiftData
 @MainActor
 private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     private let updater = BurritoUpdateManager.shared
+    private let noteTakingDetection = NoteTakingDetectionController.shared
+    private let permissionAccess = PermissionAccess()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
@@ -17,22 +19,50 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         updater.start()
         Task { await updater.checkIfDue() }
+        permissionAccess.refresh()
+        noteTakingDetection.setEnabled(
+            NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: UserDefaults.standard.bool(
+                    forKey: "permissionOnboardingCompleted"
+                ),
+                permissionsGranted: permissionAccess.allGranted
+            )
+        )
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        noteTakingDetection.stop()
     }
 }
 
 @main
 struct burritoApp: App {
     @NSApplicationDelegateAdaptor(BurritoAppDelegate.self) private var appDelegate
-    @State private var coordinator = AppCoordinator.live()
+    @State private var coordinator: AppCoordinator
     @State private var calendarAccess = CalendarAccess()
 
-    private let container: ModelContainer = {
+    private let container: ModelContainer
+
+    @MainActor
+    init() {
+        let coordinator = AppCoordinator.live()
+        let container: ModelContainer
         do {
-            return try ModelContainer(for: Note.self, Folder.self, NoteTemplate.self)
+            container = try ModelContainer(for: Note.self, Folder.self, NoteTemplate.self)
         } catch {
             fatalError("Burrito could not create its local data store: \(error.localizedDescription)")
         }
-    }()
+        _coordinator = State(initialValue: coordinator)
+        self.container = container
+        NoteTakingDetectionController.shared.configure(coordinator: coordinator)
+        DetectedRecordingRequestHandler.shared.configure { mode in
+            await DetectedRecordingLauncher.start(
+                mode: mode,
+                coordinator: coordinator,
+                context: container.mainContext
+            )
+        }
+    }
 
     var body: some Scene {
         WindowGroup("Burrito", id: "main") {
@@ -412,8 +442,9 @@ private struct BurritoMenuBarMenu: View {
     }
 
     private func openMainWindow() {
-        openWindow(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
+        MainWindowRouter.shared.open(using: {
+            openWindow(id: "main")
+        })
     }
 }
 

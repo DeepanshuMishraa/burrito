@@ -41,6 +41,34 @@ final class NoteSelectionInbox {
     }
 }
 
+@MainActor
+final class MainWindowRouter {
+    static let shared = MainWindowRouter()
+
+    private var openAction: (() -> Void)?
+    private let activateAction: () -> Void
+
+    init(activateAction: @escaping () -> Void = {
+        NSApp.activate(ignoringOtherApps: true)
+    }) {
+        self.activateAction = activateAction
+    }
+
+    func configure(_ openAction: @escaping () -> Void) {
+        self.openAction = openAction
+    }
+
+    func open() {
+        openAction?()
+        activateAction()
+    }
+
+    func open(using openAction: @escaping () -> Void) {
+        configure(openAction)
+        open()
+    }
+}
+
 private enum SidebarSelection: Hashable {
     case all
     case favorites
@@ -71,6 +99,7 @@ private struct MacUserProfile {
 }
 
 struct ContentView: View {
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
@@ -228,6 +257,12 @@ struct ContentView: View {
         .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
             styleStore.selectInterfaceFontSize(rawValue)
         }
+        .onChange(of: permissionOnboardingCompleted, initial: true) {
+            synchronizeNoteTakingDetection()
+        }
+        .onChange(of: permissions.allGranted, initial: true) {
+            synchronizeNoteTakingDetection()
+        }
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -343,6 +378,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            MainWindowRouter.shared.configure { openWindow(id: "main") }
             seedAndRecover()
             permissions.refresh()
             calendarAccess.refresh()
@@ -980,6 +1016,15 @@ struct ContentView: View {
         Task {
             await MeetingReminderScheduler.shared.synchronize(events: events)
         }
+    }
+
+    private func synchronizeNoteTakingDetection() {
+        NoteTakingDetectionController.shared.setEnabled(
+            NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: permissionOnboardingCompleted,
+                permissionsGranted: permissions.allGranted
+            )
+        )
     }
 
     private func handlePendingMeetingAction() {
