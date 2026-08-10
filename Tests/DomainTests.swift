@@ -576,6 +576,10 @@ struct LocalMemoryTests {
             hasDefaultMeetingScope: false,
             hasExplicitMeetingScope: false
         ))
+        #expect(MeetingQueryIntent.asksForLibraryOverview("Do you know about our meetings?"))
+        #expect(MeetingQueryIntent.asksForLibraryOverview("do you know about all our meetings ?"))
+        #expect(MeetingQueryIntent.asksForLibraryOverview("How many meetings do I have?"))
+        #expect(!MeetingQueryIntent.asksForLibraryOverview("What was decided in the launch meeting?"))
     }
 
     @Test("General chat streams while tool-capable answers remain buffered")
@@ -621,15 +625,13 @@ struct LocalMemoryTests {
         ))
     }
 
-    @Test("Grounded retry never streams the false refusal")
-    func suppressesFalseRefusalBeforeRetry() async throws {
+    @Test("Required meeting answers use the grounded memory prompt")
+    func requiredMeetingAnswersUseGroundedPrompt() async throws {
         let noteID = UUID()
         let segmentID = UUID()
         let citation = "burrito://memory/\(noteID.uuidString)/\(segmentID.uuidString)"
-        let refusal = "I don't have access to your meeting transcripts."
         let corrected = "The launch is October 12. [source](\(citation))"
         let model = MockLanguageModel(responses: [
-            [.textDelta(refusal), .finish(reason: .stop, usage: Usage())],
             [.textDelta(corrected), .finish(reason: .stop, usage: Usage())],
         ])
         let adapter = FoundationModelAdapter(
@@ -667,6 +669,9 @@ struct LocalMemoryTests {
 
         #expect(updates == [response.text])
         #expect(response.text.contains(corrected))
+        let request = try #require(model.requests.first)
+        #expect(request.tools.isEmpty)
+        #expect(request.messages.map(\.text).contains(MemoryPrompt.instructions))
     }
 
     @Test("Meeting validation emits only the safe fallback")
@@ -706,7 +711,7 @@ struct LocalMemoryTests {
         let response = try result.get()
         let updates = await recorder.updates
 
-        #expect(response.text.contains("couldn’t safely connect"))
+        #expect(response.text.contains("couldn't safely connect"))
         #expect(updates == [response.text])
     }
 
@@ -940,6 +945,30 @@ struct LocalMemoryTests {
 
         #expect(evidence.map(\.noteID) == [document.noteID])
         #expect(evidence.first?.segment.text == "Priya will send the revised launch plan on Friday.")
+    }
+
+    @Test("Scoped meeting fallback skips punctuation-only transcript fragments")
+    func scopedMeetingFallbackSkipsNoise() {
+        let useful = TranscriptSegment(
+            source: .system,
+            startTime: 4,
+            duration: 2,
+            text: "Priya will send the revised launch plan on Friday."
+        )
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Weekly product review",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(source: .system, startTime: 1, duration: 1, text: "."),
+                TranscriptSegment(source: .system, startTime: 2, duration: 1, text: " "),
+                useful,
+            ]
+        )
+
+        let evidence = LocalMemory.retrieve(question: "What happened?", scopedTo: document)
+
+        #expect(evidence.map(\.segment.id) == [useful.id])
     }
 
     @Test("Meeting mention parsing recognizes and removes the active query")
@@ -1179,6 +1208,168 @@ struct LocalMemoryTests {
                 + "\n\n**Meeting sources:** [Launch planning](\(citation))"
         )
         #expect(!answer.contains("Unverified AI answer"))
+    }
+
+    @Test("Recovered meeting answers keep sources in the footer")
+    func movesInlineSourcesToFooter() throws {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let citation = evidence.citationURL?.absoluteString ?? ""
+        let answer = try #require(
+            MemoryAnswer.recoveredToolAnswer(
+                "The launch date is October 12. [source](\(citation))",
+                against: [evidence]
+            )
+        )
+
+        #expect(!answer.contains("[source](burrito://memory/"))
+        #expect(answer.contains("**Meeting sources:** [Launch planning](\(citation))"))
+    }
+
+    @Test("Recovered tool answers reject raw evidence dumps")
+    func rejectsRawEvidenceDumpAnswers() {
+        let evidence = MemoryEvidence(
+            noteID: UUID(),
+            noteTitle: "Launch planning",
+            noteUpdatedAt: .now,
+            segment: TranscriptSegment(
+                id: UUID(),
+                source: .system,
+                startTime: 12,
+                duration: 3,
+                text: "The launch date is October 12."
+            )
+        )
+        let dump = """
+            Meeting Details:
+            - Time: 0:12
+            - Passage: System: The launch date is October 12.
+            - Passage: System: .
+            """
+
+        #expect(MemoryAnswer.recoveredToolAnswer(dump, against: [evidence]) == nil)
+    }
+
+    @Test("Supermemory documents preserve stable transcript source markers")
+    func rendersSupermemoryDocumentWithSources() throws {
+        let segmentID = try #require(
+            UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")
+        )
+        let document = MemoryDocument(
+            noteID: UUID(),
+            title: "Launch planning",
+            updatedAt: Date(timeIntervalSince1970: 100),
+            segments: [
+                TranscriptSegment(
+                    id: segmentID,
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The release date is October 12.",
+                    speakerName: "Priya"
+                ),
+            ]
+        )
+
+        let rendered = SupermemoryDocumentRenderer.render(document)
+
+        #expect(rendered.contains("# Launch planning"))
+        #expect(rendered.contains("[source:\(segmentID.uuidString)]"))
+        #expect(rendered.contains("Priya: The release date is October 12."))
+    }
+
+    @Test("Supermemory results resolve back to exact local transcript passages")
+    func mapsSupermemoryHitsToLocalEvidence() throws {
+        let noteID = try #require(
+            UUID(uuidString: "B445F1FC-D124-4CD4-A157-D25201200659")
+        )
+        let selectedID = try #require(
+            UUID(uuidString: "A27D24D0-9977-4C5C-92B4-581DB235D736")
+        )
+        let ignoredID = UUID()
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Launch planning",
+            updatedAt: .now,
+            segments: [
+                TranscriptSegment(
+                    id: ignoredID,
+                    source: .system,
+                    startTime: 2,
+                    duration: 2,
+                    text: "We reviewed the current design."
+                ),
+                TranscriptSegment(
+                    id: selectedID,
+                    source: .system,
+                    startTime: 12,
+                    duration: 3,
+                    text: "The release date is October 12."
+                ),
+            ]
+        )
+        let manifest = SupermemoryManifest(entries: [
+            noteID: SupermemoryManifest.Entry(documentID: "doc_launch", digest: "digest"),
+        ])
+
+        let evidence = SupermemoryEvidenceMapper.map(
+            hits: [
+                SupermemorySearchHit(
+                    text: "[source:\(selectedID.uuidString)] The release date is October 12.",
+                    documentID: "doc_launch"
+                ),
+            ],
+            documents: [document],
+            manifest: manifest,
+            limit: 6
+        )
+
+        #expect(evidence.map(\.segment.id) == [selectedID])
+        #expect(evidence.first?.citationURL?.absoluteString.contains(noteID.uuidString) == true)
+    }
+
+    @Test("Supermemory chunk fallback remains grounded in a local segment")
+    func mapsMarkerlessSupermemoryChunkByDocument() {
+        let noteID = UUID()
+        let segment = TranscriptSegment(
+            source: .system,
+            startTime: 12,
+            duration: 3,
+            text: "Priya committed to send the release candidate on Friday."
+        )
+        let document = MemoryDocument(
+            noteID: noteID,
+            title: "Release review",
+            updatedAt: .now,
+            segments: [segment]
+        )
+        let manifest = SupermemoryManifest(entries: [
+            noteID: SupermemoryManifest.Entry(documentID: "doc_release", digest: "digest"),
+        ])
+
+        let evidence = SupermemoryEvidenceMapper.map(
+            hits: [
+                SupermemorySearchHit(
+                    text: "Priya committed to send the release candidate on Friday.",
+                    documentID: "doc_release"
+                ),
+            ],
+            documents: [document],
+            manifest: manifest,
+            limit: 1
+        )
+
+        #expect(evidence.map(\.segment.id) == [segment.id])
     }
 }
 

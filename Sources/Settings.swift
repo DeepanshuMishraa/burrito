@@ -62,6 +62,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 struct BurritoSettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var calendarAccess: CalendarAccess
+    let memoryDocuments: [MemoryDocument]
     let exportLibrary: () -> Void
     let importLibrary: () -> Void
     let ownershipStatus: OwnershipOperationStatus?
@@ -134,6 +135,7 @@ struct BurritoSettingsView: View {
                 SettingsPane(
                     tab: selected,
                     calendarAccess: calendarAccess,
+                    memoryDocuments: memoryDocuments,
                     exportLibrary: exportLibrary,
                     importLibrary: importLibrary,
                     ownershipStatus: ownershipStatus
@@ -154,6 +156,7 @@ struct BurritoSettingsView: View {
 private struct SettingsPane: View {
     let tab: SettingsTab
     @Bindable var calendarAccess: CalendarAccess
+    let memoryDocuments: [MemoryDocument]
     let exportLibrary: () -> Void
     let importLibrary: () -> Void
     let ownershipStatus: OwnershipOperationStatus?
@@ -226,6 +229,12 @@ private struct SettingsPane: View {
                         .overlay {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
                         }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        BurritoSectionLabel(title: "SEMANTIC MEETING MEMORY")
+
+                        SupermemorySettingsCard(documents: memoryDocuments)
                     }
                 }
 
@@ -757,6 +766,338 @@ private struct ThemeSwatches: View {
         }
         .frame(width: 54)
         .accessibilityHidden(true)
+    }
+}
+
+private enum SupermemorySettingsStatus: Equatable {
+    case idle
+    case working(String)
+    case success(String)
+    case failure(String)
+
+    var message: String? {
+        switch self {
+        case .idle: nil
+        case .working(let message), .success(let message), .failure(let message): message
+        }
+    }
+
+    var isWorking: Bool {
+        if case .working = self { true } else { false }
+    }
+
+    var isFailure: Bool {
+        if case .failure = self { true } else { false }
+    }
+}
+
+private struct SupermemorySettingsCard: View {
+    let documents: [MemoryDocument]
+
+    @State private var apiKey = ""
+    @State private var isConnected = false
+    @State private var status = SupermemorySettingsStatus.idle
+    @State private var indexProgress: [UUID: SupermemoryIndexProgress] = [:]
+    @State private var confirmsCloudDeletion = false
+    @State private var showingDownloadedModelMessage = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Supermemory cloud search")
+                        .font(.burritoUI(size: 14, weight: 450))
+                    Text(
+                        "Find related meeting passages by meaning, phrasing, people, and context—not only exact keywords."
+                    )
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                if isConnected {
+                    BurritoLabel("Connected", systemImage: "checkmark")
+                        .font(.burritoUI(size: 11, weight: 450))
+                        .foregroundStyle(BurritoTheme.accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                BurritoLabel("Cloud data notice", systemImage: "exclamationmark.triangle")
+                    .font(.burritoUI(size: 11, weight: 450))
+                    .foregroundStyle(.orange)
+                Text(
+                    "Connect only validates and securely stores your API key. Nothing is uploaded until you click Index meetings. After indexing starts, Burrito sends existing and future non-deleted meeting titles and transcripts to Supermemory for storage and semantic search. Supermemory processes that data under its own privacy policy and bills usage to your account. Local keyword search remains the fallback."
+                )
+                .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption2))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 12) {
+                    Link("Supermemory privacy", destination: URL(string: "https://supermemory.ai/privacy/") ?? URL(fileURLWithPath: "/"))
+                    Link("Create an API key", destination: URL(string: "https://console.supermemory.ai") ?? URL(fileURLWithPath: "/"))
+                }
+                .font(.burritoUI(size: 10, weight: 450))
+            }
+            .padding(11)
+            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.orange.opacity(0.24))
+            }
+
+            if !isConnected {
+                HStack(spacing: 10) {
+                    SecureField("sm_…", text: $apiKey)
+                        .textFieldStyle(.plain)
+                        .font(.burritoUI(size: 11, weight: 400).monospaced())
+                        .padding(.horizontal, 11)
+                        .frame(height: 34)
+                        .background(
+                            BurritoTheme.controlFill,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(BurritoTheme.softBorder)
+                        }
+                        .accessibilityLabel("Supermemory API key")
+
+                    Button("Connect") { connect() }
+                        .buttonStyle(SettingsActionButtonStyle())
+                        .disabled(
+                            apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                || status.isWorking
+                        )
+                }
+                Text("The API key is stored in macOS Keychain, not in the Burrito library.")
+                    .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption2))
+                    .foregroundStyle(.tertiary)
+            } else {
+                HStack(spacing: 10) {
+                    Button("Index meetings") { indexMeetings() }
+                        .buttonStyle(SettingsActionButtonStyle())
+                        .disabled(documents.isEmpty || status.isWorking)
+
+                    Button("Disconnect") { disconnect(deleteRemoteData: false) }
+                        .buttonStyle(SettingsActionButtonStyle())
+                        .disabled(status.isWorking)
+
+                    Button("Delete cloud copies…", role: .destructive) {
+                        confirmsCloudDeletion = true
+                    }
+                    .buttonStyle(SettingsActionButtonStyle())
+                    .foregroundStyle(.red)
+                    .disabled(status.isWorking)
+                }
+                Text(
+                    "Disconnecting removes the key from this Mac but leaves uploaded meetings in Supermemory. Choose Delete cloud copies to remove Burrito’s indexed documents first."
+                )
+                .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption2))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let message = status.message {
+                HStack(spacing: 7) {
+                    if status.isWorking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        BurritoIcon(
+                            name: status.isFailure ? "exclamationmark.triangle" : "checkmark.circle",
+                            size: 11
+                        )
+                    }
+                    Text(message)
+                }
+                .font(.burritoUI(size: 10, weight: 400))
+                .foregroundStyle(status.isFailure ? Color.red : Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !indexProgress.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(indexProgressRows, id: \.noteID) { progress in
+                        HStack(spacing: 8) {
+                            BurritoIcon(name: progress.state.systemImage, size: 10)
+                                .foregroundStyle(progress.state.tint)
+                                .frame(width: 12)
+                            Text(progress.title)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 8)
+                            Text(progress.state.label)
+                                .foregroundStyle(progress.state.tint)
+                        }
+                        .font(.burritoUI(size: 10, weight: 400))
+                    }
+                }
+                .padding(10)
+                .background(
+                    BurritoTheme.controlFill,
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+            }
+        }
+        .padding(16)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+        }
+        .task {
+            isConnected = await SupermemoryCloudMemory.shared.hasAPIKey()
+        }
+        .confirmationDialog(
+            "Delete Burrito meetings from Supermemory?",
+            isPresented: $confirmsCloudDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete cloud copies and disconnect", role: .destructive) {
+                disconnect(deleteRemoteData: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Burrito will request permanent deletion of every Supermemory document it uploaded. Local meetings will not be deleted."
+            )
+        }
+        .alert("Download a local model first", isPresented: $showingDownloadedModelMessage) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                "Apple Intelligence cannot call Supermemory tools on macOS 26. Open Models, download a Burrito local model, select it, and then connect Supermemory."
+            )
+        }
+    }
+
+    private func connect() {
+        guard SupermemoryConfiguration.supportsSelectedModel else {
+            showingDownloadedModelMessage = true
+            return
+        }
+        let submittedKey = apiKey
+        status = .working("Checking the API key…")
+        Task {
+            let result = await SupermemoryCloudMemory.shared.connect(apiKey: submittedKey)
+            switch result {
+            case .success:
+                isConnected = true
+                apiKey = ""
+                status = .success("Successfully connected. Click Index meetings when you’re ready to upload your meeting library.")
+            case .failure(let error):
+                status = .failure(error.recoveryMessage)
+            }
+        }
+    }
+
+    private func indexMeetings() {
+        indexProgress = Dictionary(
+            uniqueKeysWithValues: documents.map { document in
+                (
+                    document.noteID,
+                    SupermemoryIndexProgress(
+                        noteID: document.noteID,
+                        title: document.title,
+                        state: .queued,
+                        liveCount: 0,
+                        totalCount: documents.count
+                    )
+                )
+            }
+        )
+        status = .working("Indexing \(documents.count) meetings…")
+        Task {
+            let report = await SupermemoryCloudMemory.shared.indexAll(documents) { progress in
+                await MainActor.run {
+                    indexProgress[progress.noteID] = progress
+                    status = .working(
+                        progress.state == .live
+                            ? "\(progress.title) is live on Supermemory. \(progress.liveCount) of \(progress.totalCount) live."
+                            : "Supermemory indexing: \(progress.liveCount) of \(progress.totalCount) live."
+                    )
+                }
+            }
+            if report.failedCount > 0 {
+                status = .failure(
+                    "\(report.liveCount) meeting(s) are live. \(report.failedCount) failed and \(report.pendingCount) are still processing."
+                )
+            } else if report.pendingCount > 0 {
+                status = .success(
+                    "\(report.liveCount) meeting(s) are live. \(report.pendingCount) are still processing in Supermemory."
+                )
+            } else if report.queuedCount == 0 {
+                status = .success("All \(report.liveCount) meeting(s) are live on Supermemory.")
+            } else {
+                status = .success("All \(report.liveCount) meeting(s) are live on Supermemory.")
+            }
+        }
+    }
+
+    private var indexProgressRows: [SupermemoryIndexProgress] {
+        let order = Dictionary(uniqueKeysWithValues: documents.enumerated().map {
+            ($0.element.noteID, $0.offset)
+        })
+        return indexProgress.values.sorted {
+            order[$0.noteID, default: Int.max] < order[$1.noteID, default: Int.max]
+        }
+    }
+
+    private func disconnect(deleteRemoteData: Bool) {
+        status = .working(
+            deleteRemoteData ? "Deleting Burrito meetings from Supermemory…" : "Disconnecting…"
+        )
+        Task {
+            let result = await SupermemoryCloudMemory.shared.disconnect(
+                deleteRemoteData: deleteRemoteData
+            )
+            switch result {
+            case .success:
+                isConnected = false
+                status = .success(
+                    deleteRemoteData
+                        ? "Cloud copies were deleted. Local meetings are unchanged."
+                        : "Disconnected. Uploaded meetings remain in Supermemory until you delete them there."
+                )
+            case .failure(let error):
+                status = .failure(error.recoveryMessage)
+            }
+        }
+    }
+}
+
+@MainActor
+private extension SupermemoryIndexState {
+    var label: String {
+        switch self {
+        case .uploading: "Uploading"
+        case .queued: "Queued"
+        case .processing: "Processing"
+        case .live: "Live"
+        case .failed: "Failed"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .uploading: "arrow.up"
+        case .queued: "clock"
+        case .processing: "arrow.triangle.2.circlepath"
+        case .live: "checkmark.circle"
+        case .failed: "exclamationmark.triangle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .uploading, .queued, .processing: Color.secondary
+        case .live: BurritoTheme.accent
+        case .failed: Color.red
+        }
     }
 }
 

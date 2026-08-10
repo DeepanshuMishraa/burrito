@@ -2,7 +2,7 @@
 
 **Private meeting capture and genuinely useful notes—entirely on your Mac.**
 
-Burrito records system audio with an optional microphone track, transcribes it locally, then turns the conversation into structured Markdown using Apple Intelligence. No accounts, meeting bots, cloud uploads, analytics, or third-party AI services.
+Burrito records system audio with an optional microphone track, transcribes it locally, then turns the conversation into structured Markdown using Apple Intelligence. No Burrito account, meeting bot, analytics, or cloud service is required. Users may optionally connect their own Supermemory account for cloud-hosted semantic transcript search.
 
 ## A calmer way to remember
 
@@ -17,11 +17,12 @@ Burrito records system audio with an optional microphone track, transcribes it l
 - Create custom note templates with your own instructions
 - Edit the transcript and notes in a focused, Granola-inspired workspace
 - Organize notes with folders, favorites, search, Trash, and Markdown export
+- Optionally use a personal Supermemory API key for semantic meeting search, with local keyword search as the fallback
 - Recover interrupted sessions without losing usable audio
 
 ## Local by design
 
-Recordings live in Burrito’s Application Support directory. Audio is removed after successful transcription by default, while failed or interrupted sessions retain recoverable files. Transcripts and notes remain editable and local.
+Recordings live in Burrito’s Application Support directory. Audio is removed after successful transcription by default, while failed or interrupted sessions retain recoverable files. Transcripts and notes remain editable and local unless the user connects Supermemory Cloud Search and separately clicks Index meetings; that optional action uploads non-deleted meeting titles and transcripts to the user’s Supermemory account. API keys are stored in macOS Keychain.
 
 ## Requirements
 

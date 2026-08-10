@@ -319,7 +319,7 @@ enum LocalMemory {
         let queryTerms = terms(in: question)
         let candidates = documents.flatMap { document in
             let titleMatches = queryTerms.intersection(terms(in: document.title)).count
-            return document.segments.map { segment in
+            return document.segments.filter(isInformative).map { segment in
                 let passageMatches = queryTerms.intersection(terms(in: segment.text)).count
                 return (
                     evidence: MemoryEvidence(
@@ -354,6 +354,7 @@ enum LocalMemory {
         let ranked = retrieve(question: question, from: [document], limit: limit)
         guard ranked.isEmpty else { return ranked }
         return document.segments
+            .filter(isInformative)
             .sorted { $0.startTime < $1.startTime }
             .prefix(limit)
             .map { segment in
@@ -364,6 +365,10 @@ enum LocalMemory {
                     segment: segment
                 )
             }
+    }
+
+    private static func isInformative(_ segment: TranscriptSegment) -> Bool {
+        segment.text.contains { $0.isLetter || $0.isNumber }
     }
 
     private static func terms(in text: String) -> Set<String> {

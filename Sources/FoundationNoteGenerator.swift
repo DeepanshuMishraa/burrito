@@ -171,9 +171,29 @@ struct BurritoChatResponse: Equatable, Sendable {
     let text: String
     let usedMeetingEvidence: Bool
     let searchedMeetings: Bool
+    let usedSupermemory: Bool
 }
 
 enum MeetingQueryIntent {
+    static func asksForLibraryOverview(_ question: String) -> Bool {
+        let normalized = question
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let overviewPhrases = [
+            "do you know about our meetings",
+            "do you know about all our meetings",
+            "what do you know about our meetings",
+            "what do you know about all our meetings",
+            "how many meetings",
+            "list all meetings",
+            "show all meetings",
+        ]
+        return overviewPhrases.contains(where: normalized.contains)
+    }
+
     static func requiresSearch(
         _ question: String,
         hasDefaultMeetingScope: Bool,
@@ -263,11 +283,13 @@ enum BurritoChatPrompt {
 actor MeetingEvidenceCollector {
     private var evidence: [MemoryEvidence] = []
     private var didSearch = false
+    private var didUseSupermemory = false
 
-    func record(_ newEvidence: [MemoryEvidence]) {
+    func record(_ result: MeetingRetrievalResult) {
         didSearch = true
+        didUseSupermemory = didUseSupermemory || result.usedSupermemory
         let existingIDs = Set(evidence.map(\.id))
-        evidence.append(contentsOf: newEvidence.filter { !existingIDs.contains($0.id) })
+        evidence.append(contentsOf: result.evidence.filter { !existingIDs.contains($0.id) })
     }
 
     func snapshot() -> [MemoryEvidence] {
@@ -276,6 +298,10 @@ actor MeetingEvidenceCollector {
 
     func searchWasPerformed() -> Bool {
         didSearch
+    }
+
+    func supermemoryWasUsed() -> Bool {
+        didUseSupermemory
     }
 }
 
@@ -310,33 +336,23 @@ enum MeetingSearchTool {
             argumentsType: Arguments.self
         ) { arguments in
             let query = arguments.query.trimmingCharacters(in: .whitespacesAndNewlines)
-            let evidence = retrieve(
+            let result = await MeetingMemoryRetriever.retrieve(
                 query: query,
                 documents: documents,
                 scopedDocument: scopedDocument
             )
-            await collector.record(evidence)
-            guard !evidence.isEmpty else {
+            await collector.record(result)
+            guard !result.evidence.isEmpty else {
                 return [
                     "matchCount": 0,
                     "evidence": "No relevant transcript passages were found.",
                 ]
             }
             return [
-                "matchCount": .number(Double(evidence.count)),
-                "evidence": .string(render(evidence)),
+                "matchCount": .number(Double(result.evidence.count)),
+                "evidence": .string(render(result.evidence)),
             ]
         }
-    }
-
-    static func retrieve(
-        query: String,
-        documents: [MemoryDocument],
-        scopedDocument: MemoryDocument?
-    ) -> [MemoryEvidence] {
-        scopedDocument.map {
-            LocalMemory.retrieve(question: query, scopedTo: $0, limit: 6)
-        } ?? LocalMemory.retrieve(question: query, from: documents, limit: 6)
     }
 
     static func render(_ evidence: [MemoryEvidence]) -> String {
@@ -621,8 +637,9 @@ enum MemoryAnswer {
         _ answer: String,
         against evidence: [MemoryEvidence]
     ) -> String? {
+        guard !looksLikeEvidenceDump(answer) else { return nil }
         if let validated = validated(answer, against: evidence) {
-            return validated
+            return answerWithMeetingSources(validated, evidence: evidence)
         }
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
@@ -634,13 +651,42 @@ enum MemoryAnswer {
         guard destinations.isEmpty, !evidence.isEmpty else {
             return nil
         }
-        let sources = evidence.prefix(3).compactMap { item -> String? in
+        guard !evidence.isEmpty else { return nil }
+        return answerWithMeetingSources(trimmed, evidence: evidence)
+    }
+
+    private static func answerWithMeetingSources(
+        _ answer: String,
+        evidence: [MemoryEvidence]
+    ) -> String {
+        let body = answer.replacingOccurrences(
+            of: #"\s*\[source\]\(burrito://memory/[^)]+\)"#,
+            with: "",
+            options: .regularExpression
+        )
+        var sourceIDs = Set<UUID>()
+        let sources = evidence.compactMap { item -> String? in
             guard let citation = item.citationURL?.absoluteString else { return nil }
+            guard sourceIDs.insert(item.noteID).inserted else { return nil }
             return "[\(item.noteTitle)](\(citation))"
-        }
-        guard !sources.isEmpty else { return nil }
-        return trimmed + "\n\n**Meeting sources:** "
+        }.prefix(3)
+        guard !sources.isEmpty else { return body }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n**Meeting sources:** "
             + sources.joined(separator: " · ")
+    }
+
+    private static func looksLikeEvidenceDump(_ answer: String) -> Bool {
+        let normalized = answer
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let passageCount = normalized.components(separatedBy: "passage:").count - 1
+        let systemPassageCount = normalized
+            .split(whereSeparator: \.isNewline)
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("passage: system:") }
+            .count
+        return normalized.contains("meeting details:")
+            || normalized.contains("local meeting evidence:")
+            || passageCount >= 2
+            || systemPassageCount >= 2
     }
 
     static func falselyClaimsNoMeetingAccess(_ answer: String) -> Bool {
@@ -694,6 +740,21 @@ actor BurritoChatAnswerer {
         }
 
         do {
+            if MeetingQueryIntent.asksForLibraryOverview(question) {
+                let count = documents.count
+                let overview = count == 0
+                    ? "I don’t have any recorded meeting transcripts yet."
+                    : "Yes. I have access to \(count) meeting transcript\(count == 1 ? "" : "s") in Burrito."
+                await onTextUpdate(overview)
+                return .success(
+                    BurritoChatResponse(
+                        text: overview,
+                        usedMeetingEvidence: false,
+                        searchedMeetings: false,
+                        usedSupermemory: false
+                    )
+                )
+            }
             let collector = MeetingEvidenceCollector()
             let tool = MeetingSearchTool.make(
                 documents: documents,
@@ -701,13 +762,22 @@ actor BurritoChatAnswerer {
                 collector: collector
             )
             let prefetchedEvidence: [MemoryEvidence]
-            if meetingSearchRequired {
-                prefetchedEvidence = MeetingSearchTool.retrieve(
+            let requiresMeetingEvidence = meetingSearchRequired
+                || (!adapter.supportsToolCalling
+                    && MeetingQueryIntent.requiresSearch(
+                        question,
+                        hasDefaultMeetingScope: scopedDocument != nil,
+                        hasExplicitMeetingScope: false
+                    ))
+            if requiresMeetingEvidence {
+                let retrieval = await MeetingMemoryRetriever.retrieve(
                     query: question,
                     documents: documents,
-                    scopedDocument: scopedDocument
+                    scopedDocument: scopedDocument,
+                    useSupermemory: adapter.supportsToolCalling
                 )
-                await collector.record(prefetchedEvidence)
+                prefetchedEvidence = retrieval.evidence
+                await collector.record(retrieval)
                 guard !prefetchedEvidence.isEmpty else {
                     let fallback = "I couldn’t find relevant transcript evidence for that "
                         + "meeting question."
@@ -716,10 +786,61 @@ actor BurritoChatAnswerer {
                         BurritoChatResponse(
                             text: fallback,
                             usedMeetingEvidence: false,
-                            searchedMeetings: true
+                            searchedMeetings: true,
+                            usedSupermemory: retrieval.usedSupermemory
                         )
                     )
                 }
+                let prepared = try await MemoryPrompt.boundedSource(
+                    question: question,
+                    evidence: prefetchedEvidence,
+                    tokenMeasurer: adapter
+                )
+                guard !prepared.evidence.isEmpty else {
+                    let fallback = "I found transcript passages, but they do not fit within "
+                        + "this model’s context window. Try a more specific question."
+                    await onTextUpdate(fallback)
+                    return .success(
+                        BurritoChatResponse(
+                            text: fallback,
+                            usedMeetingEvidence: false,
+                            searchedMeetings: true,
+                            usedSupermemory: retrieval.usedSupermemory
+                        )
+                    )
+                }
+                let directAnswer = try await adapter.completeStreaming(
+                    instructions: MemoryPrompt.instructions,
+                    prompt: prepared.prompt,
+                    maximumResponseTokens: 768,
+                    onTextUpdate: { _ in }
+                )
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let supported = MemoryAnswer.recoveredToolAnswer(
+                    directAnswer,
+                    against: prepared.evidence
+                ) else {
+                    let fallback = "I found relevant meeting passages, but couldn't safely connect "
+                        + "the answer to those sources. Try a more specific question."
+                    await onTextUpdate(fallback)
+                    return .success(
+                        BurritoChatResponse(
+                            text: fallback,
+                            usedMeetingEvidence: true,
+                            searchedMeetings: true,
+                            usedSupermemory: retrieval.usedSupermemory
+                        )
+                    )
+                }
+                await onTextUpdate(supported)
+                return .success(
+                    BurritoChatResponse(
+                        text: supported,
+                        usedMeetingEvidence: true,
+                        searchedMeetings: true,
+                        usedSupermemory: retrieval.usedSupermemory
+                    )
+                )
             } else {
                 prefetchedEvidence = []
             }
@@ -737,7 +858,7 @@ actor BurritoChatAnswerer {
                 ),
                 conversation: conversation,
                 question: question,
-                tools: streamsDirectly ? [] : [tool],
+                tools: streamsDirectly || !adapter.supportsToolCalling ? [] : [tool],
                 meetingEvidence: prefetchedEvidence.isEmpty
                     ? nil
                     : MeetingSearchTool.render(prefetchedEvidence),
@@ -752,6 +873,7 @@ actor BurritoChatAnswerer {
             }
             let evidence = await collector.snapshot()
             let searchedMeetings = await collector.searchWasPerformed()
+            let usedSupermemory = await collector.supermemoryWasUsed()
             guard !evidence.isEmpty else {
                 if !streamsDirectly {
                     await onTextUpdate(trimmed)
@@ -760,7 +882,8 @@ actor BurritoChatAnswerer {
                     BurritoChatResponse(
                         text: trimmed,
                         usedMeetingEvidence: false,
-                        searchedMeetings: searchedMeetings
+                        searchedMeetings: searchedMeetings,
+                        usedSupermemory: usedSupermemory
                     )
                 )
             }
@@ -778,7 +901,8 @@ actor BurritoChatAnswerer {
                         BurritoChatResponse(
                             text: fallback,
                             usedMeetingEvidence: false,
-                            searchedMeetings: true
+                            searchedMeetings: true,
+                            usedSupermemory: usedSupermemory
                         )
                     )
                 }
@@ -798,7 +922,8 @@ actor BurritoChatAnswerer {
                     BurritoChatResponse(
                         text: fallback,
                         usedMeetingEvidence: true,
-                        searchedMeetings: true
+                        searchedMeetings: true,
+                        usedSupermemory: usedSupermemory
                     )
                 )
             }
@@ -807,7 +932,8 @@ actor BurritoChatAnswerer {
                 BurritoChatResponse(
                     text: supported,
                     usedMeetingEvidence: true,
-                    searchedMeetings: true
+                    searchedMeetings: true,
+                    usedSupermemory: usedSupermemory
                 )
             )
         } catch {
@@ -902,6 +1028,7 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
     private let systemModel: SystemLanguageModel
     private let model: any AI.LanguageModel
     private let tokenMeasurer: (any PromptTokenMeasuring)?
+    let supportsToolCalling: Bool
 
     init() {
         let systemModel = SystemLanguageModel(
@@ -911,11 +1038,13 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         self.systemModel = systemModel
         model = FoundationModelsModel(systemModel: systemModel)
         tokenMeasurer = nil
+        supportsToolCalling = false
     }
 
     init(
         model: any AI.LanguageModel,
-        tokenMeasurer: (any PromptTokenMeasuring)? = nil
+        tokenMeasurer: (any PromptTokenMeasuring)? = nil,
+        supportsToolCalling: Bool = true
     ) {
         systemModel = SystemLanguageModel(
             useCase: .general,
@@ -923,6 +1052,7 @@ actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
         )
         self.model = model
         self.tokenMeasurer = tokenMeasurer
+        self.supportsToolCalling = supportsToolCalling
     }
 
     var contextSize: Int {
