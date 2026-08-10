@@ -403,6 +403,12 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .burritoKeepRecording)) { _ in
             coordinator.keepRecording()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoStartDetectedMeeting)) { _ in
+            startDetectedRecording(mode: .meeting)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .burritoStartDetectedListenAlong)) { _ in
+            startDetectedRecording(mode: .listenAlong)
+        }
     }
 
     private func finalTranscriptionEngine(for languageIdentifier: String) -> String {
@@ -969,6 +975,34 @@ struct ContentView: View {
                     retainsAudio: defaultRetainsAudio
                 ),
                 destination: .calendarEvent(event),
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
+        }
+    }
+
+    private func startDetectedRecording(mode: RecordingMode) {
+        guard coordinator.captureState == .idle else { return }
+        let builtIn = mode == .meeting
+            ? BuiltInTemplate.meeting
+            : BuiltInTemplate(rawValue: defaultTemplateID) ?? .summary
+        let template = templates.first(where: {
+            $0.builtInID == builtIn.rawValue
+        })?.snapshot ?? TemplateSnapshot(
+            name: builtIn.name,
+            symbol: builtIn.symbol,
+            instructions: builtIn.instructions
+        )
+
+        Task {
+            await coordinator.start(
+                options: RecordingOptions(
+                    template: template,
+                    languageIdentifier: defaultLanguage,
+                    mode: mode,
+                    retainsAudio: defaultRetainsAudio
+                ),
+                destination: .newNote,
                 context: modelContext
             )
             selectedNoteID = coordinator.activeNoteID

@@ -5,6 +5,7 @@ import SwiftData
 @MainActor
 private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     private let updater = BurritoUpdateManager.shared
+    private let noteTakingDetection = NoteTakingDetectionController.shared
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
@@ -17,6 +18,11 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         updater.start()
         Task { await updater.checkIfDue() }
+        noteTakingDetection.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        noteTakingDetection.stop()
     }
 }
 
