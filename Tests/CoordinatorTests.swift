@@ -1161,6 +1161,49 @@ struct CoordinatorTests {
         #expect(note.lastErrorMessage?.contains("preserved") == true)
     }
 
+    @Test("Reopening the window does not recover the active recording pipeline")
+    func activeRecordingPipelineIsNotRecovered() async throws {
+        let context = try makeContext()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+        await coordinator.start(options: options, context: context)
+        let noteID = try #require(coordinator.activeNoteID)
+        let note = try #require(
+            try context.fetch(FetchDescriptor<Note>()).first { $0.id == noteID }
+        )
+
+        coordinator.recoverInterruptedNotes(context: context)
+
+        #expect(note.lifecycle == .recording)
+        #expect(note.processingStage == nil)
+        #expect(note.lastErrorMessage == nil)
+
+        note.lifecycle = .processing
+        note.processingStage = .transcribing
+        try context.save()
+        coordinator.recoverInterruptedNotes(context: context)
+
+        #expect(note.lifecycle == .processing)
+        #expect(note.processingStage == .transcribing)
+        #expect(note.lastErrorMessage == nil)
+
+        await coordinator.stop(context: context)
+    }
+
     private func makeContext() throws -> ModelContext {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(

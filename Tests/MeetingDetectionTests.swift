@@ -160,7 +160,8 @@ struct MeetingDetectionTests {
             detected == DetectedNoteTakingSession(
                 sourceID: "chrome",
                 applicationName: "Google Chrome",
-                kind: .listenAlong
+                kind: .listenAlong,
+                activityIdentifier: "swift concurrency tutorial — youtube"
             )
         )
     }
@@ -180,7 +181,8 @@ struct MeetingDetectionTests {
             detected == DetectedNoteTakingSession(
                 sourceID: "helium",
                 applicationName: "Helium",
-                kind: .listenAlong
+                kind: .listenAlong,
+                activityIdentifier: "swift concurrency tutorial — youtube"
             )
         )
     }
@@ -201,9 +203,71 @@ struct MeetingDetectionTests {
             detected == DetectedNoteTakingSession(
                 sourceID: "helium",
                 applicationName: "Helium",
-                kind: .meeting
+                kind: .meeting,
+                activityIdentifier: "daily sync — google meet"
             )
         )
+    }
+
+    @Test("An active YouTube video is Listen Along despite a stale Meet window")
+    func activeMediaWindowOverridesStaleMeetingWindow() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.imput.helium.helper",
+                applicationName: "Helium Helper",
+                windowTitles: [
+                    "Daily sync — Google Meet",
+                    "Swift concurrency tutorial — YouTube",
+                ],
+                activeWindowTitle: "Swift concurrency tutorial — YouTube",
+                isUsingMicrophone: true,
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected?.kind == .listenAlong)
+    }
+
+    @Test("WhatsApp calls routed through macOS conferencing are meetings")
+    func detectsSystemRoutedWhatsAppCall() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.apple.avconferenced",
+                applicationName: "avconferenced",
+                isUsingMicrophone: true,
+                isPlayingAudio: true
+            ),
+            process(
+                bundleIdentifier: "net.whatsapp.WhatsApp",
+                applicationName: "WhatsApp",
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected?.kind == .meeting)
+        #expect(detected?.applicationName == "WhatsApp")
+    }
+
+    @Test("Different browser media titles create different prompt sessions")
+    func mediaTitlesCreateDistinctSessions() {
+        let first = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.imput.helium.helper",
+                applicationName: "Helium Helper",
+                windowTitles: ["First lesson — YouTube"],
+                isPlayingAudio: true
+            ),
+        ])
+        let second = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "net.imput.helium.helper",
+                applicationName: "Helium Helper",
+                windowTitles: ["Second lesson — YouTube"],
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(first?.id != second?.id)
     }
 
     @Test("Does not treat microphone-active browser audio as media playback")
@@ -290,6 +354,7 @@ struct MeetingDetectionTests {
         bundleIdentifier: String,
         applicationName: String,
         windowTitles: [String] = [],
+        activeWindowTitle: String? = nil,
         isApplicationFrontmost: Bool = true,
         isUsingMicrophone: Bool = false,
         isPlayingAudio: Bool = false
@@ -298,6 +363,7 @@ struct MeetingDetectionTests {
             bundleIdentifier: bundleIdentifier,
             applicationName: applicationName,
             windowTitles: windowTitles,
+            activeWindowTitle: activeWindowTitle ?? windowTitles.first,
             isApplicationFrontmost: isApplicationFrontmost,
             isUsingMicrophone: isUsingMicrophone,
             isPlayingAudio: isPlayingAudio

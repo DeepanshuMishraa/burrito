@@ -8,12 +8,17 @@ struct AudioProcessActivity: Equatable, Sendable {
     let bundleIdentifier: String
     let applicationName: String
     let windowTitles: [String]
+    let activeWindowTitle: String?
     let isApplicationFrontmost: Bool
     let isUsingMicrophone: Bool
     let isPlayingAudio: Bool
 }
 
 enum AudioProcessIdentity {
+    private static let systemConferenceBundleIdentifierPrefixes = [
+        "com.apple.avconferenced",
+    ]
+
     static func bundleIdentifier(
         audioBundleIdentifier: String?,
         runningApplicationBundleIdentifier: String?
@@ -39,6 +44,13 @@ enum AudioProcessIdentity {
             || lhs.hasPrefix(rhs + ".")
             || rhs.hasPrefix(lhs + ".")
     }
+
+    static func isSystemConferenceService(_ bundleIdentifier: String) -> Bool {
+        let bundleIdentifier = bundleIdentifier.lowercased()
+        return systemConferenceBundleIdentifierPrefixes.contains {
+            bundleIdentifier == $0 || bundleIdentifier.hasPrefix($0 + ".")
+        }
+    }
 }
 
 enum DetectedNoteTakingKind: String, Equatable, Sendable {
@@ -59,8 +71,25 @@ struct DetectedNoteTakingSession: Equatable, Identifiable, Sendable {
     let sourceID: String
     let applicationName: String
     let kind: DetectedNoteTakingKind
+    let activityIdentifier: String?
 
-    var id: String { "\(kind.rawValue):\(sourceID)" }
+    init(
+        sourceID: String,
+        applicationName: String,
+        kind: DetectedNoteTakingKind,
+        activityIdentifier: String? = nil
+    ) {
+        self.sourceID = sourceID
+        self.applicationName = applicationName
+        self.kind = kind
+        self.activityIdentifier = activityIdentifier
+    }
+
+    var id: String {
+        [kind.rawValue, sourceID, activityIdentifier]
+            .compactMap { $0 }
+            .joined(separator: ":")
+    }
 }
 
 @MainActor
@@ -271,6 +300,16 @@ enum NoteTakingSessionClassifier {
         "livestorm",
     ]
 
+    private static let browserMediaTitleMarkers = [
+        "youtube",
+        "vimeo",
+        "udemy",
+        "coursera",
+        "skillshare",
+        "linkedin learning",
+        "pluralsight",
+    ]
+
     static func detect(
         in processes: [AudioProcessActivity]
     ) -> DetectedNoteTakingSession? {
@@ -298,13 +337,42 @@ enum NoteTakingSessionClassifier {
 
             guard let browser = browserApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
-            }), hasMeetingWindow(process.windowTitles) else {
+            }), process.isApplicationFrontmost,
+                  let activeWindowTitle = process.activeWindowTitle,
+                  hasMeetingWindow([activeWindowTitle])
+            else {
                 continue
             }
             return DetectedNoteTakingSession(
                 sourceID: browser.id,
                 applicationName: browser.name,
-                kind: .meeting
+                kind: .meeting,
+                activityIdentifier: activityIdentifier(for: activeWindowTitle)
+            )
+        }
+
+        let systemConferenceMicrophoneIsActive = processes.contains { process in
+            process.isUsingMicrophone
+                && AudioProcessIdentity.isSystemConferenceService(
+                    process.bundleIdentifier
+                )
+        }
+        guard systemConferenceMicrophoneIsActive else { return nil }
+
+        for process in processes where process.isPlayingAudio {
+            let bundleIdentifier = process.bundleIdentifier.lowercased()
+            guard let application = dedicatedMeetingApplications.first(where: {
+                matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
+            }) else {
+                continue
+            }
+            return DetectedNoteTakingSession(
+                sourceID: application.id,
+                applicationName: application.name,
+                kind: .meeting,
+                activityIdentifier: activityIdentifier(
+                    for: process.activeWindowTitle ?? process.windowTitles.first
+                )
             )
         }
 
@@ -314,7 +382,7 @@ enum NoteTakingSessionClassifier {
     private static func detectMedia(
         in processes: [AudioProcessActivity]
     ) -> DetectedNoteTakingSession? {
-        for process in processes where process.isPlayingAudio && !process.isUsingMicrophone {
+        for process in processes where process.isPlayingAudio {
             let bundleIdentifier = process.bundleIdentifier.lowercased()
 
             if dedicatedMeetingApplications.contains(where: {
@@ -327,27 +395,34 @@ enum NoteTakingSessionClassifier {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }) {
                 // Core Audio cannot identify which browser window produced audio.
-                // Avoid guessing when any related window may be a meeting.
+                // Use the active window only as session context, never as audio attribution.
                 guard process.isApplicationFrontmost,
-                      !process.windowTitles.isEmpty,
-                      !hasMeetingWindow(process.windowTitles)
+                      let activeWindowTitle = process.activeWindowTitle,
+                      !hasMeetingWindow([activeWindowTitle]),
+                      !process.isUsingMicrophone
+                        || hasMediaWindow([activeWindowTitle])
                 else {
                     continue
                 }
                 return DetectedNoteTakingSession(
                     sourceID: browser.id,
                     applicationName: browser.name,
-                    kind: .listenAlong
+                    kind: .listenAlong,
+                    activityIdentifier: activityIdentifier(for: activeWindowTitle)
                 )
             }
 
+            guard !process.isUsingMicrophone else { continue }
             if let mediaApplication = mediaApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }) {
                 return DetectedNoteTakingSession(
                     sourceID: mediaApplication.id,
                     applicationName: mediaApplication.name,
-                    kind: .listenAlong
+                    kind: .listenAlong,
+                    activityIdentifier: activityIdentifier(
+                        for: process.activeWindowTitle ?? process.windowTitles.first
+                    )
                 )
             }
         }
@@ -362,6 +437,24 @@ enum NoteTakingSessionClassifier {
                 normalizedTitle.contains($0)
             }
         }
+    }
+
+    private static func hasMediaWindow(_ titles: [String]) -> Bool {
+        titles.contains { title in
+            let normalizedTitle = title.lowercased()
+            return browserMediaTitleMarkers.contains {
+                normalizedTitle.contains($0)
+            }
+        }
+    }
+
+    private static func activityIdentifier(for title: String?) -> String? {
+        guard let title else { return nil }
+        let normalizedTitle = title
+            .lowercased()
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return normalizedTitle.isEmpty ? nil : normalizedTitle
     }
 
     private static func matches(_ identifier: String, prefixes: [String]) -> Bool {
@@ -414,7 +507,8 @@ private struct CoreAudioProcessActivityReader {
         let frontmostApplication = NSWorkspace.shared.frontmostApplication
 
         let audioProcesses = (try? AudioHardwareSystem.shared.processes) ?? []
-        return audioProcesses.compactMap { audioProcess in
+        var activities: [AudioProcessActivity] = audioProcesses.compactMap {
+            audioProcess -> AudioProcessActivity? in
             let isUsingMicrophone = (try? audioProcess.isRunningInput) ?? false
             let isPlayingAudio = (try? audioProcess.isRunningOutput) ?? false
             guard isUsingMicrophone || isPlayingAudio,
@@ -436,41 +530,97 @@ private struct CoreAudioProcessActivityReader {
             }
 
             let applicationName = application?.localizedName ?? bundleIdentifier
-            let normalizedApplicationName = Self.normalize(applicationName)
             let isApplicationFrontmost = Self.isSameApplicationFamily(
                 bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 as: frontmostApplication
             )
-            let relatedTitles = windows.compactMap { window -> String? in
-                if window.processIdentifier == processIdentifier {
-                    return window.title
-                }
-                if let windowBundleIdentifier = window.bundleIdentifier,
-                   AudioProcessIdentity.belongsToSameApplicationFamily(
-                    bundleIdentifier,
-                    windowBundleIdentifier
-                   )
-                {
-                    return window.title
-                }
-                let normalizedOwnerName = Self.normalize(window.ownerName)
-                guard normalizedApplicationName.hasPrefix(normalizedOwnerName)
-                    || normalizedOwnerName.hasPrefix(normalizedApplicationName)
-                else {
-                    return nil
-                }
-                return window.title
-            }
+            let relatedTitles = Self.relatedTitles(
+                processIdentifier: processIdentifier,
+                bundleIdentifier: bundleIdentifier,
+                applicationName: applicationName,
+                windows: windows
+            )
 
             return AudioProcessActivity(
                 bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 windowTitles: relatedTitles,
+                activeWindowTitle: isApplicationFrontmost ? relatedTitles.first : nil,
                 isApplicationFrontmost: isApplicationFrontmost,
                 isUsingMicrophone: isUsingMicrophone,
                 isPlayingAudio: isPlayingAudio
             )
+        }
+
+        let systemConferenceMicrophoneIsActive = activities.contains { activity in
+            activity.isUsingMicrophone
+                && AudioProcessIdentity.isSystemConferenceService(
+                    activity.bundleIdentifier
+                )
+        }
+        guard systemConferenceMicrophoneIsActive,
+              let frontmostApplication,
+              let frontmostBundleIdentifier = frontmostApplication.bundleIdentifier,
+              frontmostBundleIdentifier != ownBundleIdentifier,
+              !activities.contains(where: {
+                  AudioProcessIdentity.belongsToSameApplicationFamily(
+                    $0.bundleIdentifier,
+                    frontmostBundleIdentifier
+                  )
+              })
+        else {
+            return activities
+        }
+
+        let applicationName = frontmostApplication.localizedName
+            ?? frontmostBundleIdentifier
+        let relatedTitles = Self.relatedTitles(
+            processIdentifier: frontmostApplication.processIdentifier,
+            bundleIdentifier: frontmostBundleIdentifier,
+            applicationName: applicationName,
+            windows: windows
+        )
+        activities.append(
+            AudioProcessActivity(
+                bundleIdentifier: frontmostBundleIdentifier,
+                applicationName: applicationName,
+                windowTitles: relatedTitles,
+                activeWindowTitle: relatedTitles.first,
+                isApplicationFrontmost: true,
+                isUsingMicrophone: true,
+                isPlayingAudio: false
+            )
+        )
+        return activities
+    }
+
+    private static func relatedTitles(
+        processIdentifier: pid_t,
+        bundleIdentifier: String,
+        applicationName: String,
+        windows: [AudioWindowSnapshot]
+    ) -> [String] {
+        let normalizedApplicationName = normalize(applicationName)
+        return windows.compactMap { window in
+            if window.processIdentifier == processIdentifier {
+                return window.title
+            }
+            if let windowBundleIdentifier = window.bundleIdentifier,
+               AudioProcessIdentity.belongsToSameApplicationFamily(
+                bundleIdentifier,
+                windowBundleIdentifier
+               )
+            {
+                return window.title
+            }
+            let normalizedOwnerName = normalize(window.ownerName)
+            guard normalizedApplicationName.hasPrefix(normalizedOwnerName)
+                || normalizedOwnerName.hasPrefix(normalizedApplicationName)
+            else {
+                return nil
+            }
+            return window.title
         }
     }
 
@@ -513,7 +663,7 @@ final class NoteTakingDetectionController {
 
     private static let pollInterval = Duration.seconds(2)
     private static let presentationDuration = Duration.seconds(10)
-    private static let missingSamplesToEndSession = 3
+    private static let missingSamplesToEndSession = 1
 
     private let prompt = NoteTakingPromptPanelController()
     private weak var coordinator: AppCoordinator?
