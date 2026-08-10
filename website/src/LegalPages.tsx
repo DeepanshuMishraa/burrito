@@ -124,7 +124,7 @@ export function PrivacyPolicy() {
     <LegalPage
       title="Privacy Policy"
       path="/privacy/"
-      description="Learn how Burrito keeps meeting data local by default and how optional Supermemory cloud search processes app data."
+      description="Learn how Burrito keeps meeting data local by default and how optional Supermemory cloud search handles meeting titles and transcripts after you choose Index meetings."
       summary="Burrito keeps meeting data on your Mac by default. Connecting a Supermemory API key validates the account; meeting titles and transcripts are sent only after you separately choose Index meetings."
       effectiveDate="August 10, 2026"
     >

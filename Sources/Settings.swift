@@ -799,7 +799,10 @@ private struct SupermemorySettingsCard: View {
     @State private var status = SupermemorySettingsStatus.idle
     @State private var indexProgress: [UUID: SupermemoryIndexProgress] = [:]
     @State private var confirmsCloudDeletion = false
+    @State private var confirmsKeyReplacement = false
+    @State private var pendingAPIKey = ""
     @State private var showingDownloadedModelMessage = false
+    @State private var languageModelStore = LocalLanguageModelStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -877,7 +880,11 @@ private struct SupermemorySettingsCard: View {
                 HStack(spacing: 10) {
                     Button("Index meetings") { indexMeetings() }
                         .buttonStyle(SettingsActionButtonStyle())
-                        .disabled(documents.isEmpty || status.isWorking)
+                        .disabled(
+                            documents.isEmpty
+                                || status.isWorking
+                                || !SupermemoryConfiguration.supportsSelectedModel
+                        )
 
                     Button("Disconnect") { disconnect(deleteRemoteData: false) }
                         .buttonStyle(SettingsActionButtonStyle())
@@ -952,6 +959,15 @@ private struct SupermemorySettingsCard: View {
         .task {
             isConnected = await SupermemoryCloudMemory.shared.hasAPIKey()
         }
+        .onChange(of: languageModelStore.selection, initial: true) { _, selection in
+            if case .apple = selection {
+                indexProgress.removeAll()
+                UserDefaults.standard.set(
+                    false,
+                    forKey: SupermemoryConfiguration.indexingEnabledKey
+                )
+            }
+        }
         .confirmationDialog(
             "Delete Burrito meetings from Supermemory?",
             isPresented: $confirmsCloudDeletion,
@@ -964,6 +980,22 @@ private struct SupermemorySettingsCard: View {
         } message: {
             Text(
                 "Burrito will request permanent deletion of every Supermemory document it uploaded. Local meetings will not be deleted."
+            )
+        }
+        .confirmationDialog(
+            "Replace the Supermemory API key?",
+            isPresented: $confirmsKeyReplacement,
+            titleVisibility: .visible
+        ) {
+            Button("Delete cloud copies and reconnect", role: .destructive) {
+                replaceAPIKey()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingAPIKey = ""
+            }
+        } message: {
+            Text(
+                "Burrito must delete documents associated with the existing key before storing a new key. Local meetings will not be deleted."
             )
         }
         .alert("Download a local model first", isPresented: $showingDownloadedModelMessage) {
@@ -983,7 +1015,37 @@ private struct SupermemorySettingsCard: View {
         let submittedKey = apiKey
         status = .working("Checking the API key…")
         Task {
-            let result = await SupermemoryCloudMemory.shared.connect(apiKey: submittedKey)
+            if await SupermemoryCloudMemory.shared.hasAPIKey() {
+                await MainActor.run {
+                    pendingAPIKey = submittedKey
+                    status = .idle
+                    confirmsKeyReplacement = true
+                }
+                return
+            }
+            await finishConnection(with: submittedKey)
+        }
+    }
+
+    private func replaceAPIKey() {
+        let submittedKey = pendingAPIKey
+        pendingAPIKey = ""
+        status = .working("Deleting cloud copies before reconnecting…")
+        Task {
+            let deletion = await SupermemoryCloudMemory.shared.disconnect(deleteRemoteData: true)
+            guard case .success = deletion else {
+                if case .failure(let error) = deletion {
+                    status = .failure(error.recoveryMessage)
+                }
+                return
+            }
+            await finishConnection(with: submittedKey)
+        }
+    }
+
+    private func finishConnection(with submittedKey: String) async {
+        let result = await SupermemoryCloudMemory.shared.connect(apiKey: submittedKey)
+        await MainActor.run {
             switch result {
             case .success:
                 isConnected = true
@@ -996,6 +1058,10 @@ private struct SupermemorySettingsCard: View {
     }
 
     private func indexMeetings() {
+        guard SupermemoryConfiguration.supportsSelectedModel else {
+            showingDownloadedModelMessage = true
+            return
+        }
         indexProgress = Dictionary(
             uniqueKeysWithValues: documents.map { document in
                 (
@@ -1030,8 +1096,6 @@ private struct SupermemorySettingsCard: View {
                 status = .success(
                     "\(report.liveCount) meeting(s) are live. \(report.pendingCount) are still processing in Supermemory."
                 )
-            } else if report.queuedCount == 0 {
-                status = .success("All \(report.liveCount) meeting(s) are live on Supermemory.")
             } else {
                 status = .success("All \(report.liveCount) meeting(s) are live on Supermemory.")
             }
@@ -1058,6 +1122,7 @@ private struct SupermemorySettingsCard: View {
             switch result {
             case .success:
                 isConnected = false
+                indexProgress.removeAll()
                 status = .success(
                     deleteRemoteData
                         ? "Cloud copies were deleted. Local meetings are unchanged."

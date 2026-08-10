@@ -1,6 +1,7 @@
 import AppKit
 import AVFAudio
 import Collaboration
+import CryptoKit
 import Lottie
 import Observation
 import SwiftData
@@ -260,6 +261,11 @@ struct ContentView: View {
         .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
             styleStore.selectInterfaceFontSize(rawValue)
         }
+        .onChange(of: languageModelStore.selection, initial: true) { _, selection in
+            if case .apple = selection {
+                supermemoryIndexingEnabled = false
+            }
+        }
         .onChange(of: permissionOnboardingCompleted, initial: true) {
             synchronizeNoteTakingDetection()
         }
@@ -392,7 +398,10 @@ struct ContentView: View {
             handlePendingNoteSelection()
         }
         .task(id: supermemorySyncToken) {
-            guard supermemoryEnabled, supermemoryIndexingEnabled else { return }
+            guard supermemoryEnabled,
+                  supermemoryIndexingEnabled,
+                  SupermemoryConfiguration.supportsSelectedModel
+            else { return }
             _ = await SupermemoryCloudMemory.shared.indexAll(supermemoryDocuments) { progress in
                 await MainActor.run {
                     supermemoryIndexProgress[progress.noteID] = progress
@@ -772,7 +781,10 @@ struct ContentView: View {
                     TimelineNoteItem(
                         note: note,
                         folders: folders,
-                        isIndexed: supermemoryIndexProgress[note.id]?.state == .live
+                        isIndexed: supermemoryEnabled
+                            && supermemoryIndexingEnabled
+                            && SupermemoryConfiguration.supportsSelectedModel
+                            && supermemoryIndexProgress[note.id]?.state == .live
                     ) {
                         selectedNoteID = note.id
                     }
@@ -845,18 +857,34 @@ struct ContentView: View {
             }
             let segments = note.transcriptSegments
             guard !segments.isEmpty else { return nil }
-            return MemoryDocument(
-                noteID: note.id,
-                title: note.title,
-                updatedAt: note.updatedAt,
-                segments: segments
-            )
+            return supermemoryDocument(note: note, segments: segments)
         }
     }
 
+    private func supermemoryDocument(
+        note: Note,
+        segments: [TranscriptSegment]
+    ) -> MemoryDocument {
+        let content = note.title + "\u{0}" + Transcript.rendered(segments)
+        let digest = SHA256.hash(data: Data(content.utf8))
+        let offset = digest.prefix(8).reduce(UInt64(0)) { value, byte in
+            (value << 8) | UInt64(byte)
+        } % 86_400
+
+        return MemoryDocument(
+            noteID: note.id,
+            title: note.title,
+            updatedAt: note.createdAt.addingTimeInterval(TimeInterval(offset)),
+            segments: segments
+        )
+    }
+
     private var supermemorySyncToken: String {
-        guard supermemoryEnabled, supermemoryIndexingEnabled else { return "disabled" }
-        return supermemoryDocuments
+        guard supermemoryEnabled,
+              supermemoryIndexingEnabled,
+              SupermemoryConfiguration.supportsSelectedModel
+        else { return "disabled" }
+        return languageModelStore.selection.rawValue + ":" + supermemoryDocuments
             .map { "\($0.noteID.uuidString):\(SupermemoryDocumentRenderer.digest($0))" }
             .joined(separator: "|")
     }

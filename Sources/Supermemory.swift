@@ -489,12 +489,19 @@ struct SupermemorySyncReport: Equatable, Sendable {
     var failedCount = 0
 }
 
+private struct SupermemoryLiveStatusReport: Sendable {
+    let report: SupermemorySyncReport
+    let failedEntries: [UUID: String]
+}
+
 actor SupermemoryCloudMemory {
     static let shared = SupermemoryCloudMemory()
 
     private let client: SupermemoryAPIClient
     private let keyStore: any SupermemoryAPIKeyStoring
     private let defaults: UserDefaults
+    private var disconnecting = false
+    private var lifecycleGeneration = 0
 
     init(
         client: SupermemoryAPIClient = SupermemoryAPIClient(),
@@ -507,6 +514,8 @@ actor SupermemoryCloudMemory {
     }
 
     func connect(apiKey: String) async -> Result<Void, SupermemoryClientError> {
+        guard !disconnecting else { return .failure(.apiKeyUnavailable) }
+        let generation = lifecycleGeneration
         guard SupermemoryConfiguration.supportsSelectedModel else {
             return .failure(.downloadedModelRequired)
         }
@@ -517,6 +526,7 @@ actor SupermemoryCloudMemory {
             containerTag: SupermemoryConfiguration.containerTag(defaults: defaults)
         )
         guard case .success = validation else { return validation }
+        guard isActive(generation) else { return .failure(.apiKeyUnavailable) }
         switch keyStore.save(key) {
         case .success:
             defaults.set(true, forKey: SupermemoryConfiguration.enabledKey)
@@ -536,25 +546,29 @@ actor SupermemoryCloudMemory {
         _ documents: [MemoryDocument],
         onProgress: @escaping @Sendable (SupermemoryIndexProgress) async -> Void = { _ in }
     ) async -> SupermemorySyncReport {
+        guard !disconnecting else { return SupermemorySyncReport() }
+        let generation = lifecycleGeneration
         let report = await synchronize(
             documents,
             waitsForLiveStatus: true,
-            onProgress: onProgress
+            onProgress: onProgress,
+            lifecycleGeneration: generation
         )
-        defaults.set(true, forKey: SupermemoryConfiguration.indexingEnabledKey)
+        if isActive(generation) {
+            defaults.set(true, forKey: SupermemoryConfiguration.indexingEnabledKey)
+        }
         return report
-    }
-
-    func synchronize(_ documents: [MemoryDocument]) async -> SupermemorySyncReport {
-        await synchronize(documents, waitsForLiveStatus: false, onProgress: { _ in })
     }
 
     private func synchronize(
         _ documents: [MemoryDocument],
         waitsForLiveStatus: Bool,
-        onProgress: @escaping @Sendable (SupermemoryIndexProgress) async -> Void
+        onProgress: @escaping @Sendable (SupermemoryIndexProgress) async -> Void,
+        lifecycleGeneration: Int
     ) async -> SupermemorySyncReport {
-        guard let apiKey = configuredAPIKey() else { return SupermemorySyncReport() }
+        guard isActive(lifecycleGeneration), let apiKey = configuredAPIKey() else {
+            return SupermemorySyncReport()
+        }
         let containerTag = SupermemoryConfiguration.containerTag(defaults: defaults)
         var manifest = loadManifest(apiKey: apiKey)
         var report = SupermemorySyncReport()
@@ -564,6 +578,7 @@ actor SupermemoryCloudMemory {
 
         let removedIDs = Array(manifest.entries.keys).filter { !currentIDs.contains($0) }
         for removedID in removedIDs {
+            guard isActive(lifecycleGeneration) else { return report }
             guard let entry = manifest.entries[removedID] else { continue }
             if case .success = await client.delete(documentID: entry.documentID, apiKey: apiKey) {
                 manifest.entries.removeValue(forKey: removedID)
@@ -572,12 +587,14 @@ actor SupermemoryCloudMemory {
         }
 
         for document in documents {
+            guard isActive(lifecycleGeneration) else { return report }
             let digest = SupermemoryDocumentRenderer.digest(document)
             if let entry = manifest.entries[document.noteID], entry.digest == digest {
                 report.unchangedCount += 1
                 pendingStatusChecks.append((document, entry.documentID))
                 continue
             }
+            guard isActive(lifecycleGeneration) else { return report }
             await onProgress(SupermemoryIndexProgress(
                 noteID: document.noteID,
                 title: document.title,
@@ -585,6 +602,7 @@ actor SupermemoryCloudMemory {
                 liveCount: report.liveCount,
                 totalCount: totalCount
             ))
+            guard isActive(lifecycleGeneration) else { return report }
             let result = await client.add(
                 document: document,
                 apiKey: apiKey,
@@ -594,6 +612,12 @@ actor SupermemoryCloudMemory {
                     defaults: defaults
                 )
             )
+            if !isActive(lifecycleGeneration) || Task.isCancelled {
+                if case .success(let indexed) = result {
+                    _ = await client.delete(documentID: indexed.id, apiKey: apiKey)
+                }
+                return report
+            }
             guard case .success(let indexed) = result else {
                 report.failedCount += 1
                 await onProgress(SupermemoryIndexProgress(
@@ -611,6 +635,7 @@ actor SupermemoryCloudMemory {
             )
             report.queuedCount += 1
             pendingStatusChecks.append((document, indexed.id))
+            guard isActive(lifecycleGeneration) else { return report }
             await onProgress(SupermemoryIndexProgress(
                 noteID: document.noteID,
                 title: document.title,
@@ -618,6 +643,7 @@ actor SupermemoryCloudMemory {
                 liveCount: report.liveCount,
                 totalCount: totalCount
             ))
+            guard isActive(lifecycleGeneration) else { return report }
             saveManifest(manifest, apiKey: apiKey)
         }
         if waitsForLiveStatus {
@@ -625,11 +651,20 @@ actor SupermemoryCloudMemory {
                 pendingStatusChecks,
                 apiKey: apiKey,
                 totalCount: totalCount,
-                onProgress: onProgress
+                onProgress: onProgress,
+                lifecycleGeneration: lifecycleGeneration
             )
-            report.liveCount += statusReport.liveCount
-            report.pendingCount += statusReport.pendingCount
-            report.failedCount += statusReport.failedCount
+            report.liveCount += statusReport.report.liveCount
+            report.pendingCount += statusReport.report.pendingCount
+            report.failedCount += statusReport.report.failedCount
+            for (noteID, documentID) in statusReport.failedEntries {
+                if manifest.entries[noteID]?.documentID == documentID {
+                    manifest.entries.removeValue(forKey: noteID)
+                }
+            }
+            if !statusReport.failedEntries.isEmpty, isActive(lifecycleGeneration) {
+                saveManifest(manifest, apiKey: apiKey)
+            }
         }
         return report
     }
@@ -638,20 +673,24 @@ actor SupermemoryCloudMemory {
         _ indexedDocuments: [(document: MemoryDocument, documentID: String)],
         apiKey: String,
         totalCount: Int,
-        onProgress: @escaping @Sendable (SupermemoryIndexProgress) async -> Void
-    ) async -> SupermemorySyncReport {
+        onProgress: @escaping @Sendable (SupermemoryIndexProgress) async -> Void,
+        lifecycleGeneration: Int
+    ) async -> SupermemoryLiveStatusReport {
         var report = SupermemorySyncReport()
         var pending = indexedDocuments
         var lastStates: [UUID: SupermemoryIndexState] = [:]
+        var failedEntries: [UUID: String] = [:]
 
         for attempt in 0..<60 {
-            guard !pending.isEmpty else { break }
+            guard !pending.isEmpty, isActive(lifecycleGeneration), !Task.isCancelled else { break }
             var stillPending: [(document: MemoryDocument, documentID: String)] = []
             for item in pending {
+                guard isActive(lifecycleGeneration), !Task.isCancelled else { break }
                 let result = await client.documentStatus(
                     documentID: item.documentID,
                     apiKey: apiKey
                 )
+                guard isActive(lifecycleGeneration), !Task.isCancelled else { break }
                 switch result {
                 case .success(let state):
                     if lastStates[item.document.noteID] != state || state == .live {
@@ -669,6 +708,7 @@ actor SupermemoryCloudMemory {
                         report.liveCount += 1
                     case .failed:
                         report.failedCount += 1
+                        failedEntries[item.document.noteID] = item.documentID
                     case .uploading, .queued, .processing:
                         stillPending.append(item)
                     }
@@ -678,11 +718,17 @@ actor SupermemoryCloudMemory {
             }
             pending = stillPending
             if !pending.isEmpty, attempt < 59 {
-                try? await Task.sleep(for: .seconds(2))
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                } catch is CancellationError {
+                    break
+                } catch {
+                    break
+                }
             }
         }
         report.pendingCount = pending.count
-        return report
+        return SupermemoryLiveStatusReport(report: report, failedEntries: failedEntries)
     }
 
     func retrieve(
@@ -716,7 +762,13 @@ actor SupermemoryCloudMemory {
     }
 
     func disconnect(deleteRemoteData: Bool) async -> Result<Void, SupermemoryClientError> {
+        guard !disconnecting else {
+            return .failure(.apiKeyUnavailable)
+        }
+        lifecycleGeneration += 1
+        disconnecting = true
         guard case .success(let storedKey) = keyStore.load() else {
+            disconnecting = false
             return .failure(.apiKeyUnavailable)
         }
         if deleteRemoteData, let apiKey = storedKey {
@@ -729,6 +781,7 @@ actor SupermemoryCloudMemory {
                 }
             }
             guard manifest.entries.isEmpty else {
+                disconnecting = false
                 return .failure(.cloudDeletionIncomplete(remainingCount: manifest.entries.count))
             }
         }
@@ -736,8 +789,10 @@ actor SupermemoryCloudMemory {
         case .success:
             defaults.set(false, forKey: SupermemoryConfiguration.enabledKey)
             defaults.set(false, forKey: SupermemoryConfiguration.indexingEnabledKey)
+            disconnecting = false
             return .success(())
         case .failure(let error):
+            disconnecting = false
             return .failure(error)
         }
     }
@@ -748,6 +803,10 @@ actor SupermemoryCloudMemory {
             return nil
         }
         return apiKey
+    }
+
+    private func isActive(_ generation: Int) -> Bool {
+        !disconnecting && lifecycleGeneration == generation
     }
 
     private func manifestKey(apiKey: String) -> String {
