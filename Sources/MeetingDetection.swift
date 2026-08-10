@@ -18,6 +18,15 @@ enum DetectedNoteTakingKind: String, Equatable, Sendable {
     case listenAlong
 }
 
+enum NoteTakingDetectionEligibility {
+    static func isEnabled(
+        permissionOnboardingCompleted: Bool,
+        permissionsGranted: Bool
+    ) -> Bool {
+        permissionOnboardingCompleted && permissionsGranted
+    }
+}
+
 struct DetectedNoteTakingSession: Equatable, Identifiable, Sendable {
     let sourceID: String
     let applicationName: String
@@ -56,16 +65,11 @@ enum DetectedRecordingLauncher {
 
         let defaultTemplateID = defaults.string(forKey: "defaultTemplateID")
             ?? BuiltInTemplate.summary.rawValue
-        let builtIn = mode == .meeting
-            ? BuiltInTemplate.meeting
-            : BuiltInTemplate(rawValue: defaultTemplateID) ?? .summary
         let templates = (try? context.fetch(FetchDescriptor<NoteTemplate>())) ?? []
-        let template = templates.first(where: {
-            $0.builtInID == builtIn.rawValue
-        })?.snapshot ?? TemplateSnapshot(
-            name: builtIn.name,
-            symbol: builtIn.symbol,
-            instructions: builtIn.instructions
+        let template = RecordingTemplateResolver.snapshot(
+            for: mode,
+            defaultTemplateID: defaultTemplateID,
+            templates: templates
         )
         let languageIdentifier = defaults.string(forKey: "transcriptionLanguage")
             ?? "en-US"
@@ -274,7 +278,7 @@ enum NoteTakingSessionClassifier {
     private static func detectMedia(
         in processes: [AudioProcessActivity]
     ) -> DetectedNoteTakingSession? {
-        for process in processes where process.isPlayingAudio {
+        for process in processes where process.isPlayingAudio && !process.isUsingMicrophone {
             let bundleIdentifier = process.bundleIdentifier.lowercased()
 
             if dedicatedMeetingApplications.contains(where: {
@@ -368,11 +372,11 @@ private struct CoreAudioProcessActivityReader {
             let isUsingMicrophone = Self.uint32Property(
                 objectID: objectID,
                 selector: kAudioProcessPropertyIsRunningInput
-            ) != 0
+            ).map { $0 != 0 } ?? false
             let isPlayingAudio = Self.uint32Property(
                 objectID: objectID,
                 selector: kAudioProcessPropertyIsRunningOutput
-            ) != 0
+            ).map { $0 != 0 } ?? false
             guard isUsingMicrophone || isPlayingAudio,
                   let processIdentifier = Self.processIdentifier(objectID: objectID),
                   let application = NSRunningApplication(
@@ -505,8 +509,8 @@ final class NoteTakingDetectionController {
     private static let presentationDuration = Duration.seconds(10)
     private static let missingSamplesToEndSession = 3
 
-    private let reader = CoreAudioProcessActivityReader()
     private let prompt = NoteTakingPromptPanelController()
+    private weak var coordinator: AppCoordinator?
     private var monitoringTask: Task<Void, Never>?
     private var autoDismissTask: Task<Void, Never>?
     private var currentSession: DetectedNoteTakingSession?
@@ -516,11 +520,27 @@ final class NoteTakingDetectionController {
 
     private init() {}
 
+    func configure(coordinator: AppCoordinator) {
+        self.coordinator = coordinator
+    }
+
+    func setEnabled(_ isEnabled: Bool) {
+        if isEnabled {
+            start()
+        } else {
+            stop()
+        }
+    }
+
     func start() {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.refresh()
+                let processes = await Task.detached(priority: .utility) {
+                    CoreAudioProcessActivityReader().processes()
+                }.value
+                guard !Task.isCancelled else { return }
+                self?.refresh(processes: processes)
                 try? await Task.sleep(for: Self.pollInterval)
             }
         }
@@ -535,9 +555,9 @@ final class NoteTakingDetectionController {
         prompt.hide(animated: false)
     }
 
-    private func refresh() {
+    private func refresh(processes: [AudioProcessActivity]) {
         guard let detectedSession = NoteTakingSessionClassifier.detect(
-            in: reader.processes()
+            in: processes
         ) else {
             missingSampleCount += 1
             if missingSampleCount >= Self.missingSamplesToEndSession {
@@ -553,6 +573,14 @@ final class NoteTakingDetectionController {
             currentSession = detectedSession
             presentedSessionID = nil
             dismissedSessionID = nil
+        }
+
+        guard coordinator?.captureState == .idle else {
+            autoDismissTask?.cancel()
+            autoDismissTask = nil
+            presentedSessionID = nil
+            prompt.hide()
+            return
         }
 
         guard dismissedSessionID != detectedSession.id,
@@ -620,6 +648,7 @@ final class NoteTakingDetectionController {
 private final class NoteTakingPromptPanelController {
     private let panel: NoteTakingPromptPanel
     private var presentedSessionID: String?
+    private var generation = 0
 
     init() {
         panel = NoteTakingPromptPanel(
@@ -650,6 +679,7 @@ private final class NoteTakingPromptPanelController {
         dismiss: @escaping () -> Void
     ) {
         guard presentedSessionID != session.id || !panel.isVisible else { return }
+        generation &+= 1
         presentedSessionID = session.id
         panel.contentView = NSHostingView(
             rootView: NoteTakingPromptView(
@@ -694,6 +724,7 @@ private final class NoteTakingPromptPanelController {
 
         let restingOrigin = panel.frame.origin
         let hiddenOrigin = NSPoint(x: restingOrigin.x, y: restingOrigin.y - 6)
+        let hideGeneration = generation
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.28
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -701,6 +732,7 @@ private final class NoteTakingPromptPanelController {
             panel.animator().setFrameOrigin(hiddenOrigin)
         } completionHandler: { [weak self] in
             Task { @MainActor [weak self] in
+                guard self?.generation == hideGeneration else { return }
                 self?.panel.orderOut(nil)
                 self?.panel.alphaValue = 1
             }

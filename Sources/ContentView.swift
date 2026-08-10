@@ -228,6 +228,12 @@ struct ContentView: View {
         .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
             styleStore.selectInterfaceFontSize(rawValue)
         }
+        .onChange(of: permissionOnboardingCompleted, initial: true) {
+            synchronizeNoteTakingDetection()
+        }
+        .onChange(of: permissions.allGranted, initial: true) {
+            synchronizeNoteTakingDetection()
+        }
         .sheet(item: $recordingDestination) { destination in
             RecordingSetupView(
                 templates: templates,
@@ -980,6 +986,15 @@ struct ContentView: View {
         Task {
             await MeetingReminderScheduler.shared.synchronize(events: events)
         }
+    }
+
+    private func synchronizeNoteTakingDetection() {
+        NoteTakingDetectionController.shared.setEnabled(
+            NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: permissionOnboardingCompleted,
+                permissionsGranted: permissions.allGranted
+            )
+        )
     }
 
     private func handlePendingMeetingAction() {

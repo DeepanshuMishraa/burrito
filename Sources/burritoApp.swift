@@ -6,6 +6,7 @@ import SwiftData
 private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     private let updater = BurritoUpdateManager.shared
     private let noteTakingDetection = NoteTakingDetectionController.shared
+    private let permissionAccess = PermissionAccess()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults.standard
@@ -18,7 +19,15 @@ private final class BurritoAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         updater.start()
         Task { await updater.checkIfDue() }
-        noteTakingDetection.start()
+        permissionAccess.refresh()
+        noteTakingDetection.setEnabled(
+            NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: UserDefaults.standard.bool(
+                    forKey: "permissionOnboardingCompleted"
+                ),
+                permissionsGranted: permissionAccess.allGranted
+            )
+        )
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -45,6 +54,7 @@ struct burritoApp: App {
         }
         _coordinator = State(initialValue: coordinator)
         self.container = container
+        NoteTakingDetectionController.shared.configure(coordinator: coordinator)
         DetectedRecordingRequestHandler.shared.configure { mode in
             DetectedRecordingLauncher.start(
                 mode: mode,

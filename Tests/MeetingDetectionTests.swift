@@ -3,6 +3,28 @@ import Testing
 
 @Suite("Note-taking detection")
 struct MeetingDetectionTests {
+    @Test("Detection requires completed onboarding and all permissions")
+    func requiresOnboardingAndPermissions() {
+        #expect(
+            !NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: false,
+                permissionsGranted: true
+            )
+        )
+        #expect(
+            !NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: true,
+                permissionsGranted: false
+            )
+        )
+        #expect(
+            NoteTakingDetectionEligibility.isEnabled(
+                permissionOnboardingCompleted: true,
+                permissionsGranted: true
+            )
+        )
+    }
+
     @Test("Detects a dedicated meeting app using the microphone")
     func detectsDedicatedMeetingApp() {
         let detected = NoteTakingSessionClassifier.detect(in: [
@@ -112,6 +134,35 @@ struct MeetingDetectionTests {
                 kind: .listenAlong
             )
         )
+    }
+
+    @Test("Does not treat microphone-active browser audio as media playback")
+    func ignoresMicrophoneActiveBrowserAudio() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.google.Chrome.helper",
+                applicationName: "Google Chrome Helper",
+                windowTitles: ["Unrecognized call room"],
+                isUsingMicrophone: true,
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected == nil)
+    }
+
+    @Test("Ignores an unrecognized microphone-active browser without playback")
+    func ignoresUnrecognizedMicrophoneSiteWithoutPlayback() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.apple.Safari",
+                applicationName: "Safari",
+                windowTitles: ["Unrecognized call room"],
+                isUsingMicrophone: true
+            ),
+        ])
+
+        #expect(detected == nil)
     }
 
     @Test("Detects supported local video players for Listen Along")
