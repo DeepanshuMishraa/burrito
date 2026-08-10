@@ -9,6 +9,7 @@ struct AudioProcessActivity: Equatable, Sendable {
     let applicationName: String
     let windowTitles: [String]
     let foregroundWindowTitle: String?
+    let isApplicationFrontmost: Bool
     let isUsingMicrophone: Bool
     let isPlayingAudio: Bool
 }
@@ -290,10 +291,12 @@ enum NoteTakingSessionClassifier {
             if let browser = browserApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }) {
-                let foregroundIsMeeting = process.foregroundWindowTitle.map {
-                    hasMeetingWindow([$0])
-                } ?? false
-                guard !foregroundIsMeeting else { continue }
+                guard process.isApplicationFrontmost,
+                      let foregroundWindowTitle = process.foregroundWindowTitle,
+                      !hasMeetingWindow([foregroundWindowTitle])
+                else {
+                    continue
+                }
                 return DetectedNoteTakingSession(
                     sourceID: browser.id,
                     applicationName: browser.name,
@@ -367,6 +370,7 @@ private struct CoreAudioProcessActivityReader {
     func processes() -> [AudioProcessActivity] {
         let windows = AudioWindowReader.snapshots()
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
 
         return Self.audioProcessObjectIDs().compactMap { objectID in
             let isUsingMicrophone = Self.uint32Property(
@@ -390,6 +394,11 @@ private struct CoreAudioProcessActivityReader {
 
             let applicationName = application.localizedName ?? bundleIdentifier
             let normalizedApplicationName = Self.normalize(applicationName)
+            let isApplicationFrontmost = Self.isSameApplicationFamily(
+                bundleIdentifier: bundleIdentifier,
+                applicationName: applicationName,
+                as: frontmostApplication
+            )
             let relatedTitles = windows.compactMap { window -> String? in
                 if window.processIdentifier == processIdentifier {
                     return window.title
@@ -407,11 +416,38 @@ private struct CoreAudioProcessActivityReader {
                 bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 windowTitles: relatedTitles,
-                foregroundWindowTitle: relatedTitles.first,
+                foregroundWindowTitle: isApplicationFrontmost ? relatedTitles.first : nil,
+                isApplicationFrontmost: isApplicationFrontmost,
                 isUsingMicrophone: isUsingMicrophone,
                 isPlayingAudio: isPlayingAudio
             )
         }
+    }
+
+    private static func isSameApplicationFamily(
+        bundleIdentifier: String,
+        applicationName: String,
+        as application: NSRunningApplication?
+    ) -> Bool {
+        guard let application else { return false }
+
+        if let frontmostBundleIdentifier = application.bundleIdentifier,
+           bundleIdentifier == frontmostBundleIdentifier
+            || bundleIdentifier.hasPrefix(frontmostBundleIdentifier + ".")
+            || frontmostBundleIdentifier.hasPrefix(bundleIdentifier + ".")
+        {
+            return true
+        }
+
+        let normalizedName = normalize(applicationName)
+        let normalizedFrontmostName = normalize(
+            application.localizedName ?? application.bundleIdentifier ?? ""
+        )
+        guard !normalizedName.isEmpty, !normalizedFrontmostName.isEmpty else {
+            return false
+        }
+        return normalizedName.hasPrefix(normalizedFrontmostName)
+            || normalizedFrontmostName.hasPrefix(normalizedName)
     }
 
     private static func normalize(_ value: String) -> String {

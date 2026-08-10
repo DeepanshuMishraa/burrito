@@ -116,6 +116,43 @@ struct MeetingDetectionTests {
         #expect(detected?.applicationName == "Google Chrome")
     }
 
+    @Test("A background browser window cannot drive media classification")
+    func ignoresBackgroundBrowserWindow() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.google.Chrome.helper",
+                applicationName: "Google Chrome Helper",
+                windowTitles: [
+                    "Swift concurrency tutorial — YouTube",
+                    "Weekly review — Google Meet",
+                ],
+                foregroundWindowTitle: "Swift concurrency tutorial — YouTube",
+                isApplicationFrontmost: false,
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected == nil)
+    }
+
+    @Test("A foreground meeting window suppresses other browser media windows")
+    func suppressesMediaBehindForegroundMeetingWindow() {
+        let detected = NoteTakingSessionClassifier.detect(in: [
+            process(
+                bundleIdentifier: "com.google.Chrome.helper",
+                applicationName: "Google Chrome Helper",
+                windowTitles: [
+                    "Weekly review — Google Meet",
+                    "Swift concurrency tutorial — YouTube",
+                ],
+                foregroundWindowTitle: "Weekly review — Google Meet",
+                isPlayingAudio: true
+            ),
+        ])
+
+        #expect(detected == nil)
+    }
+
     @Test("Detects browser media playback for Listen Along")
     func detectsBrowserMediaPlayback() {
         let detected = NoteTakingSessionClassifier.detect(in: [
@@ -221,6 +258,7 @@ struct MeetingDetectionTests {
         applicationName: String,
         windowTitles: [String] = [],
         foregroundWindowTitle: String? = nil,
+        isApplicationFrontmost: Bool = true,
         isUsingMicrophone: Bool = false,
         isPlayingAudio: Bool = false
     ) -> AudioProcessActivity {
@@ -229,6 +267,7 @@ struct MeetingDetectionTests {
             applicationName: applicationName,
             windowTitles: windowTitles,
             foregroundWindowTitle: foregroundWindowTitle ?? windowTitles.first,
+            isApplicationFrontmost: isApplicationFrontmost,
             isUsingMicrophone: isUsingMicrophone,
             isPlayingAudio: isPlayingAudio
         )
