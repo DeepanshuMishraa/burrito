@@ -8,7 +8,6 @@ struct AudioProcessActivity: Equatable, Sendable {
     let bundleIdentifier: String
     let applicationName: String
     let windowTitles: [String]
-    let foregroundWindowTitle: String?
     let isApplicationFrontmost: Bool
     let isUsingMicrophone: Bool
     let isPlayingAudio: Bool
@@ -291,9 +290,11 @@ enum NoteTakingSessionClassifier {
             if let browser = browserApplications.first(where: {
                 matches(bundleIdentifier, prefixes: $0.bundleIdentifierPrefixes)
             }) {
+                // Core Audio cannot identify which browser window produced audio.
+                // Avoid guessing when any related window may be a meeting.
                 guard process.isApplicationFrontmost,
-                      let foregroundWindowTitle = process.foregroundWindowTitle,
-                      !hasMeetingWindow([foregroundWindowTitle])
+                      !process.windowTitles.isEmpty,
+                      !hasMeetingWindow(process.windowTitles)
                 else {
                     continue
                 }
@@ -416,7 +417,6 @@ private struct CoreAudioProcessActivityReader {
                 bundleIdentifier: bundleIdentifier,
                 applicationName: applicationName,
                 windowTitles: relatedTitles,
-                foregroundWindowTitle: isApplicationFrontmost ? relatedTitles.first : nil,
                 isApplicationFrontmost: isApplicationFrontmost,
                 isUsingMicrophone: isUsingMicrophone,
                 isPlayingAudio: isPlayingAudio

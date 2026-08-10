@@ -97,8 +97,8 @@ struct MeetingDetectionTests {
         #expect(detected == nil)
     }
 
-    @Test("A separate meeting window does not suppress browser media playback")
-    func allowsMediaAlongsideMeetingWindow() {
+    @Test("Mixed browser windows are ignored when the audio source is ambiguous")
+    func ignoresAmbiguousBrowserWindows() {
         let detected = NoteTakingSessionClassifier.detect(in: [
             process(
                 bundleIdentifier: "com.google.Chrome.helper",
@@ -107,13 +107,11 @@ struct MeetingDetectionTests {
                     "Weekly review — Google Meet",
                     "Swift concurrency tutorial — YouTube",
                 ],
-                foregroundWindowTitle: "Swift concurrency tutorial — YouTube",
                 isPlayingAudio: true
             ),
         ])
 
-        #expect(detected?.kind == .listenAlong)
-        #expect(detected?.applicationName == "Google Chrome")
+        #expect(detected == nil)
     }
 
     @Test("A background browser window cannot drive media classification")
@@ -122,30 +120,8 @@ struct MeetingDetectionTests {
             process(
                 bundleIdentifier: "com.google.Chrome.helper",
                 applicationName: "Google Chrome Helper",
-                windowTitles: [
-                    "Swift concurrency tutorial — YouTube",
-                    "Weekly review — Google Meet",
-                ],
-                foregroundWindowTitle: "Swift concurrency tutorial — YouTube",
+                windowTitles: ["Swift concurrency tutorial — YouTube"],
                 isApplicationFrontmost: false,
-                isPlayingAudio: true
-            ),
-        ])
-
-        #expect(detected == nil)
-    }
-
-    @Test("A foreground meeting window suppresses other browser media windows")
-    func suppressesMediaBehindForegroundMeetingWindow() {
-        let detected = NoteTakingSessionClassifier.detect(in: [
-            process(
-                bundleIdentifier: "com.google.Chrome.helper",
-                applicationName: "Google Chrome Helper",
-                windowTitles: [
-                    "Weekly review — Google Meet",
-                    "Swift concurrency tutorial — YouTube",
-                ],
-                foregroundWindowTitle: "Weekly review — Google Meet",
                 isPlayingAudio: true
             ),
         ])
@@ -257,7 +233,6 @@ struct MeetingDetectionTests {
         bundleIdentifier: String,
         applicationName: String,
         windowTitles: [String] = [],
-        foregroundWindowTitle: String? = nil,
         isApplicationFrontmost: Bool = true,
         isUsingMicrophone: Bool = false,
         isPlayingAudio: Bool = false
@@ -266,7 +241,6 @@ struct MeetingDetectionTests {
             bundleIdentifier: bundleIdentifier,
             applicationName: applicationName,
             windowTitles: windowTitles,
-            foregroundWindowTitle: foregroundWindowTitle ?? windowTitles.first,
             isApplicationFrontmost: isApplicationFrontmost,
             isUsingMicrophone: isUsingMicrophone,
             isPlayingAudio: isPlayingAudio
