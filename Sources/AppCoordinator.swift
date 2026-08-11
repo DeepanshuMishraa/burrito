@@ -261,6 +261,14 @@ final class AppCoordinator {
         studySessionID: UUID? = nil,
         context: ModelContext
     ) async {
+        defer {
+            if let studySessionID,
+               !(captureState.isRecording && studySession?.id == studySessionID) {
+                studySession = nil
+                studyRotationInFlight = false
+                studyRotationTask = nil
+            }
+        }
         guard captureState == .idle else {
             lastError = .recordingAlreadyInProgress
             return
@@ -360,7 +368,9 @@ final class AppCoordinator {
         guard !Task.isCancelled,
               studySessionID == nil || studySession?.id == studySessionID
         else {
-            context.delete(note)
+            if existingNote == nil {
+                context.delete(note)
+            }
             _ = fileStore.removeAudio(for: files)
             try? context.save()
             finishCaptureSession()
@@ -377,12 +387,26 @@ final class AppCoordinator {
             guard !Task.isCancelled,
                   studySessionID == nil || studySession?.id == studySessionID
             else {
-                _ = await capture.stop()
-                context.delete(note)
-                _ = fileStore.removeAudio(for: files)
-                try? context.save()
-                finishCaptureSession()
-                lastError = nil
+                switch await capture.stop() {
+                case .success:
+                    if existingNote == nil {
+                        context.delete(note)
+                    }
+                    _ = fileStore.removeAudio(for: files)
+                    try? context.save()
+                    finishCaptureSession()
+                    lastError = nil
+                case .failure(let error):
+                    note.lifecycle = .recoverable
+                    note.processingStage = nil
+                    note.lastErrorMessage = error.recoveryMessage
+                    try? context.save()
+                    lastError = error
+                    captureState = .failed(
+                        sessionID: note.id,
+                        message: error.recoveryMessage
+                    )
+                }
                 return
             }
             activeFiles = files
@@ -449,6 +473,7 @@ final class AppCoordinator {
         context: ModelContext,
         continueStudy: Bool
     ) async {
+        guard !continueStudy || !Task.isCancelled else { return }
         guard case .recording(let sessionID, let startedAt) = captureState,
               let files = activeFiles,
               let noteID = activeNoteID,
@@ -1007,7 +1032,7 @@ final class AppCoordinator {
                    elapsed >= Self.studySegmentLimit {
                     studyRotationInFlight = true
                     studyRotationTask = Task { [weak self] in
-                        guard let self else { return }
+                        guard let self, !Task.isCancelled else { return }
                         await stopCapture(context: context, continueStudy: true)
                     }
                     return
