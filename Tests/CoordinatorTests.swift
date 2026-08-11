@@ -202,6 +202,37 @@ private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
     }
 }
 
+private final class BlockingGeneratorStub: NoteGenerating, Sendable {
+    let generationStarted = Mutex(false)
+    let allowGeneration = Mutex(false)
+
+    func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func generate(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
+        template: TemplateSnapshot,
+        languageIdentifier: String
+    ) async -> Result<GeneratedNote, BurritoError> {
+        generationStarted.withLock { $0 = true }
+        while !allowGeneration.withLock({ $0 }) {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        .success("Generated title")
+    }
+}
+
 private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
     let titleResponses: Mutex<[Result<String, BurritoError>]>
     let titleCallCount = Mutex(0)
@@ -589,6 +620,50 @@ struct CoordinatorTests {
             feedback.events
                 == ["recordingStarted", "recordingStopped", "noteReady:Generated title"]
         )
+    }
+
+    @Test("A new recording can start while the previous note is still generating")
+    func recordingStartsWhilePreviousNoteGenerates() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let generator = BlockingGeneratorStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "text.alignleft",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        let stopTask = Task { await coordinator.stop(context: context) }
+        await waitUntil { generator.generationStarted.withLock { $0 } }
+
+        #expect(coordinator.captureState == .idle)
+        #expect(capture.stops == 1)
+
+        await coordinator.start(options: options, context: context)
+        #expect(coordinator.captureState.isRecording)
+        #expect(coordinator.lastError == nil)
+        #expect(capture.starts == 2)
+
+        generator.allowGeneration.withLock { $0 = true }
+        await stopTask.value
+        await coordinator.stop(context: context)
+
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 2)
+        #expect(notes.allSatisfy { $0.lifecycle == .ready })
     }
 
     @Test("Human notes written during capture guide generation and remain intact")
@@ -1202,6 +1277,16 @@ struct CoordinatorTests {
         #expect(note.lastErrorMessage == nil)
 
         await coordinator.stop(context: context)
+    }
+
+    private func waitUntil(
+        _ condition: @MainActor () -> Bool,
+        attempts: Int = 500
+    ) async {
+        for _ in 0..<attempts {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     private func makeContext() throws -> ModelContext {

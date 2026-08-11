@@ -23,18 +23,21 @@ struct MeetingDetectionTests {
     func requiresOnboardingAndPermissions() {
         #expect(
             !NoteTakingDetectionEligibility.isEnabled(
+                userEnabled: true,
                 permissionOnboardingCompleted: false,
                 permissionsGranted: true
             )
         )
         #expect(
             !NoteTakingDetectionEligibility.isEnabled(
+                userEnabled: true,
                 permissionOnboardingCompleted: true,
                 permissionsGranted: false
             )
         )
         #expect(
             NoteTakingDetectionEligibility.isEnabled(
+                userEnabled: true,
                 permissionOnboardingCompleted: true,
                 permissionsGranted: true
             )

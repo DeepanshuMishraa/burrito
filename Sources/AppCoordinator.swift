@@ -383,6 +383,7 @@ final class AppCoordinator {
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
         let recordingDuration = activeRecordingDuration(since: startedAt, at: now())
+        let appendsToExisting = appendsToExistingNote
         var processingWarnings: [String] = []
         isPaused = false
         pausedAt = nil
@@ -395,13 +396,21 @@ final class AppCoordinator {
         }
         liveTranscript = capture.liveTranscript
         feedback.recordingStopped()
+        // The capture device is released; processing below runs in the
+        // background so a new recording can start immediately.
+        finishCaptureSession()
 
         guard capture.hasMeaningfulAudio else {
-            finishSilentRecording(note: note, files: files, context: context)
+            finishSilentRecording(
+                note: note,
+                files: files,
+                appendsToExistingNote: appendsToExisting,
+                context: context
+            )
             return
         }
 
-        note.duration = appendsToExistingNote
+        note.duration = appendsToExisting
             ? note.duration + recordingDuration
             : recordingDuration
         note.processingStage = .transcribing
@@ -477,7 +486,7 @@ final class AppCoordinator {
             microphone: microphoneSegments
         )
         let combinedSegments: [TranscriptSegment]
-        if appendsToExistingNote {
+        if appendsToExisting {
             let existingSegments = note.transcriptSegments
             let offset = existingSegments
                 .map { $0.startTime + $0.duration }
@@ -519,7 +528,7 @@ final class AppCoordinator {
             }
         }
 
-        if appendsToExistingNote {
+        if appendsToExisting {
             await appendGeneratedNotes(
                 from: newSegments,
                 to: note,
@@ -536,6 +545,14 @@ final class AppCoordinator {
             note.lastErrorMessage = messages.joined(separator: "\n\n")
             try? context.save()
         }
+    }
+
+    private func existingPCMURL(_ url: URL?) -> URL? {
+        guard let url, FileManager.default.fileExists(atPath: url.path()) else { return nil }
+        return url
+    }
+
+    private func finishCaptureSession() {
         activeFiles = nil
         activeNoteID = nil
         activeCalendarEvent = nil
@@ -550,14 +567,10 @@ final class AppCoordinator {
         smartStopStatus = .monitoring
     }
 
-    private func existingPCMURL(_ url: URL?) -> URL? {
-        guard let url, FileManager.default.fileExists(atPath: url.path()) else { return nil }
-        return url
-    }
-
     private func finishSilentRecording(
         note: Note,
         files: RecordingFiles,
+        appendsToExistingNote: Bool,
         context: ModelContext
     ) {
         if !note.retainsAudio {
@@ -573,18 +586,6 @@ final class AppCoordinator {
         note.processingStage = nil
         note.updatedAt = .now
         try? context.save()
-        activeFiles = nil
-        activeNoteID = nil
-        activeCalendarEvent = nil
-        appendsToExistingNote = false
-        captureState = .idle
-        elapsed = 0
-        activity = .silent
-        isPaused = false
-        pausedAt = nil
-        accumulatedPausedDuration = 0
-        silentFor = 0
-        smartStopStatus = .monitoring
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {

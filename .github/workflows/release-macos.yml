@@ -36,6 +36,45 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Set up Developer ID signing keychain
+        env:
+          MACOS_DEVELOPER_ID_CERT: ${{ secrets.MACOS_DEVELOPER_ID_CERT }}
+          MACOS_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERT_PASSWORD }}
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+        run: |
+          if [[ -z "$MACOS_DEVELOPER_ID_CERT" || -z "$MACOS_DEVELOPER_ID_CERT_PASSWORD" ]]; then
+            echo "MACOS_DEVELOPER_ID_CERT (base64-encoded .p12) and MACOS_DEVELOPER_ID_CERT_PASSWORD"
+            echo "are required. Releases must be Developer ID signed: ad-hoc signed apps lose"
+            echo "their Screen Recording, Microphone, and Calendar permissions on every update."
+            echo "Export your Developer ID Application certificate as a .p12, base64-encode it,"
+            echo "and add both secrets to this repository."
+            exit 1
+          fi
+          if [[ -z "$NOTARIZATION_APPLE_ID" || -z "$NOTARIZATION_APP_PASSWORD" || -z "$NOTARIZATION_TEAM_ID" ]]; then
+            echo "NOTARIZATION_APPLE_ID, NOTARIZATION_APP_PASSWORD, and NOTARIZATION_TEAM_ID"
+            echo "are required for notarization. Add them as repository secrets."
+            exit 1
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/developer_id.p12"
+          printf '%s' "$MACOS_DEVELOPER_ID_CERT" | base64 -D > "$CERT_PATH"
+          KEYCHAIN_PATH="$RUNNER_TEMP/burrito-signing.keychain-db"
+          KEYCHAIN_PASSWORD="burrito-ci-keychain"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -P "$MACOS_DEVELOPER_ID_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | tr -d '"')
+
       - name: Build Burrito
         env:
           VERSION: ${{ steps.version.outputs.value }}
@@ -48,14 +87,20 @@ jobs:
             -skipPackagePluginValidation \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
             build
 
-      - name: Create disk images
+      - name: Verify code signature
+        run: |
+          APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP" 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" || true
+
+      - name: Create disk image
         run: |
           APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
           STAGE="$RUNNER_TEMP/BurritoDMG"
-          codesign --force --deep --sign - "$APP"
           mkdir -p "$STAGE"
           cp -R "$APP" "$STAGE/Burrito.app"
           ln -s /Applications "$STAGE/Applications"
@@ -64,6 +109,20 @@ jobs:
             -srcfolder "$STAGE" \
             -format UDZO \
             "$RUNNER_TEMP/Burrito.dmg"
+
+      - name: Notarize and staple disk image
+        env:
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$RUNNER_TEMP/Burrito.dmg" \
+            --apple-id "$NOTARIZATION_APPLE_ID" \
+            --password "$NOTARIZATION_APP_PASSWORD" \
+            --team-id "$NOTARIZATION_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$RUNNER_TEMP/Burrito.dmg"
+          xcrun stapler validate "$RUNNER_TEMP/Burrito.dmg"
 
       - name: Sign update and create appcast
         env:

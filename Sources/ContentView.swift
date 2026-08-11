@@ -208,6 +208,10 @@ struct ContentView: View {
                 ) {
                     permissionOnboardingCompleted = true
                 }
+            } else if coordinator.captureState.isRecording {
+                RecordingStatusView(coordinator: coordinator) {
+                    Task { await coordinator.stop(context: modelContext) }
+                }
             } else if let activeProcessingNote,
                       let processingStage = activeProcessingNote.processingStage {
                 ScooterGenerationLoader(
@@ -237,10 +241,6 @@ struct ContentView: View {
                         continueRecording(selectedNote)
                     }
                 )
-            } else if coordinator.captureState.isRecording {
-                RecordingStatusView(coordinator: coordinator) {
-                    Task { await coordinator.stop(context: modelContext) }
-                }
             } else {
                 home
             }

@@ -290,6 +290,21 @@ private struct BurritoMenuBarMenu: View {
             }
 
             Menu("Start Recording") {
+                Button("Summary Notes") {
+                    startQuickRecording(mode: .listenAlong, template: .summary)
+                }
+                Button("Detailed Notes") {
+                    startQuickRecording(mode: .listenAlong, template: .detailed)
+                }
+                Button("Study Notes") {
+                    startQuickRecording(mode: .listenAlong, template: .studyNotes)
+                }
+                Button("Meeting Notes") {
+                    startQuickRecording(mode: .meeting, template: .meeting)
+                }
+
+                Divider()
+
                 Button("Listen Along") {
                     startQuickRecording(mode: .listenAlong)
                 }
@@ -424,6 +439,31 @@ private struct BurritoMenuBarMenu: View {
                         defaultTemplateID: defaultTemplateID,
                         templates: templates
                     ),
+                    languageIdentifier: language,
+                    mode: mode,
+                    retainsAudio: retainsAudio,
+                    playbackRate: playbackRate
+                ),
+                context: modelContext
+            )
+        }
+    }
+
+    private func startQuickRecording(mode: RecordingMode, template: BuiltInTemplate) {
+        let snapshot: TemplateSnapshot
+        if let stored = templates.first(where: { $0.builtInID == template.rawValue }) {
+            snapshot = stored.snapshot
+        } else {
+            snapshot = TemplateSnapshot(
+                name: template.name,
+                symbol: template.symbol,
+                instructions: template.instructions
+            )
+        }
+        Task {
+            await coordinator.start(
+                options: RecordingOptions(
+                    template: snapshot,
                     languageIdentifier: language,
                     mode: mode,
                     retainsAudio: retainsAudio,
