@@ -69,9 +69,7 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
                 dropped.continuation.resume(
                     returning: .failure(
                         .speakerDiarizationFailed(
-                            details: "Speaker identification was already busy. "
-                                + "The transcript is preserved with audio-source labels; edit speaker names manually. "
-                                + "Original audio is available only when Keep audio was enabled."
+                            details: "Speaker identification was already busy."
                         )
                     )
                 )
@@ -80,7 +78,6 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
                     returning: .failure(
                         .speakerDiarizationFailed(
                             details: "The local diarization worker is no longer available. "
-                                + "The transcript is preserved with audio-source labels; edit speaker names manually. "
                                 + "Restart Burrito before future meeting recordings."
                         )
                     )
@@ -89,9 +86,7 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
                 continuation.resume(
                     returning: .failure(
                         .speakerDiarizationFailed(
-                            details: "Speaker identification could not be queued. "
-                                + "The transcript is preserved with audio-source labels; edit speaker names manually. "
-                                + "Original audio is available only when Keep audio was enabled."
+                            details: "Speaker identification could not be queued."
                         )
                     )
                 )
