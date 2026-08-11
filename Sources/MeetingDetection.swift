@@ -60,11 +60,18 @@ enum DetectedNoteTakingKind: String, Equatable, Sendable {
 }
 
 enum NoteTakingDetectionEligibility {
+    static let storageKey = "noteTakingDetectionEnabled"
+
+    static var isUserEnabled: Bool {
+        UserDefaults.standard.object(forKey: storageKey) as? Bool ?? true
+    }
+
     static func isEnabled(
+        userEnabled: Bool = isUserEnabled,
         permissionOnboardingCompleted: Bool,
         permissionsGranted: Bool
     ) -> Bool {
-        permissionOnboardingCompleted && permissionsGranted
+        userEnabled && permissionOnboardingCompleted && permissionsGranted
     }
 }
 
@@ -795,6 +802,11 @@ final class NoteTakingDetectionController {
         guard monitoringTask == nil else { return }
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
+                guard NoteTakingDetectionEligibility.isUserEnabled else {
+                    self?.suppressPrompt()
+                    try? await Task.sleep(for: Self.pollInterval)
+                    continue
+                }
                 let processes = await Task.detached(priority: .utility) {
                     CoreAudioProcessActivityReader().processes()
                 }.value
@@ -815,6 +827,13 @@ final class NoteTakingDetectionController {
     }
 
     private func refresh(processes: [AudioProcessActivity]) {
+        guard NoteTakingDetectionEligibility.isUserEnabled else {
+            if currentSession != nil || presentedSessionID != nil {
+                resetSession()
+                prompt.hide(animated: false)
+            }
+            return
+        }
         let classifiedSession = NoteTakingSessionClassifier.detect(in: processes)
         guard let detectedSession = stabilizer.update(with: classifiedSession) else {
             if currentSession != nil {
@@ -890,6 +909,12 @@ final class NoteTakingDetectionController {
         dismissedSessionID = currentSession?.id
         presentedSessionID = nil
         prompt.hide()
+    }
+
+    private func suppressPrompt() {
+        guard currentSession != nil || presentedSessionID != nil else { return }
+        resetSession()
+        prompt.hide(animated: false)
     }
 
     private func resetSession() {

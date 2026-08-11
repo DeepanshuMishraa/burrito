@@ -41,6 +41,24 @@ struct MeetingDetectionTests {
         )
     }
 
+    @Test("User toggle can disable detection")
+    func userToggleDisablesDetection() {
+        #expect(
+            !NoteTakingDetectionEligibility.isEnabled(
+                userEnabled: false,
+                permissionOnboardingCompleted: true,
+                permissionsGranted: true
+            )
+        )
+        #expect(
+            NoteTakingDetectionEligibility.isEnabled(
+                userEnabled: true,
+                permissionOnboardingCompleted: true,
+                permissionsGranted: true
+            )
+        )
+    }
+
     @Test("Detects a dedicated meeting app using the microphone")
     func detectsDedicatedMeetingApp() {
         let detected = NoteTakingSessionClassifier.detect(in: [

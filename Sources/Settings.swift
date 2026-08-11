@@ -161,6 +161,7 @@ private struct SettingsPane: View {
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "en-US"
     @AppStorage("microphoneDefault") private var microphoneDefault = false
     @AppStorage("retainAudioDefault") private var retainAudioDefault = false
+    @AppStorage(NoteTakingDetectionEligibility.storageKey) private var noteTakingDetectionEnabled = true
     @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
         BurritoColorTheme.burrito.rawValue
     @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
@@ -217,6 +218,13 @@ private struct SettingsPane: View {
                                 title: "Keep audio backups",
                                 subtitle: "Retain local audio files after transcription to allow regenerating notes.",
                                 isOn: $retainAudioDefault,
+                                style: .settingsForm
+                            )
+
+                            BurritoToggleRow(
+                                title: "Note-taking prompts",
+                                subtitle: "Show a suggestion to take notes when a meeting or media playback is detected.",
+                                isOn: $noteTakingDetectionEnabled,
                                 style: .settingsForm
                             )
                         }

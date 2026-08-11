@@ -203,6 +203,7 @@ private struct BurritoMenuBarMenu: View {
     @AppStorage("transcriptionLanguage") private var language = "en-US"
     @AppStorage("retainAudioDefault") private var retainsAudio = false
     @AppStorage("playbackRateDefault") private var playbackRateValue = 1.0
+    @AppStorage(NoteTakingDetectionEligibility.storageKey) private var noteTakingDetectionEnabled = true
 
     private var playbackRate: PlaybackRate {
         PlaybackRate(rawValue: playbackRateValue) ?? .natural
@@ -301,6 +302,8 @@ private struct BurritoMenuBarMenu: View {
                 openRecordingSetup()
             }
             .keyboardShortcut("n", modifiers: .command)
+
+            Toggle("Note-taking Prompts", isOn: $noteTakingDetectionEnabled)
 
             Divider()
 
