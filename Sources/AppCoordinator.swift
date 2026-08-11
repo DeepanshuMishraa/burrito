@@ -32,6 +32,15 @@ final class AppCoordinator {
     private var timerTask: Task<Void, Never>?
     private var pausedAt: Date?
     private var accumulatedPausedDuration: TimeInterval = 0
+    private var studySession: StudySession?
+    private var studyRotationInFlight = false
+
+    private struct StudySession {
+        let folderID: UUID
+        let options: RecordingOptions
+    }
+
+    private static let studySegmentLimit: TimeInterval = 10 * 60
 
     init(
         capture: any AudioCapturing,
@@ -211,6 +220,37 @@ final class AppCoordinator {
         }
     }
 
+    func startStudyMode(
+        name: String,
+        options: RecordingOptions,
+        context: ModelContext
+    ) async {
+        guard captureState == .idle else {
+            lastError = .recordingAlreadyInProgress
+            return
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastError = .storageFailed(details: "A study session needs a name before recording can start.")
+            return
+        }
+
+        let folder = Folder(
+            name: trimmedName,
+            order: (try? context.fetch(FetchDescriptor<Folder>()).count) ?? 0
+        )
+        context.insert(folder)
+        try? context.save()
+        studySession = StudySession(folderID: folder.id, options: options)
+        studyRotationInFlight = false
+        await start(options: options, context: context)
+        if !captureState.isRecording {
+            context.delete(folder)
+            try? context.save()
+            studySession = nil
+        }
+    }
+
     func start(
         options: RecordingOptions,
         destination: RecordingDestination = .newNote,
@@ -298,6 +338,10 @@ final class AppCoordinator {
                 fileStore.relativePath(for:)
             )
             context.insert(newNote)
+            if let studySession,
+               let folder = fetchFolder(id: studySession.folderID, context: context) {
+                newNote.folder = folder
+            }
             note = newNote
         }
 
@@ -327,7 +371,7 @@ final class AppCoordinator {
             liveTranscript = capture.liveTranscript
             silentFor = 0
             smartStopStatus = .monitoring
-            startTimer(startedAt: now)
+            startTimer(startedAt: now, context: context)
             feedback.recordingStarted()
         case .failure(let error):
             note.lifecycle = .recoverable
@@ -366,6 +410,15 @@ final class AppCoordinator {
     }
 
     func stop(context: ModelContext) async {
+        studySession = nil
+        studyRotationInFlight = false
+        await stopCapture(context: context, continueStudy: false)
+    }
+
+    private func stopCapture(
+        context: ModelContext,
+        continueStudy: Bool
+    ) async {
         guard case .recording(let sessionID, let startedAt) = captureState,
               let files = activeFiles,
               let noteID = activeNoteID,
@@ -396,9 +449,15 @@ final class AppCoordinator {
         }
         liveTranscript = capture.liveTranscript
         feedback.recordingStopped()
+        let nextStudySession = continueStudy ? studySession : nil
         // The capture device is released; processing below runs in the
         // background so a new recording can start immediately.
         finishCaptureSession()
+
+        if let nextStudySession {
+            studyRotationInFlight = false
+            await start(options: nextStudySession.options, context: context)
+        }
 
         guard capture.hasMeaningfulAudio else {
             finishSilentRecording(
@@ -851,6 +910,7 @@ final class AppCoordinator {
         note.processingStage = nil
         note.lastErrorMessage = error.recoveryMessage
         try? context.save()
+        guard activeNoteID == note.id else { return }
         lastError = error
         captureState = .failed(sessionID: note.id, message: error.recoveryMessage)
         activeFiles = nil
@@ -874,7 +934,15 @@ final class AppCoordinator {
         return try? context.fetch(descriptor).first
     }
 
-    private func startTimer(startedAt: Date) {
+    private func fetchFolder(id: UUID, context: ModelContext) -> Folder? {
+        let requestedID = id
+        let descriptor = FetchDescriptor<Folder>(
+            predicate: #Predicate { $0.id == requestedID }
+        )
+        return try? context.fetch(descriptor).first
+    }
+
+    private func startTimer(startedAt: Date, context: ModelContext) {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
             guard let initialTick = self?.now() else { return }
@@ -889,6 +957,16 @@ final class AppCoordinator {
                 elapsed = activeRecordingDuration(since: startedAt, at: now)
                 liveTranscript = capture.liveTranscript
                 activity = isPaused ? .silent : capture.activity
+                if studySession != nil,
+                   !studyRotationInFlight,
+                   elapsed >= Self.studySegmentLimit {
+                    studyRotationInFlight = true
+                    Task { [weak self] in
+                        guard let self else { return }
+                        await stopCapture(context: context, continueStudy: true)
+                    }
+                    return
+                }
                 if isPaused {
                     continue
                 } else if max(activity.system, activity.microphone) >= 0.04 {

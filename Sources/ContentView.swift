@@ -24,6 +24,28 @@ final class RecordingDestinationInbox {
     }
 }
 
+enum StudyModeLaunchSource: Equatable, Sendable {
+    case app
+    case menuBar
+}
+
+@MainActor
+@Observable
+final class StudyModeInbox {
+    static let shared = StudyModeInbox()
+
+    private(set) var pendingSource: StudyModeLaunchSource?
+
+    func submit(source: StudyModeLaunchSource) {
+        pendingSource = source
+    }
+
+    func consume() -> StudyModeLaunchSource? {
+        defer { pendingSource = nil }
+        return pendingSource
+    }
+}
+
 @MainActor
 @Observable
 final class NoteSelectionInbox {
@@ -112,6 +134,7 @@ struct ContentView: View {
     @State private var notificationAccess = NotificationAccess.shared
     @State private var meetingActionInbox = MeetingActionInbox.shared
     @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
+    @State private var studyModeInbox = StudyModeInbox.shared
     @State private var noteSelectionInbox = NoteSelectionInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
@@ -128,6 +151,9 @@ struct ContentView: View {
     @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
+    @State private var showingStudyModePrompt = false
+    @State private var studyModeName = ""
+    @State private var studyModeLaunchSource: StudyModeLaunchSource = .app
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -331,6 +357,17 @@ struct ContentView: View {
                         create: createFolder
                     )
                 }
+            } else if showingStudyModePrompt {
+                BurritoModalBackdrop {
+                    StudyModeNameDialog(
+                        name: $studyModeName,
+                        cancel: {
+                            studyModeName = ""
+                            showingStudyModePrompt = false
+                        },
+                        start: startStudyMode
+                    )
+                }
             } else if confirmingEmptyTrash {
                 BurritoModalBackdrop {
                     BurritoMessageDialog(
@@ -394,6 +431,7 @@ struct ContentView: View {
             synchronizeMeetingReminders()
             handlePendingMeetingAction()
             handlePendingRecordingDestination()
+            handlePendingStudyMode()
             handlePendingNoteSelection()
         }
         .task(id: supermemorySyncToken) {
@@ -428,6 +466,9 @@ struct ContentView: View {
         }
         .onChange(of: recordingDestinationInbox.pending) {
             handlePendingRecordingDestination()
+        }
+        .onChange(of: studyModeInbox.pendingSource) {
+            handlePendingStudyMode()
         }
         .onChange(of: noteSelectionInbox.pendingNoteID) {
             handlePendingNoteSelection()
@@ -748,6 +789,13 @@ struct ContentView: View {
                     }
                     .buttonStyle(HomeToolbarButtonStyle())
                 }
+
+                Button {
+                    presentStudyModePrompt(source: .app)
+                } label: {
+                    BurritoLabel("Study mode", systemImage: "book.fill")
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
 
                 Button {
                     recordingDestination = .newNote
@@ -1077,6 +1125,49 @@ struct ContentView: View {
     private func handlePendingRecordingDestination() {
         guard let destination = recordingDestinationInbox.consume() else { return }
         recordingDestination = destination
+    }
+
+    private func presentStudyModePrompt(source: StudyModeLaunchSource) {
+        studyModeLaunchSource = source
+        studyModeName = ""
+        showingStudyModePrompt = true
+    }
+
+    private func handlePendingStudyMode() {
+        guard let source = studyModeInbox.consume() else { return }
+        presentStudyModePrompt(source: source)
+    }
+
+    private func startStudyMode() {
+        let name = studyModeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let template = templates.first(where: {
+                  $0.builtInID == BuiltInTemplate.studyNotes.rawValue
+              }) ?? templates.first
+        else {
+            return
+        }
+
+        let options = RecordingOptions(
+            template: template.snapshot,
+            languageIdentifier: defaultLanguage,
+            mode: .listenAlong,
+            retainsAudio: defaultRetainsAudio
+        )
+        let launchSource = studyModeLaunchSource
+        showingStudyModePrompt = false
+        studyModeName = ""
+        Task {
+            await coordinator.startStudyMode(
+                name: name,
+                options: options,
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
+            if launchSource == .menuBar {
+                NSApp.keyWindow?.close()
+            }
+        }
     }
 
     private func handlePendingNoteSelection() {
@@ -3269,6 +3360,45 @@ private struct NewFolderDialog: View {
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
                 Spacer()
                 Button("Create folder", action: create)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: true))
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(26)
+        .frame(width: 440)
+    }
+}
+
+private struct StudyModeNameDialog: View {
+    @Binding var name: String
+    let cancel: () -> Void
+    let start: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Start study mode")
+                    .font(.burritoDisplay(size: 28, weight: .init(400)))
+                Text("Name this session. Each 10-minute note will be added to its folder.")
+                    .foregroundStyle(.secondary)
+            }
+            TextField("Database isolation", text: $name)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 13)
+                .frame(height: 42)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .burritoElevation(.control)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+                .onSubmit(start)
+            HStack {
+                Button("Cancel", action: cancel)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                Spacer()
+                Button("Start study mode", action: start)
                     .buttonStyle(BurritoActionButtonStyle(prominent: true))
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .keyboardShortcut(.defaultAction)

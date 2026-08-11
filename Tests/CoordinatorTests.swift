@@ -666,6 +666,40 @@ struct CoordinatorTests {
         #expect(notes.allSatisfy { $0.lifecycle == .ready })
     }
 
+    @Test("Study mode creates a named folder and assigns the recording")
+    func studyModeCreatesNamedFolder() async throws {
+        let context = try makeContext()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Study Notes",
+                symbol: "book",
+                instructions: "Teach the material."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        await coordinator.startStudyMode(
+            name: "Database isolation",
+            options: options,
+            context: context
+        )
+
+        let folder = try #require(context.fetch(FetchDescriptor<Folder>()).first)
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(folder.name == "Database isolation")
+        #expect(note.folder?.id == folder.id)
+
+        await coordinator.stop(context: context)
+    }
+
     @Test("Human notes written during capture guide generation and remain intact")
     func humanNotesGuideGeneration() async throws {
         let context = try makeContext()
