@@ -130,6 +130,7 @@ struct ContentView: View {
     @State private var newFolderName = ""
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
+    @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
     @AppStorage("permissionOnboardingCompleted") private var permissionOnboardingCompleted = false
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
@@ -142,6 +143,8 @@ struct ContentView: View {
         BurritoFontChoice.burritoDefault.rawValue
     @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
         BurritoInterfaceFontSize.standard
+    @AppStorage(SupermemoryConfiguration.enabledKey) private var supermemoryEnabled = false
+    @AppStorage(SupermemoryConfiguration.indexingEnabledKey) private var supermemoryIndexingEnabled = false
     private let userProfile = MacUserProfile.current
 
     private var appearance: BurritoAppearance {
@@ -256,6 +259,11 @@ struct ContentView: View {
         }
         .onChange(of: interfaceFontSizeRawValue, initial: true) { _, rawValue in
             styleStore.selectInterfaceFontSize(rawValue)
+        }
+        .onChange(of: languageModelStore.selection, initial: true) { _, selection in
+            if case .apple = selection {
+                supermemoryIndexingEnabled = false
+            }
         }
         .onChange(of: permissionOnboardingCompleted, initial: true) {
             synchronizeNoteTakingDetection()
@@ -388,6 +396,17 @@ struct ContentView: View {
             handlePendingRecordingDestination()
             handlePendingNoteSelection()
         }
+        .task(id: supermemorySyncToken) {
+            guard supermemoryEnabled,
+                  supermemoryIndexingEnabled,
+                  SupermemoryConfiguration.supportsSelectedModel
+            else { return }
+            _ = await SupermemoryCloudMemory.shared.indexAll(supermemoryDocuments) { progress in
+                await MainActor.run {
+                    supermemoryIndexProgress[progress.noteID] = progress
+                }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 permissions.refresh()
@@ -480,6 +499,7 @@ struct ContentView: View {
             } else if sidebarSelection == .settings {
                 BurritoSettingsView(
                     calendarAccess: calendarAccess,
+                    memoryDocuments: supermemoryDocuments,
                     exportLibrary: exportLibrary,
                     importLibrary: importLibrary,
                     ownershipStatus: ownershipStatus
@@ -759,7 +779,11 @@ struct ContentView: View {
                 ForEach(group.notes) { note in
                     TimelineNoteItem(
                         note: note,
-                        folders: folders
+                        folders: folders,
+                        isIndexed: supermemoryEnabled
+                            && supermemoryIndexingEnabled
+                            && SupermemoryConfiguration.supportsSelectedModel
+                            && supermemoryIndexProgress[note.id]?.state == .live
                     ) {
                         selectedNoteID = note.id
                     }
@@ -819,10 +843,15 @@ struct ContentView: View {
     }
 
     private var memoryDocuments: [MemoryDocument] {
+        supermemoryDocuments.filter { document in
+            guard let memoryFolderID else { return true }
+            return notes.first(where: { $0.id == document.noteID })?.folder?.id == memoryFolderID
+        }
+    }
+
+    private var supermemoryDocuments: [MemoryDocument] {
         notes.compactMap { note in
-            guard note.deletedAt == nil,
-                  memoryFolderID == nil || note.folder?.id == memoryFolderID
-            else {
+            guard note.deletedAt == nil else {
                 return nil
             }
             let segments = note.transcriptSegments
@@ -834,6 +863,16 @@ struct ContentView: View {
                 segments: segments
             )
         }
+    }
+
+    private var supermemorySyncToken: String {
+        guard supermemoryEnabled,
+              supermemoryIndexingEnabled,
+              SupermemoryConfiguration.supportsSelectedModel
+        else { return "disabled" }
+        return languageModelStore.selection.rawValue + ":" + supermemoryDocuments
+            .map { "\($0.noteID.uuidString):\(SupermemoryDocumentRenderer.digest($0))" }
+            .joined(separator: "|")
     }
 
     private func seedAndRecover() {
@@ -3628,6 +3667,7 @@ private struct NoteIconBadge: View {
 
 private struct TimelineNoteRow: View {
     let note: Note
+    let isIndexed: Bool
     var isHovered: Bool = false
 
     var body: some View {
@@ -3643,6 +3683,9 @@ private struct TimelineNoteRow: View {
                     if note.isFavorite {
                         BurritoIcon(name: "star.fill", size: 10)
                             .foregroundStyle(BurritoTheme.accent)
+                    }
+                    if isIndexed {
+                        IndexedBadge()
                     }
                 }
                 Text(note.processingStage?.rawValue ?? NoteExcerpt.text(for: note))
@@ -3724,11 +3767,31 @@ private struct FolderTag: View {
     }
 }
 
+private struct IndexedBadge: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            BurritoIcon(name: "checkmark", size: 8)
+            Text("Indexed")
+        }
+        .font(.burritoUI(size: 9, weight: 500))
+        .foregroundStyle(BurritoTheme.accent)
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .background(BurritoTheme.accentSoft, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(BurritoTheme.accent.opacity(0.32))
+        }
+        .accessibilityLabel("Indexed in Supermemory")
+    }
+}
+
 private struct TimelineNoteItem: View {
     @Environment(\.modelContext) private var modelContext
 
     let note: Note
     let folders: [Folder]
+    let isIndexed: Bool
     let open: () -> Void
 
     @State private var isHovered = false
@@ -3741,7 +3804,7 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.alignment)
                 open()
             } label: {
-                TimelineNoteRow(note: note, isHovered: isHovered)
+                 TimelineNoteRow(note: note, isIndexed: isIndexed, isHovered: isHovered)
             }
             .buttonStyle(.plain)
 
@@ -5617,6 +5680,7 @@ struct MemoryChatMessage: Identifiable, Equatable {
     let scopeTitle: String?
     let usedMeetingEvidence: Bool
     let searchedMeetings: Bool
+    let usedSupermemory: Bool
 
     init(
         id: UUID = UUID(),
@@ -5626,7 +5690,8 @@ struct MemoryChatMessage: Identifiable, Equatable {
         errorMessage: String? = nil,
         scopeTitle: String? = nil,
         usedMeetingEvidence: Bool = false,
-        searchedMeetings: Bool = false
+        searchedMeetings: Bool = false,
+        usedSupermemory: Bool = false
     ) {
         self.id = id
         self.isUser = isUser
@@ -5636,6 +5701,7 @@ struct MemoryChatMessage: Identifiable, Equatable {
         self.scopeTitle = scopeTitle
         self.usedMeetingEvidence = usedMeetingEvidence
         self.searchedMeetings = searchedMeetings
+        self.usedSupermemory = usedSupermemory
     }
 }
 
@@ -6139,6 +6205,13 @@ private struct MemoryChatView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                Group {
+                    if msg.usedSupermemory {
+                        BurritoLabel("Semantic meeting search by Supermemory", systemImage: "cloud")
+                            .font(.burritoUI(size: 10, weight: 450))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .padding(16)
@@ -6269,7 +6342,8 @@ private struct MemoryChatView: View {
                         timestamp: assistantTimestamp,
                         scopeTitle: submittedScope?.title,
                         usedMeetingEvidence: response.usedMeetingEvidence,
-                        searchedMeetings: response.searchedMeetings
+                        searchedMeetings: response.searchedMeetings,
+                        usedSupermemory: response.usedSupermemory
                     )
                     if let index = session.messages.firstIndex(where: { $0.id == assistantID }) {
                         session.messages[index] = botMsg

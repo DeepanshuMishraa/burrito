@@ -9,6 +9,7 @@ type LegalPageProps = {
   description: string;
   path: string;
   summary: string;
+  effectiveDate?: string;
   children: ReactNode;
 };
 
@@ -47,6 +48,7 @@ function LegalPage({
   description,
   path,
   summary,
+  effectiveDate = "July 29, 2026",
   children,
 }: LegalPageProps) {
   usePageMetadata(title, description, path);
@@ -73,7 +75,7 @@ function LegalPage({
             </h1>
             <div className="legal-hero-summary">
               <p>{summary}</p>
-              <span>Effective July 29, 2026</span>
+              <span>Effective {effectiveDate}</span>
             </div>
           </div>
         </header>
@@ -122,8 +124,9 @@ export function PrivacyPolicy() {
     <LegalPage
       title="Privacy Policy"
       path="/privacy/"
-      description="Learn how Burrito keeps recordings, transcripts, and notes local to your Mac and what limited data its website may process."
-      summary="Burrito is designed so your recordings, transcripts, and notes stay on your Mac. There are no Burrito accounts, analytics, advertising trackers, or cloud transcription services."
+      description="Learn how Burrito keeps meeting data local by default and how optional Supermemory cloud search handles meeting titles and transcripts after you choose Index meetings."
+      summary="Burrito keeps meeting data on your Mac by default. Connecting a Supermemory API key validates the account; meeting titles and transcripts are sent only after you separately choose Index meetings."
+      effectiveDate="August 10, 2026"
     >
       <section>
         <h2>1. The short version</h2>
@@ -131,7 +134,10 @@ export function PrivacyPolicy() {
           Burrito processes meeting audio and creates notes locally on your Mac. The
           app does not require an account and does not upload your recordings,
           transcripts, generated notes, templates, or folders to a Burrito-operated
-          server. Burrito does not sell personal information.
+          server by default. Burrito does not sell personal information. The optional
+          Supermemory Cloud Search feature sends meeting titles and transcripts to
+          Supermemory only after you connect your own API key and separately choose
+          Index meetings in Settings.
         </p>
       </section>
 
@@ -141,7 +147,10 @@ export function PrivacyPolicy() {
           Depending on the features you use, Burrito may handle system audio,
           microphone audio, speech transcripts, generated notes, custom templates,
           folder names, Calendar event details, and app preferences. This information
-          is stored and processed on your Mac.
+          is stored and processed on your Mac by default. When Supermemory Cloud Search
+          is connected and you choose Index meetings, non-deleted meeting titles and
+          transcripts are also stored and processed by Supermemory under its own terms
+          and privacy policy.
         </p>
         <p>
           Burrito uses macOS permissions for screen and system-audio capture,
@@ -155,8 +164,9 @@ export function PrivacyPolicy() {
         <p>
           Transcription uses Apple Speech or an optional locally installed Parakeet
           model. Note generation uses Apple Intelligence through Apple’s on-device
-          Foundation Models framework. Burrito does not send source audio or
-          transcripts to a third-party AI API.
+          Foundation Models framework. Burrito never sends source audio to
+          Supermemory. Transcript uploads occur only when you explicitly click Index
+          meetings after connecting Supermemory Cloud Search.
         </p>
         <p>
           If you install a Parakeet model, the model files are downloaded from their
@@ -168,7 +178,29 @@ export function PrivacyPolicy() {
       </section>
 
       <section>
-        <h2>4. Storage and retention</h2>
+        <h2>4. Optional Supermemory Cloud Search</h2>
+        <p>
+          You may connect a Supermemory API key to improve meeting retrieval beyond
+          Burrito’s local keyword search. Connecting validates and stores the key but
+          does not upload meeting content. When you separately click Index meetings,
+          Burrito uploads every existing non-deleted meeting title and transcript to
+          your Supermemory account and automatically keeps future changes indexed.
+          Burrito stores the API key in macOS Keychain and uses it only to validate,
+          index, search, update, and delete Burrito meeting documents.
+        </p>
+        <p>
+          Supermemory receives and processes uploaded content, account information,
+          network metadata, and API usage under its own privacy policy. Usage is billed
+          by Supermemory to your account. Disconnecting removes the API key from this
+          Mac but does not itself delete previously uploaded data. The app provides a
+          separate action to request deletion of Burrito’s uploaded documents before
+          disconnecting. If Supermemory is unavailable or disconnected, Burrito falls
+          back to local keyword search.
+        </p>
+      </section>
+
+      <section>
+        <h2>5. Storage and retention</h2>
         <p>
           Notes, transcripts, settings, and retained recordings live in Burrito’s
           local Application Support data. Audio is removed after successful
@@ -178,12 +210,13 @@ export function PrivacyPolicy() {
         <p>
           You can edit or delete notes in the app, empty Trash, remove retained audio,
           uninstall downloaded models, or remove Burrito’s local application data
-          through macOS.
+          through macOS. Deleting a local meeting causes Burrito to request deletion
+          of its indexed Supermemory document while the integration remains connected.
         </p>
       </section>
 
       <section>
-        <h2>5. Website data</h2>
+        <h2>6. Website data</h2>
         <p>
           The Burrito website does not intentionally set cookies, run analytics,
           display advertising, fingerprint visitors, or include marketing trackers.
@@ -203,18 +236,19 @@ export function PrivacyPolicy() {
       </section>
 
       <section>
-        <h2>6. Sharing and disclosure</h2>
+        <h2>7. Sharing and disclosure</h2>
         <p>
           Burrito does not sell, rent, or trade personal information. Because app data
           is not collected by a Burrito server, there is ordinarily no app content for
-          the project maintainers to disclose. Information may still be accessible to
-          anyone who can access your Mac, your backups, or files you choose to export
-          and share.
+          the project maintainers to disclose. If you enable Supermemory Cloud Search,
+          meeting titles and transcripts are disclosed to Supermemory at your direction.
+          Information may also be accessible to anyone who can access your Mac, your
+          backups, your Supermemory account, or files you choose to export and share.
         </p>
       </section>
 
       <section>
-        <h2>7. Security</h2>
+        <h2>8. Security</h2>
         <p>
           Burrito relies on macOS application storage, permission controls, and your
           device security. Keep macOS updated, use a strong login password, and protect
@@ -223,7 +257,7 @@ export function PrivacyPolicy() {
       </section>
 
       <section>
-        <h2>8. Your choices and rights</h2>
+        <h2>9. Your choices and rights</h2>
         <p>
           Because Burrito does not maintain user accounts or a remote database, you
           directly control most relevant data on your Mac. Depending on where you live,
@@ -234,7 +268,7 @@ export function PrivacyPolicy() {
       </section>
 
       <section>
-        <h2>9. Children</h2>
+        <h2>10. Children</h2>
         <p>
           Burrito is a general-purpose productivity tool and is not directed to
           children under 13. The project does not knowingly collect children’s
@@ -243,7 +277,7 @@ export function PrivacyPolicy() {
       </section>
 
       <section>
-        <h2>10. Changes and contact</h2>
+        <h2>11. Changes and contact</h2>
         <p>
           Material changes will be reflected by updating this page and its effective
           date. For privacy questions, email{" "}

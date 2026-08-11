@@ -59,6 +59,7 @@
 		EBDF528C793D101EB1F58C7D /* LocalTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288BCB0B98620C3CFB7D5C26 /* LocalTranscriber.swift */; };
 		EE09F05A5364BA09E154CB94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */; };
 		EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DACDC881191EC0950114922B /* Geist-Variable.ttf */; };
+		F36295486C69F3CDC1D5F28A /* Supermemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4763766120520B992AC0D060 /* Supermemory.swift */; };
 		F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */; };
 		F7BB2C12AE45416A05A720C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B76BDAAD1105FDBF200FA0E /* ContentView.swift */; };
 		FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25328314F1FFC002350B88B8 /* burritoApp.swift */; };
@@ -97,6 +98,7 @@
 		3B76BDAAD1105FDBF200FA0E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioCapture.swift; sourceTree = "<group>"; };
 		45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLanguageModels.swift; sourceTree = "<group>"; };
+		4763766120520B992AC0D060 /* Supermemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Supermemory.swift; sourceTree = "<group>"; };
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
@@ -221,6 +223,7 @@
 				728318FB3CB86222B61B8235 /* RecordingFileStore.swift */,
 				A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */,
 				3A7EDE94375DECAC98C16A4F /* Settings.swift */,
+				4763766120520B992AC0D060 /* Supermemory.swift */,
 				40B823F1C364D4BF65341772 /* SystemAudioCapture.swift */,
 			);
 			path = Sources;
@@ -408,6 +411,7 @@
 				CD5B87557E959AF82F365E95 /* RecordingFileStore.swift in Sources */,
 				E58B89D554341787008A874D /* ServiceProtocols.swift in Sources */,
 				0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */,
+				F36295486C69F3CDC1D5F28A /* Supermemory.swift in Sources */,
 				7C6B573508E6EC36D37CDBEE /* SystemAudioCapture.swift in Sources */,
 				FB187AF7006C211BDF567FEE /* burritoApp.swift in Sources */,
 			);
