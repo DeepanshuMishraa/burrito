@@ -1,7 +1,6 @@
 import AppKit
 import AVFAudio
 import Collaboration
-import CryptoKit
 import Lottie
 import Observation
 import SwiftData
@@ -857,26 +856,13 @@ struct ContentView: View {
             }
             let segments = note.transcriptSegments
             guard !segments.isEmpty else { return nil }
-            return supermemoryDocument(note: note, segments: segments)
+            return MemoryDocument(
+                noteID: note.id,
+                title: note.title,
+                updatedAt: note.updatedAt,
+                segments: segments
+            )
         }
-    }
-
-    private func supermemoryDocument(
-        note: Note,
-        segments: [TranscriptSegment]
-    ) -> MemoryDocument {
-        let content = note.title + "\u{0}" + Transcript.rendered(segments)
-        let digest = SHA256.hash(data: Data(content.utf8))
-        let offset = digest.prefix(8).reduce(UInt64(0)) { value, byte in
-            (value << 8) | UInt64(byte)
-        } % 86_400
-
-        return MemoryDocument(
-            noteID: note.id,
-            title: note.title,
-            updatedAt: note.createdAt.addingTimeInterval(TimeInterval(offset)),
-            segments: segments
-        )
     }
 
     private var supermemorySyncToken: String {

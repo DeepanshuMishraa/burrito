@@ -502,6 +502,9 @@ actor SupermemoryCloudMemory {
     private let defaults: UserDefaults
     private var disconnecting = false
     private var lifecycleGeneration = 0
+    private var disconnectDeletesData = false
+    private var inFlightUploads: Set<UUID> = []
+    private var pendingDeletions: [UUID: String] = [:]
 
     init(
         client: SupermemoryAPIClient = SupermemoryAPIClient(),
@@ -603,6 +606,7 @@ actor SupermemoryCloudMemory {
                 totalCount: totalCount
             ))
             guard isActive(lifecycleGeneration) else { return report }
+            inFlightUploads.insert(document.noteID)
             let result = await client.add(
                 document: document,
                 apiKey: apiKey,
@@ -614,10 +618,23 @@ actor SupermemoryCloudMemory {
             )
             if !isActive(lifecycleGeneration) || Task.isCancelled {
                 if case .success(let indexed) = result {
-                    _ = await client.delete(documentID: indexed.id, apiKey: apiKey)
+                    if disconnecting && disconnectDeletesData {
+                        // Delete-data disconnect: register so disconnect confirms removal.
+                        pendingDeletions[document.noteID] = indexed.id
+                    } else if !disconnecting {
+                        // Cancelled indexing: remove the orphaned upload.
+                        let deleteResult = await client.delete(documentID: indexed.id, apiKey: apiKey)
+                        if case .failure = deleteResult, disconnecting && disconnectDeletesData {
+                            // A delete-data disconnect started during cleanup: hand it over.
+                            pendingDeletions[document.noteID] = indexed.id
+                        }
+                    }
+                    // "Keep cloud data" disconnect leaves the finished upload in place.
                 }
+                inFlightUploads.remove(document.noteID)
                 return report
             }
+            inFlightUploads.remove(document.noteID)
             guard case .success(let indexed) = result else {
                 report.failedCount += 1
                 await onProgress(SupermemoryIndexProgress(
@@ -767,11 +784,14 @@ actor SupermemoryCloudMemory {
         }
         lifecycleGeneration += 1
         disconnecting = true
+        disconnectDeletesData = deleteRemoteData
         guard case .success(let storedKey) = keyStore.load() else {
             disconnecting = false
+            disconnectDeletesData = false
             return .failure(.apiKeyUnavailable)
         }
         if deleteRemoteData, let apiKey = storedKey {
+            await waitForInFlightUploadsToSettle()
             var manifest = loadManifest(apiKey: apiKey)
             for (noteID, entry) in Array(manifest.entries) {
                 let result = await client.delete(documentID: entry.documentID, apiKey: apiKey)
@@ -780,20 +800,38 @@ actor SupermemoryCloudMemory {
                     saveManifest(manifest, apiKey: apiKey)
                 }
             }
-            guard manifest.entries.isEmpty else {
+            for (noteID, documentID) in pendingDeletions {
+                let result = await client.delete(documentID: documentID, apiKey: apiKey)
+                if case .success = result {
+                    pendingDeletions.removeValue(forKey: noteID)
+                }
+            }
+            guard manifest.entries.isEmpty, pendingDeletions.isEmpty else {
                 disconnecting = false
-                return .failure(.cloudDeletionIncomplete(remainingCount: manifest.entries.count))
+                disconnectDeletesData = false
+                return .failure(.cloudDeletionIncomplete(
+                    remainingCount: manifest.entries.count + pendingDeletions.count
+                ))
             }
         }
         switch keyStore.remove() {
         case .success:
             defaults.set(false, forKey: SupermemoryConfiguration.enabledKey)
             defaults.set(false, forKey: SupermemoryConfiguration.indexingEnabledKey)
+            pendingDeletions.removeAll()
             disconnecting = false
+            disconnectDeletesData = false
             return .success(())
         case .failure(let error):
             disconnecting = false
+            disconnectDeletesData = false
             return .failure(error)
+        }
+    }
+
+    private func waitForInFlightUploadsToSettle() async {
+        while !inFlightUploads.isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
