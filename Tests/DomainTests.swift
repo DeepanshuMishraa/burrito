@@ -2662,6 +2662,19 @@ struct TemplateTests {
 
         #expect(GeneratedNote.isGrounded(grounded, in: [segment]))
         #expect(!GeneratedNote.isGrounded(ungrounded, in: [segment]))
+
+        let unrelatedSegment = TranscriptSegment(
+            source: .microphone,
+            startTime: 5,
+            duration: 4,
+            text: "The self is present only in the present moment."
+        )
+        let citesFirstUsesSecond = GeneratedNote(
+            title: "The Present Moment",
+            markdown: "The self is present only in the present moment. "
+                + "[source](burrito://transcript/\(segment.id.uuidString))"
+        )
+        #expect(!GeneratedNote.isGrounded(citesFirstUsesSecond, in: [segment, unrelatedSegment]))
     }
 }
 

@@ -1446,7 +1446,9 @@ struct GeneratedNote: Equatable, Sendable {
         guard !citations.isEmpty, citations.allSatisfy(sourceIDs.contains) else { return false }
 
         let sourceTerms = Set(
-            segments.flatMap { $0.text.lowercased().split { !$0.isLetter && !$0.isNumber } }
+            segments
+                .filter { citations.contains($0.id) }
+                .flatMap { $0.text.lowercased().split { !$0.isLetter && !$0.isNumber } }
                 .map(String.init)
                 .filter { $0.count > 2 }
         )

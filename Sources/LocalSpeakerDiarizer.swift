@@ -14,7 +14,7 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
     private let worker: Task<Void, Never>
 
     init() {
-        let pair = AsyncStream<Request>.makeStream()
+        let pair = AsyncStream<Request>.makeStream(bufferingPolicy: .bufferingOldest(1))
         requestContinuation = pair.continuation
         // FluidAudio's manager is not Sendable. Keep it scoped to one request so
         // Core ML diarizer models do not remain resident after processing.
@@ -62,12 +62,33 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
                 segments: segments,
                 continuation: continuation
             )
-            if case .terminated = requestContinuation.yield(request) {
+            switch requestContinuation.yield(request) {
+            case .enqueued:
+                break
+            case .dropped(let dropped):
+                dropped.continuation.resume(
+                    returning: .failure(
+                        .speakerDiarizationFailed(
+                            details: "Speaker identification was already busy. "
+                                + "The recording is preserved; retry identification from the note."
+                        )
+                    )
+                )
+            case .terminated:
                 continuation.resume(
                     returning: .failure(
                         .speakerDiarizationFailed(
                             details: "The local diarization worker is no longer available. "
                                 + "Restart Burrito and retry speaker identification."
+                        )
+                    )
+                )
+            @unknown default:
+                continuation.resume(
+                    returning: .failure(
+                        .speakerDiarizationFailed(
+                            details: "Speaker identification could not be queued. "
+                                + "The recording is preserved; retry identification from the note."
                         )
                     )
                 )
