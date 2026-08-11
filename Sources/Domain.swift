@@ -499,7 +499,7 @@ enum BurritoError: Error, Equatable, Sendable {
         case .transcriptionFailed(let details):
             "Transcription failed: \(details). The audio is preserved so you can retry."
         case .speakerDiarizationFailed(let details):
-            "Speaker identification did not finish: \(details). The transcript is preserved with audio-source labels; retry after checking your connection or edit speaker names manually."
+            "Speaker identification did not finish: \(details). The transcript is preserved with audio-source labels; edit speaker names manually. Original audio is available only when Keep audio was enabled."
         case .generationFailed(let details):
             "Note generation failed: \(details). The transcript and retained audio remain available; choose Generate Again."
         case .storageFailed(let details):

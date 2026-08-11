@@ -2676,6 +2676,17 @@ struct TemplateTests {
         )
         #expect(!GeneratedNote.isGrounded(citesFirstUsesSecond, in: [segment, unrelatedSegment]))
     }
+
+    @Test("Diarization failures describe the available recovery")
+    func diarizationRecoveryMessageIsActionable() {
+        let message = BurritoError.speakerDiarizationFailed(
+            details: "Speaker identification was already busy."
+        ).recoveryMessage
+
+        #expect(message.contains("edit speaker names manually"))
+        #expect(message.contains("Keep audio was enabled"))
+        #expect(!message.contains("retry identification from the note"))
+    }
 }
 
 @Suite("Command palette")
