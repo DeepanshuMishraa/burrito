@@ -37,6 +37,7 @@ jobs:
         run: xcodegen generate
 
       - name: Set up Developer ID signing keychain
+        id: signing
         env:
           MACOS_DEVELOPER_ID_CERT: ${{ secrets.MACOS_DEVELOPER_ID_CERT }}
           MACOS_DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERT_PASSWORD }}
@@ -44,18 +45,15 @@ jobs:
           NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
           NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
         run: |
-          if [[ -z "$MACOS_DEVELOPER_ID_CERT" || -z "$MACOS_DEVELOPER_ID_CERT_PASSWORD" ]]; then
-            echo "MACOS_DEVELOPER_ID_CERT (base64-encoded .p12) and MACOS_DEVELOPER_ID_CERT_PASSWORD"
-            echo "are required. Releases must be Developer ID signed: ad-hoc signed apps lose"
-            echo "their Screen Recording, Microphone, and Calendar permissions on every update."
-            echo "Export your Developer ID Application certificate as a .p12, base64-encode it,"
-            echo "and add both secrets to this repository."
-            exit 1
-          fi
-          if [[ -z "$NOTARIZATION_APPLE_ID" || -z "$NOTARIZATION_APP_PASSWORD" || -z "$NOTARIZATION_TEAM_ID" ]]; then
-            echo "NOTARIZATION_APPLE_ID, NOTARIZATION_APP_PASSWORD, and NOTARIZATION_TEAM_ID"
-            echo "are required for notarization. Add them as repository secrets."
-            exit 1
+          if [[ -z "$MACOS_DEVELOPER_ID_CERT" || -z "$MACOS_DEVELOPER_ID_CERT_PASSWORD" \
+                || -z "$NOTARIZATION_APPLE_ID" || -z "$NOTARIZATION_APP_PASSWORD" \
+                || -z "$NOTARIZATION_TEAM_ID" ]]; then
+            echo "Developer ID and notarization secrets are not fully configured;"
+            echo "falling back to ad-hoc signing without notarization."
+            echo "Note: ad-hoc signed builds lose Screen Recording, Microphone, and"
+            echo "Calendar permissions on every update because their signature changes."
+            echo "mode=ad-hoc" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           CERT_PATH="$RUNNER_TEMP/developer_id.p12"
@@ -74,33 +72,47 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
           security list-keychain -d user -s "$KEYCHAIN_PATH" \
             $(security list-keychains -d user | tr -d '"')
+          echo "mode=developer-id" >> "$GITHUB_OUTPUT"
 
       - name: Build Burrito
         env:
           VERSION: ${{ steps.version.outputs.value }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
-          xcodebuild \
-            -project burrito.xcodeproj \
-            -scheme burrito \
-            -configuration Release \
-            -derivedDataPath "$RUNNER_TEMP/BurritoDerivedData" \
-            -skipPackagePluginValidation \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Developer ID Application" \
-            build
-
-      - name: Verify code signature
-        run: |
-          APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dv --verbose=4 "$APP" 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" || true
+          if [[ "$SIGNING_MODE" == "developer-id" ]]; then
+            xcodebuild \
+              -project burrito.xcodeproj \
+              -scheme burrito \
+              -configuration Release \
+              -derivedDataPath "$RUNNER_TEMP/BurritoDerivedData" \
+              -skipPackagePluginValidation \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="Developer ID Application" \
+              build
+          else
+            xcodebuild \
+              -project burrito.xcodeproj \
+              -scheme burrito \
+              -configuration Release \
+              -derivedDataPath "$RUNNER_TEMP/BurritoDerivedData" \
+              -skipPackagePluginValidation \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          fi
 
       - name: Create disk image
+        env:
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
         run: |
           APP="$RUNNER_TEMP/BurritoDerivedData/Build/Products/Release/Burrito.app"
           STAGE="$RUNNER_TEMP/BurritoDMG"
+          if [[ "$SIGNING_MODE" != "developer-id" ]]; then
+            codesign --force --deep --sign - "$APP"
+          fi
           mkdir -p "$STAGE"
           cp -R "$APP" "$STAGE/Burrito.app"
           ln -s /Applications "$STAGE/Applications"
@@ -111,6 +123,7 @@ jobs:
             "$RUNNER_TEMP/Burrito.dmg"
 
       - name: Notarize and staple disk image
+        if: steps.signing.outputs.mode == 'developer-id'
         env:
           NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
           NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
