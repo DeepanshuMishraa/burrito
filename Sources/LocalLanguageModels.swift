@@ -415,7 +415,10 @@ enum LocalLanguageModelError: LocalizedError {
 
 actor LocalLanguageModelRuntime {
     static let shared = LocalLanguageModelRuntime()
-    static let contextSize = 16_384
+    // Keep prompt prefill bounded. Large Qwen prefill graphs can retain several
+    // gigabytes of Metal buffers even though the model itself is only 4-bit.
+    static let contextSize = 4_096
+    private static let prefillStepSize = 64
 
     private var loadedVariant: LocalLanguageModelVariant?
     private var container: ModelContainer?
@@ -462,7 +465,8 @@ actor LocalLanguageModelRuntime {
             topP: Float(request.topP ?? 1),
             topK: request.topK ?? 0,
             presencePenalty: request.presencePenalty.map(Float.init),
-            frequencyPenalty: request.frequencyPenalty.map(Float.init)
+            frequencyPenalty: request.frequencyPenalty.map(Float.init),
+            prefillStepSize: Self.prefillStepSize
         )
         return try await container.generate(input: input, parameters: parameters)
     }

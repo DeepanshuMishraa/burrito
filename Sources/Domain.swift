@@ -499,7 +499,7 @@ enum BurritoError: Error, Equatable, Sendable {
         case .transcriptionFailed(let details):
             "Transcription failed: \(details). The audio is preserved so you can retry."
         case .speakerDiarizationFailed(let details):
-            "Speaker identification did not finish: \(details). The transcript is preserved with audio-source labels; retry after checking your connection or edit speaker names manually."
+            "Speaker identification did not finish: \(details). The transcript is preserved with audio-source labels; edit speaker names manually. Original audio is available only when Keep audio was enabled."
         case .generationFailed(let details):
             "Note generation failed: \(details). The transcript and retained audio remain available; choose Generate Again."
         case .storageFailed(let details):
@@ -1430,6 +1430,35 @@ struct GeneratedNote: Equatable, Sendable {
             }
         }
         return nil
+    }
+
+    static func isGrounded(_ note: GeneratedNote, in segments: [TranscriptSegment]) -> Bool {
+        let sourceIDs = Set(segments.map(\.id))
+        let citationPattern = #"burrito://transcript/([0-9A-Fa-f-]{36})"#
+        guard let expression = try? NSRegularExpression(pattern: citationPattern) else {
+            return false
+        }
+        let range = NSRange(note.markdown.startIndex..<note.markdown.endIndex, in: note.markdown)
+        let citations = expression.matches(in: note.markdown, range: range).compactMap { match -> UUID? in
+            guard let valueRange = Range(match.range(at: 1), in: note.markdown) else { return nil }
+            return UUID(uuidString: String(note.markdown[valueRange]))
+        }
+        guard !citations.isEmpty, citations.allSatisfy(sourceIDs.contains) else { return false }
+
+        let sourceTerms = Set(
+            segments
+                .filter { citations.contains($0.id) }
+                .flatMap { $0.text.lowercased().split { !$0.isLetter && !$0.isNumber } }
+                .map(String.init)
+                .filter { $0.count > 2 }
+        )
+        let noteTerms = Set(
+            note.markdown.lowercased().split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 2 }
+        )
+        let minimumOverlap = min(3, max(1, sourceTerms.count))
+        return sourceTerms.intersection(noteTerms).count >= minimumOverlap
     }
 }
 

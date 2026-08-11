@@ -14,21 +14,16 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
     private let worker: Task<Void, Never>
 
     init() {
-        let pair = AsyncStream<Request>.makeStream()
+        let pair = AsyncStream<Request>.makeStream(bufferingPolicy: .bufferingOldest(1))
         requestContinuation = pair.continuation
-        // FluidAudio's manager is not Sendable. One worker owns it for its full
-        // lifetime, serializing requests while retaining the prepared models.
+        // FluidAudio's manager is not Sendable. Keep it scoped to one request so
+        // Core ML diarizer models do not remain resident after processing.
         worker = Task.detached(priority: .userInitiated) {
-            let manager = OfflineDiarizerManager()
-            var isPrepared = false
-
             for await request in pair.stream {
                 let result: AssignmentResult
                 do {
-                    if !isPrepared {
-                        try await manager.prepareModels()
-                        isPrepared = true
-                    }
+                    let manager = OfflineDiarizerManager()
+                    try await manager.prepareModels()
                     let diarization = try await manager.process(request.audioURL)
                     let turns = diarization.segments.map {
                         SpeakerTurn(
@@ -67,12 +62,31 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
                 segments: segments,
                 continuation: continuation
             )
-            if case .terminated = requestContinuation.yield(request) {
+            switch requestContinuation.yield(request) {
+            case .enqueued:
+                break
+            case .dropped(let dropped):
+                dropped.continuation.resume(
+                    returning: .failure(
+                        .speakerDiarizationFailed(
+                            details: "Speaker identification was already busy."
+                        )
+                    )
+                )
+            case .terminated:
                 continuation.resume(
                     returning: .failure(
                         .speakerDiarizationFailed(
                             details: "The local diarization worker is no longer available. "
-                                + "Restart Burrito and retry speaker identification."
+                                + "Restart Burrito before future meeting recordings."
+                        )
+                    )
+                )
+            @unknown default:
+                continuation.resume(
+                    returning: .failure(
+                        .speakerDiarizationFailed(
+                            details: "Speaker identification could not be queued."
                         )
                     )
                 )

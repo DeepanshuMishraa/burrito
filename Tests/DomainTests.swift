@@ -2640,6 +2640,53 @@ struct TemplateTests {
         )
         #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
     }
+
+    @Test("Generated notes require valid transcript evidence and source overlap")
+    func validatesGeneratedNoteGrounding() {
+        let segment = TranscriptSegment(
+            id: UUID(),
+            source: .system,
+            startTime: 0,
+            duration: 4,
+            text: "The team compared database isolation levels and read committed behavior."
+        )
+        let grounded = GeneratedNote(
+            title: "Database Isolation",
+            markdown: "The team compared database isolation levels and read committed behavior. "
+                + "[source](burrito://transcript/\(segment.id.uuidString))"
+        )
+        let ungrounded = GeneratedNote(
+            title: "The Present Moment",
+            markdown: "The self is present only in the present moment."
+        )
+
+        #expect(GeneratedNote.isGrounded(grounded, in: [segment]))
+        #expect(!GeneratedNote.isGrounded(ungrounded, in: [segment]))
+
+        let unrelatedSegment = TranscriptSegment(
+            source: .microphone,
+            startTime: 5,
+            duration: 4,
+            text: "The self is present only in the present moment."
+        )
+        let citesFirstUsesSecond = GeneratedNote(
+            title: "The Present Moment",
+            markdown: "The self is present only in the present moment. "
+                + "[source](burrito://transcript/\(segment.id.uuidString))"
+        )
+        #expect(!GeneratedNote.isGrounded(citesFirstUsesSecond, in: [segment, unrelatedSegment]))
+    }
+
+    @Test("Diarization failures describe the available recovery")
+    func diarizationRecoveryMessageIsActionable() {
+        let message = BurritoError.speakerDiarizationFailed(
+            details: "Speaker identification was already busy."
+        ).recoveryMessage
+
+        #expect(message.contains("edit speaker names manually"))
+        #expect(message.contains("Keep audio was enabled"))
+        #expect(!message.contains("retry identification from the note"))
+    }
 }
 
 @Suite("Command palette")

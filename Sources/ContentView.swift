@@ -24,6 +24,28 @@ final class RecordingDestinationInbox {
     }
 }
 
+enum StudyModeLaunchSource: Equatable, Sendable {
+    case app
+    case menuBar
+}
+
+@MainActor
+@Observable
+final class StudyModeInbox {
+    static let shared = StudyModeInbox()
+
+    private(set) var pendingSource: StudyModeLaunchSource?
+
+    func submit(source: StudyModeLaunchSource) {
+        pendingSource = source
+    }
+
+    func consume() -> StudyModeLaunchSource? {
+        defer { pendingSource = nil }
+        return pendingSource
+    }
+}
+
 @MainActor
 @Observable
 final class NoteSelectionInbox {
@@ -112,6 +134,7 @@ struct ContentView: View {
     @State private var notificationAccess = NotificationAccess.shared
     @State private var meetingActionInbox = MeetingActionInbox.shared
     @State private var recordingDestinationInbox = RecordingDestinationInbox.shared
+    @State private var studyModeInbox = StudyModeInbox.shared
     @State private var noteSelectionInbox = NoteSelectionInbox.shared
     @State private var updater = BurritoUpdateManager.shared
     @State private var modelStore = ParakeetModelStore.shared
@@ -128,6 +151,9 @@ struct ContentView: View {
     @State private var recordingDestination: RecordingDestination?
     @State private var showingNewFolder = false
     @State private var newFolderName = ""
+    @State private var showingStudyModePrompt = false
+    @State private var studyModeName = ""
+    @State private var studyModeLaunchSource: StudyModeLaunchSource = .app
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -331,6 +357,17 @@ struct ContentView: View {
                         create: createFolder
                     )
                 }
+            } else if showingStudyModePrompt {
+                BurritoModalBackdrop {
+                    StudyModeNameDialog(
+                        name: $studyModeName,
+                        cancel: {
+                            studyModeName = ""
+                            showingStudyModePrompt = false
+                        },
+                        start: startStudyMode
+                    )
+                }
             } else if confirmingEmptyTrash {
                 BurritoModalBackdrop {
                     BurritoMessageDialog(
@@ -394,6 +431,7 @@ struct ContentView: View {
             synchronizeMeetingReminders()
             handlePendingMeetingAction()
             handlePendingRecordingDestination()
+            handlePendingStudyMode()
             handlePendingNoteSelection()
         }
         .task(id: supermemorySyncToken) {
@@ -428,6 +466,9 @@ struct ContentView: View {
         }
         .onChange(of: recordingDestinationInbox.pending) {
             handlePendingRecordingDestination()
+        }
+        .onChange(of: studyModeInbox.pendingSource) {
+            handlePendingStudyMode()
         }
         .onChange(of: noteSelectionInbox.pendingNoteID) {
             handlePendingNoteSelection()
@@ -748,6 +789,13 @@ struct ContentView: View {
                     }
                     .buttonStyle(HomeToolbarButtonStyle())
                 }
+
+                Button {
+                    presentStudyModePrompt(source: .app)
+                } label: {
+                    BurritoLabel("Study mode", systemImage: "book.fill")
+                }
+                .buttonStyle(HomeToolbarButtonStyle())
 
                 Button {
                     recordingDestination = .newNote
@@ -1077,6 +1125,49 @@ struct ContentView: View {
     private func handlePendingRecordingDestination() {
         guard let destination = recordingDestinationInbox.consume() else { return }
         recordingDestination = destination
+    }
+
+    private func presentStudyModePrompt(source: StudyModeLaunchSource) {
+        studyModeLaunchSource = source
+        studyModeName = ""
+        showingStudyModePrompt = true
+    }
+
+    private func handlePendingStudyMode() {
+        guard let source = studyModeInbox.consume() else { return }
+        presentStudyModePrompt(source: source)
+    }
+
+    private func startStudyMode() {
+        let name = studyModeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let template = templates.first(where: {
+                  $0.builtInID == BuiltInTemplate.studyNotes.rawValue
+              }) ?? templates.first
+        else {
+            return
+        }
+
+        let options = RecordingOptions(
+            template: template.snapshot,
+            languageIdentifier: defaultLanguage,
+            mode: .listenAlong,
+            retainsAudio: defaultRetainsAudio
+        )
+        let launchSource = studyModeLaunchSource
+        showingStudyModePrompt = false
+        studyModeName = ""
+        Task {
+            let started = await coordinator.startStudyMode(
+                name: name,
+                options: options,
+                context: modelContext
+            )
+            selectedNoteID = coordinator.activeNoteID
+            if started, launchSource == .menuBar {
+                NSApp.keyWindow?.close()
+            }
+        }
     }
 
     private func handlePendingNoteSelection() {
@@ -3279,6 +3370,45 @@ private struct NewFolderDialog: View {
     }
 }
 
+private struct StudyModeNameDialog: View {
+    @Binding var name: String
+    let cancel: () -> Void
+    let start: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Start study mode")
+                    .font(.burritoDisplay(size: 28, weight: .init(400)))
+                Text("Name this session. Each 10-minute note will be added to its folder.")
+                    .foregroundStyle(.secondary)
+            }
+            TextField("Database isolation", text: $name)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 13)
+                .frame(height: 42)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .burritoElevation(.control)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(BurritoTheme.softBorder)
+                }
+                .onSubmit(start)
+            HStack {
+                Button("Cancel", action: cancel)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                Spacer()
+                Button("Start study mode", action: start)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: true))
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(26)
+        .frame(width: 440)
+    }
+}
+
 private struct BurritoMessageDialog: View {
     let title: String
     let message: String
@@ -3619,7 +3749,6 @@ private struct UpcomingEventRow: View {
 
 private struct NoteIconBadge: View {
     let note: Note
-    let isHovered: Bool
 
     private var iconName: String {
         if note.processingStage != nil {
@@ -3635,14 +3764,14 @@ private struct NoteIconBadge: View {
         if note.processingStage != nil || note.isFavorite {
             return BurritoTheme.accentSoft
         }
-        return isHovered ? BurritoTheme.controlFill : BurritoTheme.raised
+        return BurritoTheme.raised
     }
 
     private var iconColor: Color {
         if note.processingStage != nil || note.isFavorite {
             return BurritoTheme.accent
         }
-        return isHovered ? .primary : .secondary
+        return .secondary
     }
 
     var body: some View {
@@ -3668,11 +3797,10 @@ private struct NoteIconBadge: View {
 private struct TimelineNoteRow: View {
     let note: Note
     let isIndexed: Bool
-    var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
-            NoteIconBadge(note: note, isHovered: isHovered)
+            NoteIconBadge(note: note)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -3794,7 +3922,6 @@ private struct TimelineNoteItem: View {
     let isIndexed: Bool
     let open: () -> Void
 
-    @State private var isHovered = false
     @State private var showingActions = false
     @State private var showingFolders = false
 
@@ -3804,7 +3931,7 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.alignment)
                 open()
             } label: {
-                 TimelineNoteRow(note: note, isIndexed: isIndexed, isHovered: isHovered)
+                TimelineNoteRow(note: note, isIndexed: isIndexed)
             }
             .buttonStyle(.plain)
 
@@ -3813,7 +3940,7 @@ private struct TimelineNoteItem: View {
                 showingActions.toggle()
             } label: {
                 BurritoIcon(name: "ellipsis", size: 13)
-                    .foregroundStyle(isHovered || showingActions ? .primary : .tertiary)
+                    .foregroundStyle(showingActions ? .primary : .tertiary)
                     .frame(width: 30, height: 30)
                     .background(
                         showingActions ? BurritoTheme.controlFill : Color.clear,
@@ -3822,7 +3949,7 @@ private struct TimelineNoteItem: View {
                     .burritoElevation(.control, isActive: showingActions)
             }
             .buttonStyle(.plain)
-            .opacity(isHovered || showingActions ? 1 : 0.3)
+            .opacity(showingActions ? 1 : 0.55)
             .help("Note actions")
             .accessibilityLabel("Actions for \(note.title)")
             .popover(
@@ -3836,22 +3963,17 @@ private struct TimelineNoteItem: View {
         .padding(.trailing, 6)
         .padding(.vertical, 2)
         .background(
-            isHovered || showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
+            showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
-        .burritoElevation(.surface, isActive: isHovered || showingActions)
+        .burritoElevation(.surface, isActive: showingActions)
         .overlay {
-            if isHovered || showingActions {
+            if showingActions {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         }
         .contentShape(Rectangle())
-        .onHover { hover in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = hover
-            }
-        }
         .onChange(of: showingActions) { _, isPresented in
             if !isPresented {
                 showingFolders = false

@@ -290,6 +290,12 @@ private struct BurritoMenuBarMenu: View {
             }
 
             Menu("Start Recording") {
+                Button("Study Mode") {
+                    openStudyMode()
+                }
+
+                Divider()
+
                 Button("Summary Notes") {
                     startQuickRecording(mode: .listenAlong, template: .summary)
                 }
@@ -476,6 +482,11 @@ private struct BurritoMenuBarMenu: View {
 
     private func openRecordingSetup() {
         RecordingDestinationInbox.shared.submit(.newNote)
+        openMainWindow()
+    }
+
+    private func openStudyMode() {
+        StudyModeInbox.shared.submit(source: .menuBar)
         openMainWindow()
     }
 
