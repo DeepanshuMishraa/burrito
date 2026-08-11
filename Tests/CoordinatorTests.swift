@@ -686,12 +686,13 @@ struct CoordinatorTests {
             retainsAudio: false
         )
 
-        await coordinator.startStudyMode(
+        let started = await coordinator.startStudyMode(
             name: "Database isolation",
             options: options,
             context: context
         )
 
+        #expect(started)
         let folder = try #require(context.fetch(FetchDescriptor<Folder>()).first)
         let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
         #expect(folder.name == "Database isolation")

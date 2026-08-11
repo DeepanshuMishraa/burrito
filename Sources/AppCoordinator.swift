@@ -34,8 +34,10 @@ final class AppCoordinator {
     private var accumulatedPausedDuration: TimeInterval = 0
     private var studySession: StudySession?
     private var studyRotationInFlight = false
+    private var studyRotationTask: Task<Void, Never>?
 
     private struct StudySession {
+        let id: UUID
         let folderID: UUID
         let options: RecordingOptions
     }
@@ -224,15 +226,15 @@ final class AppCoordinator {
         name: String,
         options: RecordingOptions,
         context: ModelContext
-    ) async {
+    ) async -> Bool {
         guard captureState == .idle else {
             lastError = .recordingAlreadyInProgress
-            return
+            return false
         }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             lastError = .storageFailed(details: "A study session needs a name before recording can start.")
-            return
+            return false
         }
 
         let folder = Folder(
@@ -241,19 +243,22 @@ final class AppCoordinator {
         )
         context.insert(folder)
         try? context.save()
-        studySession = StudySession(folderID: folder.id, options: options)
+        studySession = StudySession(id: UUID(), folderID: folder.id, options: options)
         studyRotationInFlight = false
         await start(options: options, context: context)
-        if !captureState.isRecording {
+        let started = captureState.isRecording && activeNoteID != nil
+        if !started {
             context.delete(folder)
             try? context.save()
             studySession = nil
         }
+        return started
     }
 
     func start(
         options: RecordingOptions,
         destination: RecordingDestination = .newNote,
+        studySessionID: UUID? = nil,
         context: ModelContext
     ) async {
         guard captureState == .idle else {
@@ -352,12 +357,34 @@ final class AppCoordinator {
             return
         }
 
+        guard !Task.isCancelled,
+              studySessionID == nil || studySession?.id == studySessionID
+        else {
+            context.delete(note)
+            _ = fileStore.removeAudio(for: files)
+            try? context.save()
+            finishCaptureSession()
+            lastError = nil
+            return
+        }
+
         switch await capture.start(
             files: files,
             mode: recordingMode,
             languageIdentifier: languageIdentifier
         ) {
         case .success:
+            guard !Task.isCancelled,
+                  studySessionID == nil || studySession?.id == studySessionID
+            else {
+                _ = await capture.stop()
+                context.delete(note)
+                _ = fileStore.removeAudio(for: files)
+                try? context.save()
+                finishCaptureSession()
+                lastError = nil
+                return
+            }
             activeFiles = files
             activeNoteID = note.id
             appendsToExistingNote = existingNote != nil
@@ -412,6 +439,9 @@ final class AppCoordinator {
     func stop(context: ModelContext) async {
         studySession = nil
         studyRotationInFlight = false
+        studyRotationTask?.cancel()
+        studyRotationTask = nil
+        guard captureState.isRecording else { return }
         await stopCapture(context: context, continueStudy: false)
     }
 
@@ -444,22 +474,37 @@ final class AppCoordinator {
         try? context.save()
 
         if case .failure(let error) = await capture.stop() {
+            if continueStudy {
+                studySession = nil
+                studyRotationInFlight = false
+                studyRotationTask = nil
+            }
             fail(note: note, error: error, context: context)
             return
         }
         liveTranscript = capture.liveTranscript
         feedback.recordingStopped()
-        let nextStudySession = continueStudy ? studySession : nil
+        let completedAudioWasMeaningful = capture.hasMeaningfulAudio
+        let nextStudySession = continueStudy && !Task.isCancelled ? studySession : nil
         // The capture device is released; processing below runs in the
         // background so a new recording can start immediately.
         finishCaptureSession()
 
         if let nextStudySession {
             studyRotationInFlight = false
-            await start(options: nextStudySession.options, context: context)
+            await start(
+                options: nextStudySession.options,
+                studySessionID: nextStudySession.id,
+                context: context
+            )
+            studyRotationTask = nil
+            if !(captureState.isRecording && studySession?.id == nextStudySession.id) {
+                studySession = nil
+                studyRotationInFlight = false
+            }
         }
 
-        guard capture.hasMeaningfulAudio else {
+        guard completedAudioWasMeaningful else {
             finishSilentRecording(
                 note: note,
                 files: files,
@@ -961,7 +1006,7 @@ final class AppCoordinator {
                    !studyRotationInFlight,
                    elapsed >= Self.studySegmentLimit {
                     studyRotationInFlight = true
-                    Task { [weak self] in
+                    studyRotationTask = Task { [weak self] in
                         guard let self else { return }
                         await stopCapture(context: context, continueStudy: true)
                     }

@@ -1158,13 +1158,13 @@ struct ContentView: View {
         showingStudyModePrompt = false
         studyModeName = ""
         Task {
-            await coordinator.startStudyMode(
+            let started = await coordinator.startStudyMode(
                 name: name,
                 options: options,
                 context: modelContext
             )
             selectedNoteID = coordinator.activeNoteID
-            if launchSource == .menuBar {
+            if started, launchSource == .menuBar {
                 NSApp.keyWindow?.close()
             }
         }
