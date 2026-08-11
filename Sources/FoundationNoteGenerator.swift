@@ -1369,6 +1369,11 @@ struct FoundationNoteGenerator: NoteGenerating {
         if case .failure(let error) = available { return .failure(error) }
 
         do {
+            guard !segments.isEmpty else {
+                throw BurritoError.generationFailed(
+                    details: "The transcript is empty, so Burrito did not write an ungrounded note."
+                )
+            }
             let finalInstructions = GenerationPrompt.finalInstructions(template: template)
             let finalSourceOverhead = try await tokenCount(
                 GenerationPrompt.finalSource(
@@ -1390,14 +1395,19 @@ struct FoundationNoteGenerator: NoteGenerating {
                 additionalReservedTokens:
                     TokenBudget.generatedNoteSchema + finalSourceOverhead
             )
-            let generated = try await adapter.completeNote(
+            guard !condensed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw BurritoError.generationFailed(
+                    details: "The transcript digest was empty, so Burrito did not write an ungrounded note."
+                )
+            }
+            let generated = try await completeGroundedNote(
                 instructions: finalInstructions,
                 prompt: GenerationPrompt.finalSource(
                     digest: condensed,
                     userNotes: userNotes,
                     meetingContext: meetingContext
                 ),
-                maximumResponseTokens: TokenBudget.finalOutput
+                segments: segments
             )
             guard !generated.title.isEmpty, !generated.markdown.isEmpty else {
                 return .failure(
@@ -1475,6 +1485,11 @@ struct FoundationNoteGenerator: NoteGenerating {
             reservedInputTokens: digestOverhead + TokenBudget.safetyMargin
         )
         let chunks = try await chunker.chunks(for: segments)
+        guard !chunks.isEmpty else {
+            throw BurritoError.generationFailed(
+                details: "The transcript could not be split into generation-safe chunks."
+            )
+        }
         var digests: [String] = []
 
         for chunk in chunks {
@@ -1484,6 +1499,11 @@ struct FoundationNoteGenerator: NoteGenerating {
                 maximumResponseTokens: TokenBudget.digestOutput
             )
             digests.append(digest)
+        }
+        guard digests.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw BurritoError.generationFailed(
+                details: "The local model returned an empty transcript digest."
+            )
         }
 
         let finalInputLimit = try await inputLimit(
@@ -1500,6 +1520,26 @@ struct FoundationNoteGenerator: NoteGenerating {
             finalInputLimit: finalInputLimit,
             condenseInputLimit: condenseInputLimit
         )
+    }
+
+    private func completeGroundedNote(
+        instructions: String,
+        prompt: String,
+        segments: [TranscriptSegment]
+    ) async throws -> GeneratedNote {
+        var lastError = "The local model returned notes without transcript evidence."
+        for _ in 0..<2 {
+            let generated = try await adapter.completeNote(
+                instructions: instructions,
+                prompt: prompt,
+                maximumResponseTokens: TokenBudget.finalOutput
+            )
+            if GeneratedNote.isGrounded(generated, in: segments) {
+                return generated
+            }
+            lastError = "The local model returned notes that could not be grounded in the transcript."
+        }
+        throw BurritoError.generationFailed(details: lastError)
     }
 
     private func recursivelyCondense(

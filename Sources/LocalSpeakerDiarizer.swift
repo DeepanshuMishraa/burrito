@@ -16,19 +16,14 @@ final class LocalSpeakerDiarizer: SpeakerDiarizing {
     init() {
         let pair = AsyncStream<Request>.makeStream()
         requestContinuation = pair.continuation
-        // FluidAudio's manager is not Sendable. One worker owns it for its full
-        // lifetime, serializing requests while retaining the prepared models.
+        // FluidAudio's manager is not Sendable. Keep it scoped to one request so
+        // Core ML diarizer models do not remain resident after processing.
         worker = Task.detached(priority: .userInitiated) {
-            let manager = OfflineDiarizerManager()
-            var isPrepared = false
-
             for await request in pair.stream {
                 let result: AssignmentResult
                 do {
-                    if !isPrepared {
-                        try await manager.prepareModels()
-                        isPrepared = true
-                    }
+                    let manager = OfflineDiarizerManager()
+                    try await manager.prepareModels()
                     let diarization = try await manager.process(request.audioURL)
                     let turns = diarization.segments.map {
                         SpeakerTurn(

@@ -2640,6 +2640,29 @@ struct TemplateTests {
         )
         #expect(GeneratedNote.parseLabeledResponse("I cannot help with that.") == nil)
     }
+
+    @Test("Generated notes require valid transcript evidence and source overlap")
+    func validatesGeneratedNoteGrounding() {
+        let segment = TranscriptSegment(
+            id: UUID(),
+            source: .system,
+            startTime: 0,
+            duration: 4,
+            text: "The team compared database isolation levels and read committed behavior."
+        )
+        let grounded = GeneratedNote(
+            title: "Database Isolation",
+            markdown: "The team compared database isolation levels and read committed behavior. "
+                + "[source](burrito://transcript/\(segment.id.uuidString))"
+        )
+        let ungrounded = GeneratedNote(
+            title: "The Present Moment",
+            markdown: "The self is present only in the present moment."
+        )
+
+        #expect(GeneratedNote.isGrounded(grounded, in: [segment]))
+        #expect(!GeneratedNote.isGrounded(ungrounded, in: [segment]))
+    }
 }
 
 @Suite("Command palette")

@@ -1431,6 +1431,33 @@ struct GeneratedNote: Equatable, Sendable {
         }
         return nil
     }
+
+    static func isGrounded(_ note: GeneratedNote, in segments: [TranscriptSegment]) -> Bool {
+        let sourceIDs = Set(segments.map(\.id))
+        let citationPattern = #"burrito://transcript/([0-9A-Fa-f-]{36})"#
+        guard let expression = try? NSRegularExpression(pattern: citationPattern) else {
+            return false
+        }
+        let range = NSRange(note.markdown.startIndex..<note.markdown.endIndex, in: note.markdown)
+        let citations = expression.matches(in: note.markdown, range: range).compactMap { match -> UUID? in
+            guard let valueRange = Range(match.range(at: 1), in: note.markdown) else { return nil }
+            return UUID(uuidString: String(note.markdown[valueRange]))
+        }
+        guard !citations.isEmpty, citations.allSatisfy(sourceIDs.contains) else { return false }
+
+        let sourceTerms = Set(
+            segments.flatMap { $0.text.lowercased().split { !$0.isLetter && !$0.isNumber } }
+                .map(String.init)
+                .filter { $0.count > 2 }
+        )
+        let noteTerms = Set(
+            note.markdown.lowercased().split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 2 }
+        )
+        let minimumOverlap = min(3, max(1, sourceTerms.count))
+        return sourceTerms.intersection(noteTerms).count >= minimumOverlap
+    }
 }
 
 struct PromptChunk: Equatable, Sendable {

@@ -3619,7 +3619,6 @@ private struct UpcomingEventRow: View {
 
 private struct NoteIconBadge: View {
     let note: Note
-    let isHovered: Bool
 
     private var iconName: String {
         if note.processingStage != nil {
@@ -3635,14 +3634,14 @@ private struct NoteIconBadge: View {
         if note.processingStage != nil || note.isFavorite {
             return BurritoTheme.accentSoft
         }
-        return isHovered ? BurritoTheme.controlFill : BurritoTheme.raised
+        return BurritoTheme.raised
     }
 
     private var iconColor: Color {
         if note.processingStage != nil || note.isFavorite {
             return BurritoTheme.accent
         }
-        return isHovered ? .primary : .secondary
+        return .secondary
     }
 
     var body: some View {
@@ -3668,11 +3667,10 @@ private struct NoteIconBadge: View {
 private struct TimelineNoteRow: View {
     let note: Note
     let isIndexed: Bool
-    var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
-            NoteIconBadge(note: note, isHovered: isHovered)
+            NoteIconBadge(note: note)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -3794,7 +3792,6 @@ private struct TimelineNoteItem: View {
     let isIndexed: Bool
     let open: () -> Void
 
-    @State private var isHovered = false
     @State private var showingActions = false
     @State private var showingFolders = false
 
@@ -3804,7 +3801,7 @@ private struct TimelineNoteItem: View {
                 BurritoHaptics.trigger(.alignment)
                 open()
             } label: {
-                 TimelineNoteRow(note: note, isIndexed: isIndexed, isHovered: isHovered)
+                TimelineNoteRow(note: note, isIndexed: isIndexed)
             }
             .buttonStyle(.plain)
 
@@ -3813,7 +3810,7 @@ private struct TimelineNoteItem: View {
                 showingActions.toggle()
             } label: {
                 BurritoIcon(name: "ellipsis", size: 13)
-                    .foregroundStyle(isHovered || showingActions ? .primary : .tertiary)
+                    .foregroundStyle(showingActions ? .primary : .tertiary)
                     .frame(width: 30, height: 30)
                     .background(
                         showingActions ? BurritoTheme.controlFill : Color.clear,
@@ -3822,7 +3819,7 @@ private struct TimelineNoteItem: View {
                     .burritoElevation(.control, isActive: showingActions)
             }
             .buttonStyle(.plain)
-            .opacity(isHovered || showingActions ? 1 : 0.3)
+            .opacity(showingActions ? 1 : 0.55)
             .help("Note actions")
             .accessibilityLabel("Actions for \(note.title)")
             .popover(
@@ -3836,22 +3833,17 @@ private struct TimelineNoteItem: View {
         .padding(.trailing, 6)
         .padding(.vertical, 2)
         .background(
-            isHovered || showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
+            showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
-        .burritoElevation(.surface, isActive: isHovered || showingActions)
+        .burritoElevation(.surface, isActive: showingActions)
         .overlay {
-            if isHovered || showingActions {
+            if showingActions {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(BurritoTheme.softBorder)
             }
         }
         .contentShape(Rectangle())
-        .onHover { hover in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = hover
-            }
-        }
         .onChange(of: showingActions) { _, isPresented in
             if !isPresented {
                 showingFolders = false
