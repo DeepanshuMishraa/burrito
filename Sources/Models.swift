@@ -180,7 +180,9 @@ final class Note {
 
     var exportedMarkdown: String {
         let human = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let generated = markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generated = GeneratedNote
+            .strippedSourceArtifacts(from: markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !human.isEmpty else { return generated }
         guard !generated.isEmpty else {
             return "## Your notes\n\n\(human)"

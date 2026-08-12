@@ -1460,6 +1460,37 @@ struct GeneratedNote: Equatable, Sendable {
         let minimumOverlap = min(3, max(1, sourceTerms.count))
         return sourceTerms.intersection(noteTerms).count >= minimumOverlap
     }
+
+    /// Removes the internal citation plumbing from a generated note:
+    /// `[source:<UUID>]` markers and `[source](burrito://transcript/<UUID>)`
+    /// evidence links. They exist to keep generation grounded in the
+    /// transcript, but they are not note content and must never be visible.
+    static func strippedSourceArtifacts(from markdown: String) -> String {
+        let patterns = [
+            #"\[source:[0-9A-Fa-f-]{36}\]"#,
+            #"\[source\]\(burrito://transcript/[0-9A-Fa-f-]{36}\)"#,
+        ]
+        var value = markdown
+        for pattern in patterns {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(value.startIndex..<value.endIndex, in: value)
+            value = expression.stringByReplacingMatches(
+                in: value,
+                range: range,
+                withTemplate: ""
+            )
+        }
+        // Clean the gaps the removals leave behind.
+        value = value
+            .components(separatedBy: .newlines)
+            .map { line in
+                line
+                    .replacingOccurrences(of: "  ", with: " ")
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .joined(separator: "\n")
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 struct PromptChunk: Equatable, Sendable {

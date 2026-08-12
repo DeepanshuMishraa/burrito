@@ -51,6 +51,8 @@ enum GenerationPrompt {
         - End every factual paragraph, bullet, decision, and action with at least one clickable
           evidence link in the exact form `[source](burrito://transcript/<UUID>)`, using a
           `[source:<UUID>]` marker supplied by the transcript digest.
+        - Never write the `[source:<UUID>]` marker text itself into the notes; use markers only
+          inside the evidence links above.
         - Do not invent, alter, or omit the UUID inside an evidence link.
         - Human-note-only guidance may remain uncited, but never present it as transcript-confirmed.
 
@@ -1535,7 +1537,14 @@ struct FoundationNoteGenerator: NoteGenerating {
                 maximumResponseTokens: TokenBudget.finalOutput
             )
             if GeneratedNote.isGrounded(generated, in: segments) {
-                return generated
+                // Citation plumbing validated for grounding, then stripped:
+                // it must never appear in the saved note.
+                return GeneratedNote(
+                    title: generated.title,
+                    markdown: GeneratedNote.strippedSourceArtifacts(
+                        from: generated.markdown
+                    )
+                )
             }
             lastError = "The local model returned notes that could not be grounded in the transcript."
         }

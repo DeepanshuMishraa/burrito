@@ -155,6 +155,9 @@ struct ContentView: View {
     @State private var studyModeName = ""
     @State private var studyModeSelectedFolderID: UUID?
     @State private var studyModeLaunchSource: StudyModeLaunchSource = .app
+    @State private var toast: BurritoToast?
+    @State private var toastDismissTask: Task<Void, Never>?
+    @State private var pendingRegenerationNote: Note?
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -502,6 +505,89 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .burritoKeepRecording)) { _ in
             coordinator.keepRecording()
         }
+        .overlay(alignment: .bottom) {
+            toastOverlay
+        }
+        .confirmationDialog(
+            "Replace your edited notes?",
+            isPresented: regenerationConfirmationBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Replace and generate", role: .destructive) {
+                confirmRegeneration()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRegenerationNote = nil
+            }
+        } message: {
+            Text("Burrito will generate a fresh version of the notes and overwrite your edits.")
+        }
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let toast {
+            BurritoToastView(toast: toast)
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private var regenerationConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { pendingRegenerationNote != nil },
+            set: { if !$0 { pendingRegenerationNote = nil } }
+        )
+    }
+
+    private func confirmRegeneration() {
+        if let note = pendingRegenerationNote {
+            regenerateNoteInBackground(note)
+        }
+        pendingRegenerationNote = nil
+    }
+
+    private func showToast(_ message: String, isError: Bool = false) {
+        toastDismissTask?.cancel()
+        withAnimation(.burritoSpring) {
+            toast = BurritoToast(message: message, isError: isError)
+        }
+        toastDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.burritoSpring) {
+                    toast = nil
+                }
+            }
+        }
+    }
+
+    /// Regenerates a note in the background from the notes list: no modal,
+    /// no navigation — just a toast while the model works.
+    private func regenerateNoteInBackground(_ note: Note) {
+        guard note.processingStage == nil,
+              note.lifecycle != .recording
+        else {
+            showToast("Notes are already being generated.", isError: true)
+            return
+        }
+        if note.userEditedNotes {
+            pendingRegenerationNote = note
+            return
+        }
+        showToast("Generating notes in the background…")
+        Task {
+            await coordinator.generate(note: note, context: modelContext)
+            if note.lifecycle == .ready {
+                showToast("Notes ready for “\(note.title)”")
+            } else {
+                showToast(
+                    note.lastErrorMessage ?? "Note generation failed. Try again.",
+                    isError: true
+                )
+            }
+        }
     }
 
     private func finalTranscriptionEngine(for languageIdentifier: String) -> String {
@@ -834,10 +920,12 @@ struct ContentView: View {
                         isIndexed: supermemoryEnabled
                             && supermemoryIndexingEnabled
                             && SupermemoryConfiguration.supportsSelectedModel
-                            && supermemoryIndexProgress[note.id]?.state == .live
-                    ) {
-                        selectedNoteID = note.id
-                    }
+                            && supermemoryIndexProgress[note.id]?.state == .live,
+                        open: {
+                            selectedNoteID = note.id
+                        },
+                        requestRegeneration: regenerateNoteInBackground
+                    )
                     .draggable(note.id.uuidString)
                     .contextMenu {
                         noteContextMenu(note)
@@ -864,6 +952,10 @@ struct ContentView: View {
             Button(note.isFavorite ? "Remove from Favorites" : "Favorite") {
                 note.isFavorite.toggle()
             }
+            Button("Generate Again") {
+                regenerateNoteInBackground(note)
+            }
+            .disabled(note.processingStage != nil || note.lifecycle == .recording)
             Button("Move to Trash", role: .destructive) {
                 note.deletedAt = .now
             }
@@ -3220,6 +3312,7 @@ private struct BurritoPopoverRow: View {
     let systemImage: String
     var isSelected = false
     var tint: Color? = nil
+    var isDisabled = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -3231,10 +3324,12 @@ private struct BurritoPopoverRow: View {
                 systemImage: systemImage,
                 isSelected: isSelected,
                 isHovered: isHovered,
-                tint: tint
+                tint: tint,
+                isDisabled: isDisabled
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .onHover { isHovered = $0 }
     }
 }
@@ -3245,6 +3340,7 @@ private struct BurritoPopoverRowLabel: View {
     var isSelected = false
     var isHovered = false
     var tint: Color? = nil
+    var isDisabled = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -3263,6 +3359,7 @@ private struct BurritoPopoverRowLabel: View {
         .padding(.horizontal, 9)
         .frame(height: 32)
         .contentShape(Rectangle())
+        .opacity(isDisabled ? 0.45 : 1)
         .background(
             isHovered ? BurritoTheme.controlFill : Color.clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -3420,6 +3517,38 @@ private struct NewFolderDialog: View {
         }
         .padding(26)
         .frame(width: 440)
+    }
+}
+
+struct BurritoToast: Equatable {
+    let message: String
+    let isError: Bool
+}
+
+private struct BurritoToastView: View {
+    let toast: BurritoToast
+
+    var body: some View {
+        HStack(spacing: 10) {
+            BurritoIcon(
+                name: toast.isError ? "exclamationmark.triangle" : "checkmark.circle",
+                size: 13
+            )
+            .foregroundStyle(toast.isError ? Color.red : BurritoTheme.accent)
+            Text(toast.message)
+                .font(.burritoUI(size: 12, weight: 450))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 7)
+        .accessibilityLabel(toast.message)
     }
 }
 
@@ -4018,7 +4147,9 @@ private struct TimelineNoteRow: View {
 
 enum NoteExcerpt {
     static func text(for note: Note) -> String {
-        let markdown = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown = GeneratedNote
+            .strippedSourceArtifacts(from: note.markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !markdown.isEmpty {
             return markdown
                 .replacingOccurrences(of: "#", with: "")
@@ -4100,6 +4231,7 @@ private struct TimelineNoteItem: View {
     let folders: [Folder]
     let isIndexed: Bool
     let open: () -> Void
+    let requestRegeneration: (Note) -> Void
 
     @State private var showingActions = false
     @State private var showingFolders = false
@@ -4201,6 +4333,14 @@ private struct TimelineNoteItem: View {
                     systemImage: "folder"
                 ) {
                     showingFolders = true
+                }
+                BurritoPopoverRow(
+                    title: "Generate again",
+                    systemImage: "arrow.clockwise",
+                    isDisabled: note.processingStage != nil || note.lifecycle == .recording
+                ) {
+                    showingActions = false
+                    requestRegeneration(note)
                 }
                 BurritoPopoverDivider()
                 BurritoPopoverRow(
@@ -5548,7 +5688,7 @@ private struct MarkdownNoteContent: View {
     var openMemory: ((MemoryCitation) -> Void)?
 
     private var document: MarkdownDocument {
-        MarkdownDocument.parse(markdown)
+        MarkdownDocument.parse(GeneratedNote.strippedSourceArtifacts(from: markdown))
     }
 
     var body: some View {
