@@ -541,6 +541,28 @@ struct TranscriptTests {
             """)
     }
 
+    @Test("Stripping source artifacts preserves legitimate markdown whitespace")
+    func strippingPreservesMarkdownWhitespace() {
+        let id = "9F8E7D6C-5B4A-4321-9876-ABCDEF012345"
+        let dirty = """
+            # Title
+
+            - top level
+              - nested item [source](burrito://transcript/\(id))
+
+            ```swift
+            let   spaced   = "kept"
+            ```
+            Inline `code  with  double  spaces` stays. [source:\(id)]
+            """
+        let clean = GeneratedNote.strippedSourceArtifacts(from: dirty)
+
+        #expect(!clean.contains("[source"))
+        #expect(clean.contains("  - nested item"))
+        #expect(clean.contains("let   spaced   = \"kept\""))
+        #expect(clean.contains("`code  with  double  spaces` stays."))
+    }
+
     @Test("System and microphone segments merge by timestamp and source")
     func mergesSegments() {
         // Given

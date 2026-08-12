@@ -541,26 +541,17 @@ struct ContentView: View {
     }
 
     private func confirmRegeneration() {
-        if let note = pendingRegenerationNote {
-            regenerateNoteInBackground(note)
-        }
+        guard let note = pendingRegenerationNote else { return }
         pendingRegenerationNote = nil
-    }
-
-    private func showToast(_ message: String, isError: Bool = false) {
-        toastDismissTask?.cancel()
-        withAnimation(.burritoSpring) {
-            toast = BurritoToast(message: message, isError: isError)
+        guard note.processingStage == nil,
+              note.lifecycle != .recording
+        else {
+            showToast("Notes are already being generated.", isError: true)
+            return
         }
-        toastDismissTask = Task {
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.burritoSpring) {
-                    toast = nil
-                }
-            }
-        }
+        // The user already confirmed overwriting their edits: skip the
+        // edited-notes gate and regenerate for real.
+        performBackgroundRegeneration(note)
     }
 
     /// Regenerates a note in the background from the notes list: no modal,
@@ -576,6 +567,10 @@ struct ContentView: View {
             pendingRegenerationNote = note
             return
         }
+        performBackgroundRegeneration(note)
+    }
+
+    private func performBackgroundRegeneration(_ note: Note) {
         showToast("Generating notes in the background…")
         Task {
             await coordinator.generateInBackground(note: note, context: modelContext)
@@ -586,6 +581,22 @@ struct ContentView: View {
                     note.lastErrorMessage ?? "Note generation failed. Try again.",
                     isError: true
                 )
+            }
+        }
+    }
+
+    private func showToast(_ message: String, isError: Bool = false) {
+        toastDismissTask?.cancel()
+        withAnimation(.burritoSpring) {
+            toast = BurritoToast(message: message, isError: isError)
+        }
+        toastDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.burritoSpring) {
+                    toast = nil
+                }
             }
         }
     }

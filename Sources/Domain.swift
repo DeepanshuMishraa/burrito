@@ -1466,30 +1466,23 @@ struct GeneratedNote: Equatable, Sendable {
     /// evidence links. They exist to keep generation grounded in the
     /// transcript, but they are not note content and must never be visible.
     static func strippedSourceArtifacts(from markdown: String) -> String {
-        let patterns = [
-            #"\[source:[0-9A-Fa-f-]{36}\]"#,
-            #"\[source\]\(burrito://transcript/[0-9A-Fa-f-]{36}\)"#,
-        ]
-        var value = markdown
-        for pattern in patterns {
-            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
-            let range = NSRange(value.startIndex..<value.endIndex, in: value)
-            value = expression.stringByReplacingMatches(
-                in: value,
-                range: range,
-                withTemplate: ""
-            )
+        // Remove each artifact together with its adjacent horizontal
+        // whitespace, so only the region around a removed token is touched.
+        // Legitimate markdown whitespace — nested list indentation, indented
+        // code blocks, inline code with multiple spaces — is left intact.
+        let pattern =
+            "[ \\t]*\\[source:[0-9A-Fa-f-]{36}\\][ \\t]*"
+            + "|[ \\t]*\\[source\\]\\(burrito://transcript/[0-9A-Fa-f-]{36}\\)[ \\t]*"
+        guard let expression = try? NSRegularExpression(pattern: pattern) else {
+            return markdown
         }
-        // Clean the gaps the removals leave behind.
-        value = value
-            .components(separatedBy: .newlines)
-            .map { line in
-                line
-                    .replacingOccurrences(of: "  ", with: " ")
-                    .trimmingCharacters(in: .whitespaces)
-            }
-            .joined(separator: "\n")
-        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(markdown.startIndex..<markdown.endIndex, in: markdown)
+        let stripped = expression.stringByReplacingMatches(
+            in: markdown,
+            range: range,
+            withTemplate: ""
+        )
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
