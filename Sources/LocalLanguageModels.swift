@@ -701,7 +701,11 @@ actor SelectedLanguageModelAdapter {
     func resolve(languageIdentifier: String) async -> Result<any GenerationAdapter, BurritoError> {
         // An enabled terminal agent harness replaces the in-process text
         // models entirely: no Qwen download, no Apple Intelligence use.
-        if let harness = AgentHarnessStore.currentSelection() {
+        // Only honor the selection while the harness binary still exists —
+        // a stale persisted selection falls back to the local model instead
+        // of failing every generation.
+        if let harness = AgentHarnessStore.currentSelection(),
+           harness.resolveExecutableURL() != nil {
             return .success(AgentHarnessAdapter(harness: harness))
         }
         switch LocalLanguageModelStore.currentSelection() {

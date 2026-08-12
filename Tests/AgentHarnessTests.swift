@@ -10,6 +10,17 @@ struct AgentHarnessTests {
         store.disable()
         defer { store.disable() }
 
+        // Wait for the store's initial detection to settle, then seed the
+        // executable cache so routing is deterministic regardless of the
+        // test host's PATH.
+        for _ in 0..<500 {
+            if store.states[.claude] != nil { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        AgentCLI.executableCache.withLock {
+            $0[.claude] = URL(fileURLWithPath: "/usr/local/bin/claude")
+        }
+
         store.enable(.claude)
         #expect(AgentHarnessStore.currentSelection() == .claude)
 
@@ -35,6 +46,28 @@ struct AgentHarnessTests {
 
         store.disable()
         #expect(AgentHarnessStore.currentSelection() == nil)
+    }
+
+    @Test("A stale selection without an executable falls back to the local model")
+    func staleSelectionFallsBackToLocalModel() async {
+        let store = AgentHarnessStore.shared
+        store.disable()
+        defer { store.disable() }
+
+        // Cache a nil result for a harness that is not installed here, then
+        // select it: resolution must not route through the harness.
+        AgentCLI.executableCache.withLock { $0[.aider] = nil }
+        store.enable(.aider)
+        #expect(AgentHarnessStore.currentSelection() == .aider)
+
+        let resolved = await SelectedLanguageModelAdapter.shared.resolve(
+            languageIdentifier: "en-US"
+        )
+        if case .success(let adapter) = resolved {
+            #expect(adapter is FoundationModelAdapter)
+        }
+        // A failure (Apple Intelligence unavailable on this machine) is also
+        // acceptable — the point is that routing did not use the harness.
     }
 
     @Test("Agent output sanitization strips ANSI escapes and padding")

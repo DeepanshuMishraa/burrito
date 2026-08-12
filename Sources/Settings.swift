@@ -787,24 +787,50 @@ private struct ThemeSwatches: View {
 private struct AgentSettingsPane: View {
     @State private var agentStore = AgentHarnessStore.shared
 
+    private var installedHarnesses: [AgentHarness] {
+        AgentHarness.allCases.filter { agentStore.state(for: $0) != .notInstalled }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 10) {
                 BurritoSectionLabel(title: "TERMINAL AGENT HARNESSES")
 
-                VStack(spacing: 4) {
-                    ForEach(AgentHarness.allCases) { harness in
-                        AgentHarnessRow(
-                            harness: harness,
-                            store: agentStore
+                if installedHarnesses.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        BurritoLabel("No agent harnesses detected", systemImage: "terminal")
+                            .font(.burritoUI(size: 13, weight: 450))
+                            .foregroundStyle(.primary)
+                        Text(
+                            "Install one of the supported CLIs (Claude Code, opencode, Codex CLI, "
+                                + "Antigravity CLI, Goose, Aider), sign in from a terminal, then reopen "
+                                + "this tab. Burrito only lists harnesses found on this Mac."
                         )
+                        .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-                .padding(.vertical, 6)
-                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .burritoElevation(.surface)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                    .padding(16)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .burritoElevation(.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(installedHarnesses) { harness in
+                            AgentHarnessRow(
+                                harness: harness,
+                                store: agentStore
+                            )
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .burritoElevation(.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
                 }
 
                 SettingsFootnote(

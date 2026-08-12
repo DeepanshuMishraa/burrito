@@ -35,12 +35,26 @@ final class AppCoordinator {
     private var studySession: StudySession?
     private var studyRotationInFlight = false
     private var studyRotationTask: Task<Void, Never>?
-    private var processingTasks: [UUID: Task<Void, Never>] = [:]
+    /// Per-note chains of background segment processing. Each finished
+    /// segment queues behind the previous one for the same note so appended
+    /// segments are never dropped and never race each other on the note.
+    private var processingChains: [UUID: ProcessingChain] = [:]
+    /// Notes whose regeneration was requested from the background (notes
+    /// list). Their processing UI is suppressed so the user never sees a
+    /// generation screen they did not opt into.
+    private(set) var backgroundGenerationNoteIDs: Set<UUID> = []
 
     private struct StudySession {
         let id: UUID
         let folderID: UUID
         let options: RecordingOptions
+    }
+
+    /// Holds the tail of a note's background processing chain. All access
+    /// happens on the main actor (the chain tasks inherit it).
+    private final class ProcessingChain: @unchecked Sendable {
+        var task: Task<Void, Never>?
+        var sequence = 0
     }
 
     private static let studySegmentLimit: TimeInterval = 10 * 60
@@ -234,7 +248,7 @@ final class AppCoordinator {
             return false
         }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
+        guard !trimmedName.isEmpty || folderID != nil else {
             lastError = .storageFailed(details: "A study session needs a name before recording can start.")
             return false
         }
@@ -564,9 +578,16 @@ final class AppCoordinator {
         // the rotation or stop caller. A later Stop (or the next 10-minute
         // rotation) cancels only the capture handoff, so the completed
         // segment always transcribes and generates its note in the
-        // background while the next segment records.
-        guard processingTasks[note.id] == nil else { return }
-        processingTasks[note.id] = Task { [weak self] in
+        // background while the next segment records. Segments appended to
+        // the same note queue behind any in-flight processing so nothing is
+        // silently dropped.
+        let chain = processingChains[note.id] ?? ProcessingChain()
+        processingChains[note.id] = chain
+        let previousTask = chain.task
+        chain.sequence += 1
+        let mySequence = chain.sequence
+        chain.task = Task { [weak self] in
+            await previousTask?.value
             guard let self else { return }
             await self.processFinishedRecording(
                 note: note,
@@ -574,7 +595,12 @@ final class AppCoordinator {
                 appendsToExisting: appendsToExisting,
                 context: context
             )
-            self.processingTasks[note.id] = nil
+            // Remove the chain only if we are still its tail: a newer
+            // segment may have queued behind us.
+            if self.processingChains[note.id] === chain,
+               chain.sequence == mySequence {
+                self.processingChains[note.id] = nil
+            }
         }
     }
 
@@ -819,7 +845,12 @@ final class AppCoordinator {
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
-            lastError = error
+            // A background failure (regeneration or a finished study segment)
+            // must not raise the global error overlay while the user is
+            // recording or viewing a different note.
+            if activeNoteID == note.id {
+                lastError = error
+            }
         }
         try? context.save()
         if note.lifecycle == .ready {
@@ -896,12 +927,22 @@ final class AppCoordinator {
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
-            lastError = error
+            if activeNoteID == note.id {
+                lastError = error
+            }
         }
         try? context.save()
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    /// Regenerates a note without any processing UI: used by the notes list.
+    /// The note keeps its current appearance; the toast reports the outcome.
+    func generateInBackground(note: Note, context: ModelContext) async {
+        backgroundGenerationNoteIDs.insert(note.id)
+        defer { backgroundGenerationNoteIDs.remove(note.id) }
+        await generate(note: note, context: context)
     }
 
     private func suggestedTitle(

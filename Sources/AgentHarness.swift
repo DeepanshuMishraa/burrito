@@ -2,6 +2,7 @@ import AI
 import Foundation
 import Observation
 import SwiftUI
+import Synchronization
 
 // MARK: - Harness registry
 
@@ -123,14 +124,15 @@ enum AgentHarness: String, CaseIterable, Identifiable, Sendable {
     }
 
     nonisolated func resolveExecutableURL() -> URL? {
-        if let found = AgentCLI.which(binaryName) {
-            return found
+        if let cached = AgentCLI.executableCache.withLock({ $0[self] }) {
+            return cached
         }
-        for candidate in fallbackBinaryPaths
-        where FileManager.default.isExecutableFile(atPath: candidate.path) {
-            return candidate
-        }
-        return nil
+        let resolved = AgentCLI.which(binaryName)
+            ?? fallbackBinaryPaths.first {
+                FileManager.default.isExecutableFile(atPath: $0.path)
+            }
+        AgentCLI.executableCache.withLock { $0[self] = resolved }
+        return resolved
     }
 }
 
@@ -180,6 +182,10 @@ enum AgentCLI {
     static let runTimeout: TimeInterval = 300
     /// Shorter timeout used for sign-in verification.
     static let verifyTimeout: TimeInterval = 90
+
+    /// Resolved executable paths per harness, cached so UI rendering never
+    /// spawns a `which` subprocess on the main thread. `refresh()` clears it.
+    static let executableCache = Mutex<[AgentHarness: URL?]>([:])
 
     private static let ansiPattern =
         "\u{001B}\\[[0-9;]*[A-Za-z]|\u{001B}\\]" + "[^\u{0007}]*(\u{0007}|\u{001B}\\\\)"
@@ -264,50 +270,84 @@ enum AgentCLI {
             throw AgentCLIError.launchFailed(harness, details: error.localizedDescription)
         }
 
-        // Collected output lives behind a lock; the readability handler and
-        // the update loop run on separate queues.
+        // Raw bytes accumulate behind a lock; the readability handlers and
+        // the update loop run on separate queues. Data is decoded only at
+        // the end so a pipe read splitting a UTF-8 character is never lost.
         final class OutputBuffer: @unchecked Sendable {
             private let lock = NSLock()
-            private var value = ""
-            var contents: String {
+            private var data = Data()
+
+            var contents: Data {
+                lock.withLock { data }
+            }
+
+            /// Lossy decode for progressive display while the stream is live.
+            var displayString: String {
+                String(decoding: contents, as: UTF8.self)
+            }
+
+            /// Strict decode for the complete stream (valid UTF-8 once the
+            /// process has exited).
+            var finalString: String? {
+                String(data: contents, encoding: .utf8)
+            }
+
+            func append(_ chunk: Data) {
+                lock.withLock { data.append(chunk) }
+            }
+        }
+
+        final class TimeoutFlag: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = false
+            var didTimeOut: Bool {
                 lock.withLock { value }
             }
 
-            func append(_ chunk: String) {
-                lock.withLock { value += chunk }
+            func set() {
+                lock.withLock { value = true }
             }
         }
+
         let buffer = OutputBuffer()
+        let stderrBuffer = OutputBuffer()
+        let timeoutFlag = TimeoutFlag()
         let updateInterval = Duration.milliseconds(120)
-        let fileHandle = stdout.fileHandleForReading
-        fileHandle.readabilityHandler = { handle in
+        let stdoutHandle = stdout.fileHandleForReading
+        stdoutHandle.readabilityHandler = { handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            buffer.append(String(data: chunk, encoding: .utf8) ?? "")
+            buffer.append(chunk)
         }
 
         defer {
-            fileHandle.readabilityHandler = nil
+            stdoutHandle.readabilityHandler = nil
         }
 
         return try await withTaskCancellationHandler {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     try await Task.sleep(for: .seconds(timeout))
+                    timeoutFlag.set()
                     if process.isRunning {
                         process.terminate()
                     }
-                    throw AgentCLIError.timedOut(
-                        harness,
-                        after: Int(timeout.rounded())
-                    )
+                }
+                // Drain stderr concurrently so a harness that writes a lot of
+                // diagnostics can never fill the pipe and block the child.
+                group.addTask {
+                    while !Task.isCancelled {
+                        let chunk = stderr.fileHandleForReading.availableData
+                        guard !chunk.isEmpty else { break }
+                        stderrBuffer.append(chunk)
+                    }
                 }
                 if let onUpdate {
                     group.addTask {
                         var lastEmitted: String?
                         while !Task.isCancelled {
                             try await Task.sleep(for: updateInterval)
-                            let current = sanitizedOutput(buffer.contents)
+                            let current = sanitizedOutput(buffer.displayString)
                             if current != lastEmitted {
                                 lastEmitted = current
                                 await onUpdate(current)
@@ -323,11 +363,15 @@ enum AgentCLI {
                 }
                 group.cancelAll()
 
-                var statusOutput = ""
-                if let data = try? stderr.fileHandleForReading.readToEnd() {
-                    statusOutput = String(data: data, encoding: .utf8) ?? ""
+                if timeoutFlag.didTimeOut {
+                    throw AgentCLIError.timedOut(
+                        harness,
+                        after: Int(timeout.rounded())
+                    )
                 }
-                let response = sanitizedOutput(buffer.contents)
+                let statusOutput = stderrBuffer.finalString
+                    ?? stderrBuffer.displayString
+                let response = sanitizedOutput(buffer.finalString ?? buffer.displayString)
                 guard result == 0 else {
                     throw AgentCLIError.exitedNonZero(
                         harness,
@@ -341,6 +385,11 @@ enum AgentCLI {
                         code: 0,
                         details: "The harness returned an empty response. Check that you are signed in."
                     )
+                }
+                // Flush the final state through onUpdate so chat never stalls
+                // on the last update interval.
+                if let onUpdate, !response.isEmpty {
+                    await onUpdate(response)
                 }
                 return response
             }
@@ -412,20 +461,40 @@ final class AgentHarnessStore {
         refresh()
     }
 
+    /// Detects installed harnesses off the main actor (each lookup spawns a
+    /// `which` subprocess) and applies the results asynchronously. Also
+    /// restores the connected state of the persisted selection so its switch
+    /// reflects reality and can be turned off.
     func refresh() {
+        AgentCLI.executableCache.withLock { $0.removeAll() }
         for harness in AgentHarness.allCases {
             guard !(states[harness]?.isVerifying ?? false) else { continue }
-            states[harness] = harness.resolveExecutableURL() != nil
-                ? .installed
-                : .notInstalled
-            if selection == harness, states[harness] != .installed, states[harness] != .connected {
-                disable()
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let installed = harness.resolveExecutableURL() != nil
+                await MainActor.run {
+                    self?.applyDetection(harness, installed: installed)
+                }
             }
         }
     }
 
+    private func applyDetection(_ harness: AgentHarness, installed: Bool) {
+        guard !(states[harness]?.isVerifying ?? false) else { return }
+        states[harness] = installed ? .installed : .notInstalled
+        guard selection == harness else { return }
+        if installed {
+            // Persisted selection: keep it usable and reflect it in the UI.
+            states[harness] = .connected
+        } else {
+            // The selected harness disappeared: fall back to the local model.
+            disable()
+        }
+    }
+
     func state(for harness: AgentHarness) -> AgentHarnessConnectionState {
-        states[harness] ?? (harness.resolveExecutableURL() != nil ? .installed : .notInstalled)
+        // Optimistic default until the async refresh resolves; the cache
+        // keeps lookups from ever spawning a subprocess during rendering.
+        states[harness] ?? .installed
     }
 
     /// Runs a trivial prompt to confirm the harness binary exists AND the user

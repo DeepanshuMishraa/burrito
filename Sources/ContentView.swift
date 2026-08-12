@@ -578,7 +578,7 @@ struct ContentView: View {
         }
         showToast("Generating notes in the background…")
         Task {
-            await coordinator.generate(note: note, context: modelContext)
+            await coordinator.generateInBackground(note: note, context: modelContext)
             if note.lifecycle == .ready {
                 showToast("Notes ready for “\(note.title)”")
             } else {
@@ -1247,7 +1247,9 @@ struct ContentView: View {
 
     private func startStudyMode() {
         let name = studyModeName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty,
+        // Continuing an existing folder does not need a new session name.
+        let continuesSession = studyModeSelectedFolderID != nil
+        guard continuesSession || !name.isEmpty,
               let template = templates.first(where: {
                   $0.builtInID == BuiltInTemplate.studyNotes.rawValue
               }) ?? templates.first
@@ -2170,6 +2172,7 @@ private struct ModelsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var modelStore: ParakeetModelStore
     @Bindable var languageModelStore: LocalLanguageModelStore
+    @State private var agentStore = AgentHarnessStore.shared
 
     @State private var selectedTab: Tab = .speechToText
 
@@ -2183,7 +2186,7 @@ private struct ModelsView: View {
     }
 
     private var activeEngineTitle: String {
-        if let harness = AgentHarnessStore.currentSelection() {
+        if let harness = agentStore.selection {
             return "\(harness.displayName) (agent)"
         }
         switch languageModelStore.selection {
@@ -2338,7 +2341,7 @@ private struct ModelsView: View {
 
                     } else {
                         // TEXT MODELS TAB
-                        if let activeAgent = AgentHarnessStore.currentSelection() {
+                        if let activeAgent = agentStore.selection {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack(spacing: 12) {
                                     AgentLogoView(harness: activeAgent, size: 34)
@@ -2388,7 +2391,7 @@ private struct ModelsView: View {
                             }
                         }
 
-                        if AgentHarnessStore.currentSelection() == nil {
+                        if agentStore.selection == nil {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack(alignment: .firstTextBaseline) {
                                     BurritoSectionLabel(title: "NOTE GENERATION MODELS")
@@ -2455,6 +2458,7 @@ private struct ModelsView: View {
         .onAppear {
             modelStore.refresh()
             languageModelStore.refresh()
+            agentStore.refresh()
         }
     }
 }
@@ -3708,7 +3712,10 @@ private struct StudyModeNameDialog: View {
                 Spacer()
                 Button("Start study mode", action: start)
                     .buttonStyle(BurritoActionButtonStyle(prominent: true))
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && selectedFolderID == nil
+                    )
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -7212,7 +7219,9 @@ private struct NoteDetailView: View {
 
                                     BurritoPopoverRow(
                                         title: "Generate again",
-                                        systemImage: "arrow.clockwise"
+                                        systemImage: "arrow.clockwise",
+                                        isDisabled: note.processingStage != nil
+                                            || note.lifecycle == .recording
                                     ) {
                                         showingMorePopover = false
                                         requestRegeneration()
@@ -7452,7 +7461,8 @@ private struct NoteDetailView: View {
                             Task { await coordinator.stop(context: modelContext) }
                         }
                     }
-                } else if let stage = note.processingStage {
+                } else if let stage = note.processingStage,
+                          !coordinator.backgroundGenerationNoteIDs.contains(note.id) {
                     ProcessingRail(
                         stage: stage,
                         isContinuation: !note.markdownBody.isEmpty
@@ -7467,6 +7477,9 @@ private struct NoteDetailView: View {
                             Button("Regenerate") {
                                 requestRegeneration()
                             }
+                            .disabled(
+                                note.processingStage != nil || note.lifecycle == .recording
+                            )
                         }
                         .font(.burritoUI(size: 13, relativeTo: .callout))
                         .padding(.horizontal, 18)

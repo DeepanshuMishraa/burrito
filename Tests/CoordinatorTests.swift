@@ -803,6 +803,53 @@ struct CoordinatorTests {
         #expect(notes.allSatisfy { !$0.transcriptSegments.isEmpty })
     }
 
+    @Test("Appended segments queue behind in-flight processing instead of being dropped")
+    func appendedSegmentsQueueBehindInFlightProcessing() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let generator = BlockingGeneratorStub()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "text.alignleft",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+
+        await coordinator.stop(context: context)
+        await waitUntil { generator.generationStarted.withLock { $0 } }
+
+        // The first segment is still generating; append a second recording
+        // to the same note and stop it. The second segment must queue
+        // behind the in-flight processing, never be dropped.
+        await coordinator.start(
+            options: options,
+            destination: .appendToNote(id: note.id),
+            context: context
+        )
+        await coordinator.stop(context: context)
+
+        generator.allowGeneration.withLock { $0 = true }
+        await waitUntil { note.lifecycle != .processing }
+
+        #expect(note.lifecycle == .ready)
+        #expect(note.transcriptSegments.count == 4)
+        #expect(note.transcriptSegments.map(\.source).contains(.system))
+    }
+
     @Test("Human notes written during capture guide generation and remain intact")
     func humanNotesGuideGeneration() async throws {
         let context = try makeContext()
@@ -1029,7 +1076,7 @@ struct CoordinatorTests {
         )
 
         await coordinator.start(options: options, context: context)
-        try await Task.sleep(for: .milliseconds(120))
+        await waitUntil { coordinator.activity == capture.activity }
 
         #expect(coordinator.activity == capture.activity)
         #expect(capture.languageIdentifiers == ["en-US"])
@@ -1099,7 +1146,7 @@ struct CoordinatorTests {
         clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 110) }
         await coordinator.pause()
         clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 140) }
-        try await Task.sleep(for: .milliseconds(120))
+        await waitUntil { coordinator.elapsed == 10 }
         #expect(coordinator.elapsed == 10)
         await coordinator.resume()
         clock.withLock { $0 = Date(timeIntervalSinceReferenceDate: 150) }
