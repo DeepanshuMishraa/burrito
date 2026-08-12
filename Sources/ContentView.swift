@@ -193,6 +193,15 @@ struct ContentView: View {
         notes.first { $0.id == selectedNoteID }
     }
 
+    /// Reliable "already onboarded" signal: a library with any note or
+    /// folder means this is not a first run, so the permission pager must
+    /// never appear — an app update can reset the onboarding flag or make
+    /// macOS re-prompt TCC permissions, and the recording flow re-requests
+    /// those on demand.
+    private var hasExistingLibrary: Bool {
+        !notes.isEmpty || !folders.isEmpty
+    }
+
     private var activeProcessingNote: Note? {
         // Notes regenerated in the background stay invisible: no full-screen
         // loader replaces the UI while "Generate again" runs.
@@ -280,7 +289,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if !permissionOnboardingCompleted || !permissions.allGranted {
+            if !permissionOnboardingCompleted, !permissions.allGranted, !hasExistingLibrary {
                 PermissionGateView(
                     permissions: permissions,
                     calendarAccess: calendarAccess
@@ -350,7 +359,14 @@ struct ContentView: View {
         .onChange(of: permissionOnboardingCompleted, initial: true) {
             synchronizeNoteTakingDetection()
         }
-        .onChange(of: permissions.allGranted, initial: true) {
+        .onChange(of: permissions.allGranted, initial: true) { _, granted in
+            // Self-heal: a user with every permission granted has completed
+            // onboarding in practice. This restores the flag when an app
+            // update resets the preference, so returning users are never
+            // pushed back into the permission pager.
+            if granted {
+                permissionOnboardingCompleted = true
+            }
             synchronizeNoteTakingDetection()
         }
         .sheet(item: $recordingDestination) { destination in
