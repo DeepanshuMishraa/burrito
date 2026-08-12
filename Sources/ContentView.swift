@@ -190,7 +190,12 @@ struct ContentView: View {
     }
 
     private var activeProcessingNote: Note? {
-        notes.first { $0.processingStage != nil }
+        // Notes regenerated in the background stay invisible: no full-screen
+        // loader replaces the UI while "Generate again" runs.
+        notes.first {
+            $0.processingStage != nil
+                && !coordinator.backgroundGenerationNoteIDs.contains($0.id)
+        }
     }
 
     private var visibleNotes: [Note] {
@@ -269,6 +274,9 @@ struct ContentView: View {
                     selectRelatedNote: { selectedNoteID = $0 },
                     newRecordingAction: {
                         continueRecording(selectedNote)
+                    },
+                    showToast: { message, isError in
+                        showToast(message, isError: isError)
                     }
                 )
             } else {
@@ -7093,6 +7101,7 @@ private struct NoteDetailView: View {
     let backAction: () -> Void
     let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
+    let showToast: (String, Bool) -> Void
 
     @State private var selectedTab: Tab = .notes
     @State private var isEditingMarkdown = false
@@ -7596,12 +7605,21 @@ private struct NoteDetailView: View {
     }
 
     private func regenerate() {
+        showToast("Generating notes in the background…", false)
         Task {
-            await coordinator.generate(
+            await coordinator.generateInBackground(
                 note: note,
                 context: modelContext,
                 undoManager: undoManager
             )
+            if note.lifecycle == .ready {
+                showToast("Notes ready for “\(note.title)”", false)
+            } else {
+                showToast(
+                    note.lastErrorMessage ?? "Note generation failed. Try again.",
+                    true
+                )
+            }
         }
     }
 

@@ -937,12 +937,17 @@ final class AppCoordinator {
         }
     }
 
-    /// Regenerates a note without any processing UI: used by the notes list.
-    /// The note keeps its current appearance; the toast reports the outcome.
-    func generateInBackground(note: Note, context: ModelContext) async {
+    /// Regenerates a note without any processing UI: used by the notes list
+    /// and the note detail's "Generate again". The note keeps its current
+    /// appearance; the caller surfaces the outcome (toast).
+    func generateInBackground(
+        note: Note,
+        context: ModelContext,
+        undoManager: UndoManager? = nil
+    ) async {
         backgroundGenerationNoteIDs.insert(note.id)
         defer { backgroundGenerationNoteIDs.remove(note.id) }
-        await generate(note: note, context: context)
+        await generate(note: note, context: context, undoManager: undoManager)
     }
 
     private func suggestedTitle(
