@@ -499,6 +499,70 @@ struct TranscriptTests {
         #expect(TranscriptCitation.segmentID(from: invalidURL) == nil)
     }
 
+    @Test("Note generation artifacts are stripped from the final markdown")
+    func stripsSourceArtifactsFromNotes() {
+        let id = "A27D24D0-9977-4C5C-92B4-581DB235D736"
+        let dirty = """
+            # Isolation Levels
+
+            Dirty reads let a transaction read uncommitted data. [source](burrito://transcript/\(id))
+            MVCC keeps old row versions. [source:\(id)] Phantoms appear under Repeatable Read.
+
+            ## Key Terms
+            [source](burrito://transcript/\(id)) Snapshot: a stable view of committed rows.
+            """
+        let clean = GeneratedNote.strippedSourceArtifacts(from: dirty)
+
+        #expect(!clean.contains("[source"))
+        #expect(!clean.contains("burrito://transcript"))
+        #expect(clean.contains("Dirty reads let a transaction read uncommitted data."))
+        #expect(clean.contains("MVCC keeps old row versions."))
+        #expect(clean.contains("Phantoms appear under Repeatable Read."))
+        #expect(clean.contains("Snapshot: a stable view of committed rows."))
+    }
+
+    @Test("Stripping source artifacts preserves headings and structure")
+    func strippingSourceArtifactsKeepsMarkdownStructure() {
+        let dirty = """
+            # Title
+
+            Paragraph with a link. [source](burrito://transcript/9F8E7D6C-5B4A-4321-9876-ABCDEF012345)
+            - bullet one
+            - bullet two [source:9F8E7D6C-5B4A-4321-9876-ABCDEF012345]
+            """
+        let clean = GeneratedNote.strippedSourceArtifacts(from: dirty)
+
+        #expect(clean == """
+            # Title
+
+            Paragraph with a link.
+            - bullet one
+            - bullet two
+            """)
+    }
+
+    @Test("Stripping source artifacts preserves legitimate markdown whitespace")
+    func strippingPreservesMarkdownWhitespace() {
+        let id = "9F8E7D6C-5B4A-4321-9876-ABCDEF012345"
+        let dirty = """
+            # Title
+
+            - top level
+              - nested item [source](burrito://transcript/\(id))
+
+            ```swift
+            let   spaced   = "kept"
+            ```
+            Inline `code  with  double  spaces` stays. [source:\(id)]
+            """
+        let clean = GeneratedNote.strippedSourceArtifacts(from: dirty)
+
+        #expect(!clean.contains("[source"))
+        #expect(clean.contains("  - nested item"))
+        #expect(clean.contains("let   spaced   = \"kept\""))
+        #expect(clean.contains("`code  with  double  spaces` stays."))
+    }
+
     @Test("System and microphone segments merge by timestamp and source")
     func mergesSegments() {
         // Given

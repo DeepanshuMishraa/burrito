@@ -51,6 +51,8 @@ enum GenerationPrompt {
         - End every factual paragraph, bullet, decision, and action with at least one clickable
           evidence link in the exact form `[source](burrito://transcript/<UUID>)`, using a
           `[source:<UUID>]` marker supplied by the transcript digest.
+        - Never write the `[source:<UUID>]` marker text itself into the notes; use markers only
+          inside the evidence links above.
         - Do not invent, alter, or omit the UUID inside an evidence link.
         - Human-note-only guidance may remain uncited, but never present it as transcript-confirmed.
 
@@ -759,7 +761,7 @@ actor BurritoChatAnswerer {
     static let shared = BurritoChatAnswerer()
 
     typealias AdapterResolver = @Sendable (String) async -> Result<
-        FoundationModelAdapter,
+        any GenerationAdapter,
         BurritoError
     >
 
@@ -785,7 +787,7 @@ actor BurritoChatAnswerer {
         onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
     ) async -> Result<BurritoChatResponse, BurritoError> {
         let resolved = await resolveAdapter(languageIdentifier)
-        let adapter: FoundationModelAdapter
+        let adapter: any GenerationAdapter
         switch resolved {
         case .success(let resolvedAdapter):
             adapter = resolvedAdapter
@@ -1080,7 +1082,7 @@ enum FoundationModelFailure {
     }
 }
 
-actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
+actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting, GenerationAdapter {
     private let systemModel: SystemLanguageModel
     private let model: any AI.LanguageModel
     private let tokenMeasurer: (any PromptTokenMeasuring)?
@@ -1319,7 +1321,7 @@ struct FoundationNoteGenerator: NoteGenerating {
         static let generatedNoteSchema = 256
     }
 
-    private let adapter: FoundationModelAdapter
+    private let adapter: any GenerationAdapter
     private let usesAutomaticSelection: Bool
 
     init() {
@@ -1327,7 +1329,7 @@ struct FoundationNoteGenerator: NoteGenerating {
         usesAutomaticSelection = true
     }
 
-    init(adapter: FoundationModelAdapter) {
+    init(adapter: any GenerationAdapter) {
         self.adapter = adapter
         usesAutomaticSelection = false
     }
@@ -1535,7 +1537,14 @@ struct FoundationNoteGenerator: NoteGenerating {
                 maximumResponseTokens: TokenBudget.finalOutput
             )
             if GeneratedNote.isGrounded(generated, in: segments) {
-                return generated
+                // Citation plumbing validated for grounding, then stripped:
+                // it must never appear in the saved note.
+                return GeneratedNote(
+                    title: generated.title,
+                    markdown: GeneratedNote.strippedSourceArtifacts(
+                        from: generated.markdown
+                    )
+                )
             }
             lastError = "The local model returned notes that could not be grounded in the transcript."
         }

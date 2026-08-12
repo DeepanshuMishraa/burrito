@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum OwnershipOperationStatus: Equatable {
@@ -38,6 +39,7 @@ enum OwnershipOperationStatus: Equatable {
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case transcription
+    case agents
     case library
 
     var id: Self { self }
@@ -46,6 +48,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .transcription: "Transcription"
+        case .agents: "Agents"
         case .library: "Library & Calendar"
         }
     }
@@ -54,6 +57,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .transcription: "captions.bubble"
+        case .agents: "terminal"
         case .library: "shippingbox"
         }
     }
@@ -266,6 +270,9 @@ private struct SettingsPane: View {
                         )
                     }
                 }
+
+            case .agents:
+                AgentSettingsPane()
 
             case .library:
                 VStack(alignment: .leading, spacing: 24) {
@@ -774,6 +781,286 @@ private struct ThemeSwatches: View {
         }
         .frame(width: 54)
         .accessibilityHidden(true)
+    }
+}
+
+private struct AgentSettingsPane: View {
+    @State private var agentStore = AgentHarnessStore.shared
+
+    private var installedHarnesses: [AgentHarness] {
+        AgentHarness.allCases.filter { agentStore.state(for: $0) != .notInstalled }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 10) {
+                BurritoSectionLabel(title: "TERMINAL AGENT HARNESSES")
+
+                if installedHarnesses.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        BurritoLabel("No agent harnesses detected", systemImage: "terminal")
+                            .font(.burritoUI(size: 13, weight: 450))
+                            .foregroundStyle(.primary)
+                        Text(
+                            "Install one of the supported CLIs (Claude Code, opencode, Codex CLI, "
+                                + "Antigravity CLI, Goose, Aider), sign in from a terminal, then reopen "
+                                + "this tab. Burrito only lists harnesses found on this Mac."
+                        )
+                        .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(16)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .burritoElevation(.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+                } else {
+                    VStack(spacing: 4) {
+                        ForEach(installedHarnesses) { harness in
+                            AgentHarnessRow(
+                                harness: harness,
+                                store: agentStore
+                            )
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .burritoElevation(.surface)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+                }
+
+                SettingsFootnote(
+                    "Burrito detects the harnesses installed on this Mac and runs note synthesis "
+                        + "through their non-interactive print mode (\(AgentHarness.claude.exampleCommand), "
+                        + "\(AgentHarness.opencode.exampleCommand), \(AgentHarness.codex.exampleCommand), "
+                        + "\(AgentHarness.antigravity.exampleCommand))."
+                )
+            }
+
+            if let activeHarness = agentStore.selection {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        AgentLogoView(harness: activeHarness, size: 20)
+                        BurritoLabel("Agent active — on-device text models are off", systemImage: "checkmark.seal")
+                            .font(.burritoUI(size: 11, weight: 450))
+                            .foregroundStyle(BurritoTheme.accent)
+                    }
+                    Text(
+                        "\(activeHarness.displayName) now handles prompt synthesis and "
+                            + "note generation. The Qwen downloads and Apple Intelligence are not used, so "
+                            + "Burrito keeps no text model loaded in memory. Speech-to-text and transcription "
+                            + "models keep working normally. Supermemory indexing requires a downloaded Qwen "
+                            + "model and is paused while an agent is active."
+                    )
+                    .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption2))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(11)
+                .background(BurritoTheme.accentSoft.opacity(0.5), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(BurritoTheme.accent.opacity(0.22))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                BurritoSectionLabel(title: "WHY USE AN AGENT")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(
+                        "Each installed harness runs in its own process with its own model, so Burrito "
+                            + "never loads a multi-gigabyte text model into memory. On-device Qwen models "
+                            + "hold roughly 3–10 GB (weights plus Metal buffers); Apple Intelligence is "
+                            + "unavailable or slow on many Macs. A harness keeps note generation fast on "
+                            + "any machine and frees that memory for recording and transcription."
+                    )
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    Text(
+                        "Enabling a harness sends your transcripts, prompts, and generated notes to that "
+                            + "harness's model provider under its own terms. Burrito waits for a live "
+                            + "response before switching — if the harness is not signed in, the on-device "
+                            + "model stays in charge."
+                    )
+                    .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .burritoElevation(.surface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                }
+            }
+        }
+        .onAppear {
+            agentStore.refresh()
+        }
+    }
+}
+
+private struct AgentHarnessRow: View {
+    let harness: AgentHarness
+    @Bindable var store: AgentHarnessStore
+
+    private var state: AgentHarnessConnectionState {
+        store.state(for: harness)
+    }
+
+    private var isActive: Bool {
+        store.selection == harness && state.isConnected
+    }
+
+    private var toggleBinding: Binding<Bool> {
+        Binding(
+            get: { isActive },
+            set: { isOn in
+                BurritoHaptics.trigger(.alignment)
+                if isOn {
+                    guard store.selection != harness else { return }
+                    Task { await store.verify(harness) }
+                } else {
+                    store.disable()
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                AgentLogoView(harness: harness, size: 30)
+                    .frame(width: 34)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(harness.displayName)
+                            .font(.burritoUI(size: 13, weight: 450))
+                            .foregroundStyle(.primary)
+                        if isActive {
+                            BurritoLabel("Active", systemImage: "checkmark.circle.fill")
+                                .font(.burritoUI(size: 10, weight: 450))
+                                .foregroundStyle(BurritoTheme.accent)
+                        }
+                    }
+                    Text(harness.tagline)
+                        .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(harness.exampleCommand)
+                    .font(.burritoUI(size: 10, weight: 400).monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
+                statusControl.frame(width: 40)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            if case .verifying = state {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Sending a test prompt to check the sign-in…")
+                        .font(.burritoUI(size: 10, weight: 400))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            } else if case .failed(let message) = state {
+                HStack(alignment: .top, spacing: 8) {
+                    BurritoIcon(name: "exclamationmark.triangle", size: 11)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 1)
+                    Text(message)
+                        .font(.burritoUI(size: 10, weight: 400))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Retry") {
+                        Task { await store.verify(harness) }
+                    }
+                    .buttonStyle(SettingsActionButtonStyle())
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(harness.displayName)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(isActive ? "On" : "Off")
+    }
+
+    @ViewBuilder
+    private var statusControl: some View {
+        switch state {
+        case .notInstalled:
+            Menu {
+                Button("Copy install command") {
+                    copyInstallCommand()
+                }
+                if let url = URL(string: harness.homepage.absoluteString) {
+                    Button("Open install guide") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } label: {
+                BurritoIcon(name: "square.and.arrow.down", size: 12)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 24)
+                    .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(BurritoTheme.softBorder)
+                    }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("\(harness.displayName) is not installed")
+        case .installed, .failed:
+            Toggle("", isOn: toggleBinding)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+        case .verifying:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 40)
+        case .connected:
+            Toggle("", isOn: toggleBinding)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+        }
+    }
+
+    private func copyInstallCommand() {
+        let command: String
+        switch harness {
+        case .claude: command = "npm install -g @anthropic-ai/claude-code"
+        case .opencode: command = "npm install -g opencode-ai"
+        case .codex: command = "npm install -g @openai/codex"
+        case .antigravity: command = "curl -fsSL https://antigravity.google/install.sh | sh"
+        case .goose: command = "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash"
+        case .aider: command = "pip install aider-install && aider-install"
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
     }
 }
 

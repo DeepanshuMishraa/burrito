@@ -35,11 +35,26 @@ final class AppCoordinator {
     private var studySession: StudySession?
     private var studyRotationInFlight = false
     private var studyRotationTask: Task<Void, Never>?
+    /// Per-note chains of background segment processing. Each finished
+    /// segment queues behind the previous one for the same note so appended
+    /// segments are never dropped and never race each other on the note.
+    private var processingChains: [UUID: ProcessingChain] = [:]
+    /// Notes whose regeneration was requested from the background (notes
+    /// list). Their processing UI is suppressed so the user never sees a
+    /// generation screen they did not opt into.
+    private(set) var backgroundGenerationNoteIDs: Set<UUID> = []
 
     private struct StudySession {
         let id: UUID
         let folderID: UUID
         let options: RecordingOptions
+    }
+
+    /// Holds the tail of a note's background processing chain. All access
+    /// happens on the main actor (the chain tasks inherit it).
+    private final class ProcessingChain: @unchecked Sendable {
+        var task: Task<Void, Never>?
+        var sequence = 0
     }
 
     private static let studySegmentLimit: TimeInterval = 10 * 60
@@ -224,6 +239,7 @@ final class AppCoordinator {
 
     func startStudyMode(
         name: String,
+        folderID: UUID? = nil,
         options: RecordingOptions,
         context: ModelContext
     ) async -> Bool {
@@ -232,24 +248,37 @@ final class AppCoordinator {
             return false
         }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
+        guard !trimmedName.isEmpty || folderID != nil else {
             lastError = .storageFailed(details: "A study session needs a name before recording can start.")
             return false
         }
 
-        let folder = Folder(
-            name: trimmedName,
-            order: (try? context.fetch(FetchDescriptor<Folder>()).count) ?? 0
-        )
-        context.insert(folder)
-        try? context.save()
+        var createdFolder = false
+        let folder: Folder
+        if let folderID,
+           let existing = fetchFolder(id: folderID, context: context) {
+            // Continuing an earlier study session: new 10-minute notes keep
+            // landing in the same folder.
+            folder = existing
+        } else {
+            let newFolder = Folder(
+                name: trimmedName,
+                order: (try? context.fetch(FetchDescriptor<Folder>()).count) ?? 0
+            )
+            context.insert(newFolder)
+            try? context.save()
+            folder = newFolder
+            createdFolder = true
+        }
         studySession = StudySession(id: UUID(), folderID: folder.id, options: options)
         studyRotationInFlight = false
         await start(options: options, context: context)
         let started = captureState.isRecording && activeNoteID != nil
         if !started {
-            context.delete(folder)
-            try? context.save()
+            if createdFolder {
+                context.delete(folder)
+                try? context.save()
+            }
             studySession = nil
         }
         return started
@@ -350,6 +379,10 @@ final class AppCoordinator {
             newNote.microphoneAudioRelativePath = files.microphoneAudioURL.map(
                 fileStore.relativePath(for:)
             )
+            newNote.manualOrder = nextManualOrder(after: now, context: context)
+            if newNote.manualOrder != nil {
+                newNote.manualOrderDay = Calendar.current.startOfDay(for: now)
+            }
             context.insert(newNote)
             if let studySession,
                let folder = fetchFolder(id: studySession.folderID, context: context) {
@@ -490,9 +523,9 @@ final class AppCoordinator {
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
+        // Computed before finishCaptureSession() resets the pause accounting.
         let recordingDuration = activeRecordingDuration(since: startedAt, at: now())
         let appendsToExisting = appendsToExistingNote
-        var processingWarnings: [String] = []
         isPaused = false
         pausedAt = nil
         note.updatedAt = .now
@@ -545,6 +578,43 @@ final class AppCoordinator {
         note.processingStage = .transcribing
         try? context.save()
 
+        // Process the finished segment in a task owned by this note, never by
+        // the rotation or stop caller. A later Stop (or the next 10-minute
+        // rotation) cancels only the capture handoff, so the completed
+        // segment always transcribes and generates its note in the
+        // background while the next segment records. Segments appended to
+        // the same note queue behind any in-flight processing so nothing is
+        // silently dropped.
+        let chain = processingChains[note.id] ?? ProcessingChain()
+        processingChains[note.id] = chain
+        let previousTask = chain.task
+        chain.sequence += 1
+        let mySequence = chain.sequence
+        chain.task = Task { [weak self] in
+            await previousTask?.value
+            guard let self else { return }
+            await self.processFinishedRecording(
+                note: note,
+                files: files,
+                appendsToExisting: appendsToExisting,
+                context: context
+            )
+            // Remove the chain only if we are still its tail: a newer
+            // segment may have queued behind us.
+            if self.processingChains[note.id] === chain,
+               chain.sequence == mySequence {
+                self.processingChains[note.id] = nil
+            }
+        }
+    }
+
+    private func processFinishedRecording(
+        note: Note,
+        files: RecordingFiles,
+        appendsToExisting: Bool,
+        context: ModelContext
+    ) async {
+        var processingWarnings: [String] = []
         var systemSegments: [TranscriptSegment] = []
         let systemURL = existingPCMURL(files.systemTranscriptionURL)
             ?? files.systemAudioURL
@@ -638,6 +708,9 @@ final class AppCoordinator {
             with: combinedSegments,
             marksEdited: true
         )
+        // The transcript is persisted before generation so the note always
+        // keeps its source material — "Generate Again" works even if the
+        // model step fails.
         try? context.save()
 
         if note.retainsAudio {
@@ -776,7 +849,12 @@ final class AppCoordinator {
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
-            lastError = error
+            // A background failure (regeneration or a finished study segment)
+            // must not raise the global error overlay while the user is
+            // recording or viewing a different note.
+            if activeNoteID == note.id {
+                lastError = error
+            }
         }
         try? context.save()
         if note.lifecycle == .ready {
@@ -853,12 +931,27 @@ final class AppCoordinator {
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
-            lastError = error
+            if activeNoteID == note.id {
+                lastError = error
+            }
         }
         try? context.save()
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    /// Regenerates a note without any processing UI: used by the notes list
+    /// and the note detail's "Generate again". The note keeps its current
+    /// appearance; the caller surfaces the outcome (toast).
+    func generateInBackground(
+        note: Note,
+        context: ModelContext,
+        undoManager: UndoManager? = nil
+    ) async {
+        backgroundGenerationNoteIDs.insert(note.id)
+        defer { backgroundGenerationNoteIDs.remove(note.id) }
+        await generate(note: note, context: context, undoManager: undoManager)
     }
 
     private func suggestedTitle(
@@ -1002,6 +1095,34 @@ final class AppCoordinator {
             predicate: #Predicate { $0.id == requestedID }
         )
         return try? context.fetch(descriptor).first
+    }
+
+    /// Manual position for a brand-new note: on top of its day group when
+    /// that day has already been manually reordered, otherwise no manual
+    /// order (the default updated-first ordering applies). The day bounds
+    /// match the timeline's grouping, which uses `updatedAt`.
+    private func nextManualOrder(after date: Date, context: ModelContext) -> Int? {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+            return nil
+        }
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate {
+                $0.manualOrder != nil
+                    && $0.updatedAt >= day
+                    && $0.updatedAt < nextDay
+            }
+        )
+        guard let notes = try? context.fetch(descriptor),
+              let minimum = notes
+                  .filter(\.hasValidManualOrder)
+                  .compactMap(\.manualOrder)
+                  .min()
+        else {
+            return nil
+        }
+        return minimum - 1
     }
 
     private func fetchFolder(id: UUID, context: ModelContext) -> Folder? {

@@ -78,6 +78,13 @@ final class Note {
     var lastErrorMessage: String?
     var calendarEventData: Data?
     var folder: Folder?
+    /// Manual position within the note's day group once the user has
+    /// reordered the timeline by dragging. nil means "no manual order yet".
+    var manualOrder: Int?
+    /// The day (start of day, updatedAt-based) this manual position belongs
+    /// to. A note edited into a different day no longer anchors the ordering
+    /// of its new day group.
+    var manualOrderDay: Date?
 
     init(
         id: UUID = UUID(),
@@ -122,6 +129,8 @@ final class Note {
         self.lastErrorMessage = nil
         self.calendarEventData = calendarEvent.flatMap { try? JSONEncoder().encode($0) }
         self.folder = nil
+        self.manualOrder = nil
+        self.manualOrderDay = nil
     }
 
     var lifecycle: NoteLifecycle {
@@ -180,7 +189,9 @@ final class Note {
 
     var exportedMarkdown: String {
         let human = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let generated = markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generated = GeneratedNote
+            .strippedSourceArtifacts(from: markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !human.isEmpty else { return generated }
         guard !generated.isEmpty else {
             return "## Your notes\n\n\(human)"
@@ -205,6 +216,34 @@ final class Note {
         if !marksEdited {
             generatedFromTranscriptRevision = transcriptRevision
         }
+    }
+}
+
+extension Note {
+    /// Whether this note's manual position still applies: the position is
+    /// anchored to the day the note was ordered in, so a note whose
+    /// `updatedAt` moved to a different day (edit across midnight,
+    /// regeneration) stops anchoring its new day group.
+    var hasValidManualOrder: Bool {
+        guard manualOrder != nil, let day = manualOrderDay else { return false }
+        return Calendar.current.isDate(updatedAt, inSameDayAs: day)
+    }
+
+    /// Display order inside one day group. Once any note in the group holds
+    /// a manual position for that day, manual positions win and notes
+    /// without one sink below; otherwise the most recently updated note
+    /// comes first.
+    static func orderedWithinDay(_ notes: [Note]) -> [Note] {
+        guard notes.contains(where: \.hasValidManualOrder) else {
+            return notes.sorted { $0.updatedAt > $1.updatedAt }
+        }
+        let manual = notes
+            .filter(\.hasValidManualOrder)
+            .sorted { ($0.manualOrder ?? 0) < ($1.manualOrder ?? 0) }
+        let rest = notes
+            .filter { !$0.hasValidManualOrder }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return manual + rest
     }
 }
 

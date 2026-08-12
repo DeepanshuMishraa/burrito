@@ -56,6 +56,8 @@ struct BurritoArchive: Codable, Equatable, Sendable {
         let folderID: UUID?
         var systemAudioArchivePath: String?
         var microphoneAudioArchivePath: String?
+        var manualOrder: Int?
+        var manualOrderDay: Date?
     }
 
     static func capture(
@@ -97,7 +99,9 @@ struct BurritoArchive: Codable, Equatable, Sendable {
                     calendarEvent: note.calendarEvent,
                     folderID: note.folder?.id,
                     systemAudioArchivePath: nil,
-                    microphoneAudioArchivePath: nil
+                    microphoneAudioArchivePath: nil,
+                    manualOrder: note.manualOrder,
+                    manualOrderDay: note.manualOrderDay
                 )
             },
             folders: folders.map {
@@ -720,6 +724,7 @@ extension BurritoArchive {
         var existingTemplateIDs = Set(existingTemplates.map(\.id))
         var existingBuiltInIDs = Set(existingTemplates.compactMap(\.builtInID))
         var existingNoteIDs = Set(existingNotes.map(\.id))
+        var importedNoteIDs = Set<UUID>()
         var foldersInserted = 0
         var templatesInserted = 0
         var notesInserted = 0
@@ -807,10 +812,30 @@ extension BurritoArchive {
             note.systemAudioRelativePath = audioPaths[record.id]?.system
             note.microphoneAudioRelativePath = audioPaths[record.id]?.microphone
             note.folder = record.folderID.flatMap { foldersByID[$0] }
+            // Old backups have no manual order; those notes fall back to the
+            // default updated-first timeline ordering. The archived day
+            // anchor is timezone-relative (start-of-day in the exporting
+            // timezone), so it is rebased onto the restored note's local day
+            // here — otherwise a cross-timezone restore would discard the
+            // manual ordering.
+            if record.manualOrder != nil, record.manualOrderDay != nil {
+                note.manualOrder = record.manualOrder
+                note.manualOrderDay = Calendar.current.startOfDay(for: record.updatedAt)
+            } else {
+                note.manualOrder = nil
+                note.manualOrderDay = nil
+            }
             context.insert(note)
             existingNoteIDs.insert(record.id)
+            importedNoteIDs.insert(record.id)
             notesInserted += 1
         }
+
+        // Imported manual positions can collide with notes the destination
+        // library already reordered on the same day. Renumber the combined
+        // day groups (existing notes first, imported after) so both sets
+        // keep their relative order.
+        try mergeImportedManualOrder(context: context, importedNoteIDs: importedNoteIDs)
 
         do {
             try context.save()
@@ -828,6 +853,65 @@ extension BurritoArchive {
             templatesInserted: templatesInserted,
             duplicatesSkipped: duplicatesSkipped
         )
+    }
+
+    /// Renumbers the manual timeline order of every day group that now
+    /// contains BOTH destination notes and imported notes with manual
+    /// positions. Each side's positions are only meaningful relative to its
+    /// own set, so without this the combined day would interleave on
+    /// colliding values. The merged order keeps destination notes first,
+    /// then imported notes, each side sorted by its own manual position
+    /// (unpositioned notes sink below by update time).
+    @MainActor
+    private func mergeImportedManualOrder(
+        context: ModelContext,
+        importedNoteIDs: Set<UUID>
+    ) throws {
+        let calendar = Calendar.current
+        let allNotes = try context.fetch(FetchDescriptor<Note>())
+        guard allNotes.contains(where: { $0.manualOrder != nil }) else { return }
+
+        let affectedDays = Set(
+            allNotes.compactMap { note -> Date? in
+                guard note.manualOrder != nil, note.manualOrderDay != nil else {
+                    return nil
+                }
+                return calendar.startOfDay(for: note.updatedAt)
+            }
+        )
+        guard !affectedDays.isEmpty else { return }
+
+        for day in affectedDays {
+            let dayNotes = allNotes.filter {
+                calendar.isDate($0.updatedAt, inSameDayAs: day)
+            }
+            let hasDestinationManual = dayNotes.contains {
+                !importedNoteIDs.contains($0.id) && $0.manualOrder != nil
+            }
+            let hasImportedManual = dayNotes.contains {
+                importedNoteIDs.contains($0.id) && $0.manualOrder != nil
+            }
+            guard hasDestinationManual, hasImportedManual else { continue }
+
+            let destination = dayNotes.filter { !importedNoteIDs.contains($0.id) }
+            let imported = dayNotes.filter { importedNoteIDs.contains($0.id) }
+            let merged = Self.manualDayOrder(destination) + Self.manualDayOrder(imported)
+            for (offset, note) in merged.enumerated() {
+                note.manualOrder = offset
+                note.manualOrderDay = day
+            }
+        }
+    }
+
+    /// Manual positions first, then unpositioned notes by update time.
+    private static func manualDayOrder(_ notes: [Note]) -> [Note] {
+        let manual = notes
+            .filter(\.hasValidManualOrder)
+            .sorted { ($0.manualOrder ?? 0) < ($1.manualOrder ?? 0) }
+        let rest = notes
+            .filter { !$0.hasValidManualOrder }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return manual + rest
     }
 }
 

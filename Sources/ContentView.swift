@@ -153,7 +153,15 @@ struct ContentView: View {
     @State private var newFolderName = ""
     @State private var showingStudyModePrompt = false
     @State private var studyModeName = ""
+    @State private var studyModeSelectedFolderID: UUID?
     @State private var studyModeLaunchSource: StudyModeLaunchSource = .app
+    @State private var toast: BurritoToast?
+    @State private var toastDismissTask: Task<Void, Never>?
+    @State private var pendingRegenerationNote: Note?
+    /// Live drag-reorder state: the dragged note ID and its current hover
+    /// target, applied to the timeline so rows slide while dragging.
+    @State private var draggedNoteID: UUID?
+    @State private var reorderTarget: NoteReorderTarget?
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -185,8 +193,22 @@ struct ContentView: View {
         notes.first { $0.id == selectedNoteID }
     }
 
+    /// Reliable "already onboarded" signal: a library with any note or
+    /// folder means this is not a first run, so the permission pager must
+    /// never appear — an app update can reset the onboarding flag or make
+    /// macOS re-prompt TCC permissions, and the recording flow re-requests
+    /// those on demand.
+    private var hasExistingLibrary: Bool {
+        !notes.isEmpty || !folders.isEmpty
+    }
+
     private var activeProcessingNote: Note? {
-        notes.first { $0.processingStage != nil }
+        // Notes regenerated in the background stay invisible: no full-screen
+        // loader replaces the UI while "Generate again" runs.
+        notes.first {
+            $0.processingStage != nil
+                && !coordinator.backgroundGenerationNoteIDs.contains($0.id)
+        }
     }
 
     private var visibleNotes: [Note] {
@@ -221,13 +243,53 @@ struct ContentView: View {
             calendar.startOfDay(for: $0.updatedAt)
         }
         return grouped
-            .map { (date: $0.key, notes: $0.value) }
+            .map { (date: $0.key, notes: previewedReorder(Note.orderedWithinDay($0.value), day: $0.key)) }
             .sorted { $0.date > $1.date }
+    }
+
+    /// Overlays the live drag preview: while a note is being dragged, its
+    /// row appears at the hovered position so the timeline animates in place.
+    private func previewedReorder(_ notes: [Note], day: Date) -> [Note] {
+        guard let target = reorderTarget,
+              let draggedID = draggedNoteID,
+              Calendar.current.isDate(target.day, inSameDayAs: day)
+        else {
+            return notes
+        }
+        return Self.moving(
+            draggedID,
+            targetID: target.targetID,
+            before: target.before,
+            in: notes
+        )
+    }
+
+    /// Moves one note before/after a target within an ordered array.
+    private static func moving(
+        _ draggedID: UUID,
+        targetID: UUID,
+        before: Bool,
+        in notes: [Note]
+    ) -> [Note] {
+        guard let draggedIndex = notes.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
+              draggedIndex != targetIndex
+        else {
+            return notes
+        }
+        var result = notes
+        let dragged = result.remove(at: draggedIndex)
+        var insertion = before ? targetIndex : targetIndex + 1
+        if draggedIndex < insertion {
+            insertion -= 1
+        }
+        result.insert(dragged, at: min(max(insertion, 0), result.count))
+        return result
     }
 
     var body: some View {
         Group {
-            if !permissionOnboardingCompleted || !permissions.allGranted {
+            if !permissionOnboardingCompleted, !permissions.allGranted, !hasExistingLibrary {
                 PermissionGateView(
                     permissions: permissions,
                     calendarAccess: calendarAccess
@@ -265,6 +327,9 @@ struct ContentView: View {
                     selectRelatedNote: { selectedNoteID = $0 },
                     newRecordingAction: {
                         continueRecording(selectedNote)
+                    },
+                    showToast: { message, isError in
+                        showToast(message, isError: isError)
                     }
                 )
             } else {
@@ -294,7 +359,14 @@ struct ContentView: View {
         .onChange(of: permissionOnboardingCompleted, initial: true) {
             synchronizeNoteTakingDetection()
         }
-        .onChange(of: permissions.allGranted, initial: true) {
+        .onChange(of: permissions.allGranted, initial: true) { _, granted in
+            // Self-heal: a user with every permission granted has completed
+            // onboarding in practice. This restores the flag when an app
+            // update resets the preference, so returning users are never
+            // pushed back into the permission pager.
+            if granted {
+                permissionOnboardingCompleted = true
+            }
             synchronizeNoteTakingDetection()
         }
         .sheet(item: $recordingDestination) { destination in
@@ -361,6 +433,8 @@ struct ContentView: View {
                 BurritoModalBackdrop {
                     StudyModeNameDialog(
                         name: $studyModeName,
+                        folders: studyFolders,
+                        selectedFolderID: $studyModeSelectedFolderID,
                         cancel: {
                             studyModeName = ""
                             showingStudyModePrompt = false
@@ -498,6 +572,100 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .burritoKeepRecording)) { _ in
             coordinator.keepRecording()
+        }
+        .overlay(alignment: .bottom) {
+            toastOverlay
+        }
+        .confirmationDialog(
+            "Replace your edited notes?",
+            isPresented: regenerationConfirmationBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Replace and generate", role: .destructive) {
+                confirmRegeneration()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRegenerationNote = nil
+            }
+        } message: {
+            Text("Burrito will generate a fresh version of the notes and overwrite your edits.")
+        }
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let toast {
+            BurritoToastView(toast: toast)
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private var regenerationConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { pendingRegenerationNote != nil },
+            set: { if !$0 { pendingRegenerationNote = nil } }
+        )
+    }
+
+    private func confirmRegeneration() {
+        guard let note = pendingRegenerationNote else { return }
+        pendingRegenerationNote = nil
+        guard note.processingStage == nil,
+              note.lifecycle != .recording
+        else {
+            showToast("Notes are already being generated.", isError: true)
+            return
+        }
+        // The user already confirmed overwriting their edits: skip the
+        // edited-notes gate and regenerate for real.
+        performBackgroundRegeneration(note)
+    }
+
+    /// Regenerates a note in the background from the notes list: no modal,
+    /// no navigation — just a toast while the model works.
+    private func regenerateNoteInBackground(_ note: Note) {
+        guard note.processingStage == nil,
+              note.lifecycle != .recording
+        else {
+            showToast("Notes are already being generated.", isError: true)
+            return
+        }
+        if note.userEditedNotes {
+            pendingRegenerationNote = note
+            return
+        }
+        performBackgroundRegeneration(note)
+    }
+
+    private func performBackgroundRegeneration(_ note: Note) {
+        showToast("Generating notes in the background…")
+        Task {
+            await coordinator.generateInBackground(note: note, context: modelContext)
+            if note.lifecycle == .ready {
+                showToast("Notes ready for “\(note.title)”")
+            } else {
+                showToast(
+                    note.lastErrorMessage ?? "Note generation failed. Try again.",
+                    isError: true
+                )
+            }
+        }
+    }
+
+    private func showToast(_ message: String, isError: Bool = false) {
+        toastDismissTask?.cancel()
+        withAnimation(.burritoSpring) {
+            toast = BurritoToast(message: message, isError: isError)
+        }
+        toastDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.burritoSpring) {
+                    toast = nil
+                }
+            }
         }
     }
 
@@ -831,11 +999,46 @@ struct ContentView: View {
                         isIndexed: supermemoryEnabled
                             && supermemoryIndexingEnabled
                             && SupermemoryConfiguration.supportsSelectedModel
-                            && supermemoryIndexProgress[note.id]?.state == .live
-                    ) {
-                        selectedNoteID = note.id
-                    }
-                    .draggable(note.id.uuidString)
+                            && supermemoryIndexProgress[note.id]?.state == .live,
+                        open: {
+                            selectedNoteID = note.id
+                        },
+                        requestRegeneration: regenerateNoteInBackground,
+                        day: group.date,
+                        onDragBegan: { draggedID in
+                            draggedNoteID = draggedID
+                            reorderTarget = nil
+                        },
+                        onReorderHover: { day, targetID, before in
+                            let target = NoteReorderTarget(
+                                day: day,
+                                targetID: targetID,
+                                before: before
+                            )
+                            guard reorderTarget != target else { return }
+                            withAnimation(.burritoSpring) {
+                                reorderTarget = target
+                            }
+                        },
+                        onReorderExit: {
+                            if reorderTarget != nil {
+                                withAnimation(.burritoSpring) {
+                                    reorderTarget = nil
+                                }
+                            }
+                        },
+                        onReorderCommit: { day, targetID, before in
+                            guard let draggedID = draggedNoteID else { return }
+                            reorderNote(
+                                id: draggedID,
+                                inDay: day,
+                                relativeTo: targetID,
+                                before: before
+                            )
+                            draggedNoteID = nil
+                            reorderTarget = nil
+                        }
+                    )
                     .contextMenu {
                         noteContextMenu(note)
                     }
@@ -855,12 +1058,51 @@ struct ContentView: View {
         return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
+    /// Applies a drag-and-drop reorder inside one day group: the dragged note
+    /// moves before/after the target, then the whole group is renumbered so
+    /// the manual order sticks. The full day is renumbered even when the
+    /// timeline is filtered (favorites, search) so positions never collide.
+    private func reorderNote(
+        id draggedID: UUID,
+        inDay day: Date,
+        relativeTo targetID: UUID,
+        before: Bool
+    ) {
+        let calendar = Calendar.current
+        var notes = Note.orderedWithinDay(
+            notes.filter {
+                $0.deletedAt == nil && calendar.isDate($0.updatedAt, inSameDayAs: day)
+            }
+        )
+        guard let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
+              let draggedIndex = notes.firstIndex(where: { $0.id == draggedID }),
+              draggedIndex != targetIndex
+        else {
+            return
+        }
+        var insertion = before ? targetIndex : targetIndex + 1
+        let dragged = notes.remove(at: draggedIndex)
+        if draggedIndex < insertion {
+            insertion -= 1
+        }
+        notes.insert(dragged, at: min(max(insertion, 0), notes.count))
+        for (offset, note) in notes.enumerated() {
+            note.manualOrder = offset
+            note.manualOrderDay = day
+        }
+        try? modelContext.save()
+    }
+
     @ViewBuilder
     private func noteContextMenu(_ note: Note) -> some View {
         if note.deletedAt == nil {
             Button(note.isFavorite ? "Remove from Favorites" : "Favorite") {
                 note.isFavorite.toggle()
             }
+            Button("Generate Again") {
+                regenerateNoteInBackground(note)
+            }
+            .disabled(note.processingStage != nil || note.lifecycle == .recording)
             Button("Move to Trash", role: .destructive) {
                 note.deletedAt = .now
             }
@@ -1034,6 +1276,8 @@ struct ContentView: View {
         let ids = Set(values.compactMap(UUID.init(uuidString:)))
         let matches = notes.filter { ids.contains($0.id) }
         for note in matches { note.folder = folder }
+        draggedNoteID = nil
+        reorderTarget = nil
         return !matches.isEmpty
     }
 
@@ -1130,6 +1374,7 @@ struct ContentView: View {
     private func presentStudyModePrompt(source: StudyModeLaunchSource) {
         studyModeLaunchSource = source
         studyModeName = ""
+        studyModeSelectedFolderID = nil
         showingStudyModePrompt = true
     }
 
@@ -1138,9 +1383,22 @@ struct ContentView: View {
         presentStudyModePrompt(source: source)
     }
 
+    /// Folders that already hold notes — candidates for continuing an earlier
+    /// study session, most recently used first.
+    private var studyFolders: [Folder] {
+        folders
+            .filter { !$0.notes.isEmpty }
+            .sorted {
+                ($0.notes.map(\.updatedAt).max() ?? .distantPast)
+                    > ($1.notes.map(\.updatedAt).max() ?? .distantPast)
+            }
+    }
+
     private func startStudyMode() {
         let name = studyModeName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty,
+        // Continuing an existing folder does not need a new session name.
+        let continuesSession = studyModeSelectedFolderID != nil
+        guard continuesSession || !name.isEmpty,
               let template = templates.first(where: {
                   $0.builtInID == BuiltInTemplate.studyNotes.rawValue
               }) ?? templates.first
@@ -1155,11 +1413,14 @@ struct ContentView: View {
             retainsAudio: defaultRetainsAudio
         )
         let launchSource = studyModeLaunchSource
+        let folderID = studyModeSelectedFolderID
         showingStudyModePrompt = false
         studyModeName = ""
+        studyModeSelectedFolderID = nil
         Task {
             let started = await coordinator.startStudyMode(
                 name: name,
+                folderID: folderID,
                 options: options,
                 context: modelContext
             )
@@ -2060,6 +2321,7 @@ private struct ModelsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var modelStore: ParakeetModelStore
     @Bindable var languageModelStore: LocalLanguageModelStore
+    @State private var agentStore = AgentHarnessStore.shared
 
     @State private var selectedTab: Tab = .speechToText
 
@@ -2073,9 +2335,12 @@ private struct ModelsView: View {
     }
 
     private var activeEngineTitle: String {
+        if let harness = agentStore.selection {
+            return "\(harness.displayName) (agent)"
+        }
         switch languageModelStore.selection {
-        case .apple: "Apple Intelligence"
-        case .local(let variant): variant.displayName
+        case .apple: return "Apple Intelligence"
+        case .local(let variant): return variant.displayName
         }
     }
 
@@ -2225,75 +2490,107 @@ private struct ModelsView: View {
 
                     } else {
                         // TEXT MODELS TAB
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 14) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Active Engine: \(activeEngineTitle)")
-                                        .font(.burritoUI(size: 13, weight: 450))
-                                        .foregroundStyle(.primary)
-                                    Text("Used for prompt synthesis, structure parsing, and note generation.")
+                        if let activeAgent = agentStore.selection {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 12) {
+                                    AgentLogoView(harness: activeAgent, size: 34)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(activeAgent.displayName) is generating your notes")
+                                            .font(.burritoUI(size: 13, weight: 450))
+                                            .foregroundStyle(.primary)
+                                        Text(
+                                            "On-device text models are disabled while the agent harness is "
+                                                + "active. Turn it off in Settings → Agents to use Apple "
+                                                + "Intelligence or a Qwen model again."
+                                        )
                                         .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
                                         .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    BurritoLabel("Active", systemImage: "checkmark.circle.fill")
+                                        .font(.burritoUI(size: 11, weight: 450))
+                                        .foregroundStyle(BurritoTheme.accent)
                                 }
-                                Spacer()
+                                .padding(16)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
-                            .padding(16)
-                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .burritoElevation(.surface)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 14) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Active Engine: \(activeEngineTitle)")
+                                            .font(.burritoUI(size: 13, weight: 450))
+                                            .foregroundStyle(.primary)
+                                        Text("Used for prompt synthesis, structure parsing, and note generation.")
+                                            .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(16)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
                         }
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(alignment: .firstTextBaseline) {
-                                BurritoSectionLabel(title: "NOTE GENERATION MODELS")
-                                Spacer()
-                                Text("Apple Intelligence is the default")
-                                    .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
-                                    .foregroundStyle(.tertiary)
-                            }
-
-                            VStack(spacing: 4) {
-                                GenerationModelCatalogRow(
-                                    title: "Apple Intelligence",
-                                    summary: "Built into macOS. Lightweight, private, and always available.",
-                                    parameterCount: "System model",
-                                    downloadSize: "No download",
-                                    isSelected: languageModelStore.selection == .apple,
-                                    state: nil
-                                ) {
-                                    languageModelStore.select(.apple)
+                        if agentStore.selection == nil {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    BurritoSectionLabel(title: "NOTE GENERATION MODELS")
+                                    Spacer()
+                                    Text("Apple Intelligence is the default")
+                                        .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
+                                        .foregroundStyle(.tertiary)
                                 }
 
-                                ForEach(
-                                    Array(LocalLanguageModelVariant.allCases.enumerated()),
-                                    id: \.element
-                                ) { index, variant in
+                                VStack(spacing: 4) {
                                     GenerationModelCatalogRow(
-                                        title: variant.displayName,
-                                        summary: variant.summary,
-                                        parameterCount: variant.parameterCount,
-                                        downloadSize: variant.downloadSize,
-                                        isSelected: languageModelStore.selection == .local(variant),
-                                        state: languageModelStore.state(for: variant)
+                                        title: "Apple Intelligence",
+                                        summary: "Built into macOS. Lightweight, private, and always available.",
+                                        parameterCount: "System model",
+                                        downloadSize: "No download",
+                                        isSelected: languageModelStore.selection == .apple,
+                                        state: nil
                                     ) {
-                                        switch languageModelStore.state(for: variant) {
-                                        case .installed:
-                                            languageModelStore.select(.local(variant))
-                                        case .notInstalled, .paused, .failed:
-                                            Task { await languageModelStore.install(variant) }
-                                        case .downloading:
-                                            languageModelStore.cancelInstallation(variant)
+                                        languageModelStore.select(.apple)
+                                    }
+
+                                    ForEach(
+                                        Array(LocalLanguageModelVariant.allCases.enumerated()),
+                                        id: \.element
+                                    ) { index, variant in
+                                        GenerationModelCatalogRow(
+                                            title: variant.displayName,
+                                            summary: variant.summary,
+                                            parameterCount: variant.parameterCount,
+                                            downloadSize: variant.downloadSize,
+                                            isSelected: languageModelStore.selection == .local(variant),
+                                            state: languageModelStore.state(for: variant)
+                                        ) {
+                                            switch languageModelStore.state(for: variant) {
+                                            case .installed:
+                                                languageModelStore.select(.local(variant))
+                                            case .notInstalled, .paused, .failed:
+                                                Task { await languageModelStore.install(variant) }
+                                            case .downloading:
+                                                languageModelStore.cancelInstallation(variant)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            .padding(.vertical, 6)
-                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .burritoElevation(.surface)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                                .padding(.vertical, 6)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
                         }
                     }
@@ -2310,6 +2607,7 @@ private struct ModelsView: View {
         .onAppear {
             modelStore.refresh()
             languageModelStore.refresh()
+            agentStore.refresh()
         }
     }
 }
@@ -3167,6 +3465,7 @@ private struct BurritoPopoverRow: View {
     let systemImage: String
     var isSelected = false
     var tint: Color? = nil
+    var isDisabled = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -3178,10 +3477,12 @@ private struct BurritoPopoverRow: View {
                 systemImage: systemImage,
                 isSelected: isSelected,
                 isHovered: isHovered,
-                tint: tint
+                tint: tint,
+                isDisabled: isDisabled
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .onHover { isHovered = $0 }
     }
 }
@@ -3192,6 +3493,7 @@ private struct BurritoPopoverRowLabel: View {
     var isSelected = false
     var isHovered = false
     var tint: Color? = nil
+    var isDisabled = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -3210,6 +3512,7 @@ private struct BurritoPopoverRowLabel: View {
         .padding(.horizontal, 9)
         .frame(height: 32)
         .contentShape(Rectangle())
+        .opacity(isDisabled ? 0.45 : 1)
         .background(
             isHovered ? BurritoTheme.controlFill : Color.clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -3370,18 +3673,76 @@ private struct NewFolderDialog: View {
     }
 }
 
+struct BurritoToast: Equatable {
+    let message: String
+    let isError: Bool
+}
+
+extension UTType {
+    /// Drag payload for note rows: only notes dragged from the timeline
+    /// register this type, so external text drops can never reorder notes.
+    static let burritoNote = UTType(exportedAs: "com.local.burrito.note")
+}
+
+/// Where a dragged note currently hovers: the target day group, the row it
+/// is being dropped onto, and whether it lands before or after that row.
+private struct NoteReorderTarget: Equatable {
+    let day: Date
+    let targetID: UUID
+    let before: Bool
+}
+
+private struct BurritoToastView: View {
+    let toast: BurritoToast
+
+    var body: some View {
+        HStack(spacing: 10) {
+            BurritoIcon(
+                name: toast.isError ? "exclamationmark.triangle" : "checkmark.circle",
+                size: 13
+            )
+            .foregroundStyle(toast.isError ? Color.red : BurritoTheme.accent)
+            Text(toast.message)
+                .font(.burritoUI(size: 12, weight: 450))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .burritoElevation(.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 7)
+        .accessibilityLabel(toast.message)
+    }
+}
+
 private struct StudyModeNameDialog: View {
     @Binding var name: String
+    let folders: [Folder]
+    @Binding var selectedFolderID: UUID?
     let cancel: () -> Void
     let start: () -> Void
+
+    @State private var isFolderPickerPresented = false
+
+    private var selectedFolder: Folder? {
+        folders.first { $0.id == selectedFolderID }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Start study mode")
                     .font(.burritoDisplay(size: 28, weight: .init(400)))
-                Text("Name this session. Each 10-minute note will be added to its folder.")
-                    .foregroundStyle(.secondary)
+                Text(
+                    selectedFolderID == nil
+                        ? "Name this session. Each 10-minute note will be added to its folder."
+                        : "New notes will continue in “\(selectedFolder?.name ?? "")”."
+                )
+                .foregroundStyle(.secondary)
             }
             TextField("Database isolation", text: $name)
                 .textFieldStyle(.plain)
@@ -3394,13 +3755,130 @@ private struct StudyModeNameDialog: View {
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(start)
+
+            if !folders.isEmpty {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Continue an earlier session")
+                            .font(.burritoUI(size: 12, weight: 450))
+                            .foregroundStyle(.primary)
+                        Text("Pick a folder to keep recording into it.")
+                            .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        isFolderPickerPresented.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selectedFolder?.name ?? "New session")
+                                .font(.burritoUI(size: 12, weight: 450))
+                                .foregroundStyle(BurritoTheme.accent)
+                                .lineLimit(1)
+                            BurritoIcon(name: "chevron.down", size: 8)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(BurritoTheme.softBorder)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Continue an earlier study session")
+                    .accessibilityValue(selectedFolder?.name ?? "New session")
+                    .popover(
+                        isPresented: $isFolderPickerPresented,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        VStack(spacing: 2) {
+                            Button {
+                                BurritoHaptics.trigger(.alignment)
+                                selectedFolderID = nil
+                                isFolderPickerPresented = false
+                            } label: {
+                                HStack(spacing: 10) {
+                                    BurritoIcon(name: "plus", size: 12)
+                                        .foregroundStyle(selectedFolderID == nil ? BurritoTheme.accent : .secondary)
+                                    Text("New session")
+                                        .font(.burritoUI(size: 12, weight: 450))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedFolderID == nil {
+                                        BurritoIcon(name: "checkmark", size: 10)
+                                            .foregroundStyle(BurritoTheme.accent)
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .frame(height: 32)
+                                .background(
+                                    selectedFolderID == nil
+                                        ? BurritoTheme.controlFill
+                                        : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            Divider().padding(.vertical, 2)
+
+                            ForEach(folders) { folder in
+                                Button {
+                                    BurritoHaptics.trigger(.alignment)
+                                    selectedFolderID = folder.id
+                                    isFolderPickerPresented = false
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        BurritoIcon(name: "folder", size: 12)
+                                            .foregroundStyle(selectedFolderID == folder.id ? BurritoTheme.accent : .secondary)
+                                        Text(folder.name)
+                                            .font(.burritoUI(size: 12, weight: 450))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if selectedFolderID == folder.id {
+                                            BurritoIcon(name: "checkmark", size: 10)
+                                                .foregroundStyle(BurritoTheme.accent)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 32)
+                                    .background(
+                                        selectedFolderID == folder.id
+                                            ? BurritoTheme.controlFill
+                                            : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(6)
+                        .frame(width: 250)
+                        .background(BurritoTheme.raised)
+                        .presentationBackground(BurritoTheme.raised)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .burritoElevation(.control)
+            }
+
             HStack {
                 Button("Cancel", action: cancel)
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))
                 Spacer()
                 Button("Start study mode", action: start)
                     .buttonStyle(BurritoActionButtonStyle(prominent: true))
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && selectedFolderID == nil
+                    )
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -3839,7 +4317,9 @@ private struct TimelineNoteRow: View {
 
 enum NoteExcerpt {
     static func text(for note: Note) -> String {
-        let markdown = note.markdownBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown = GeneratedNote
+            .strippedSourceArtifacts(from: note.markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !markdown.isEmpty {
             return markdown
                 .replacingOccurrences(of: "#", with: "")
@@ -3921,9 +4401,16 @@ private struct TimelineNoteItem: View {
     let folders: [Folder]
     let isIndexed: Bool
     let open: () -> Void
+    let requestRegeneration: (Note) -> Void
+    let day: Date
+    let onDragBegan: (UUID) -> Void
+    let onReorderHover: (Date, UUID, Bool) -> Void
+    let onReorderExit: () -> Void
+    let onReorderCommit: (Date, UUID, Bool) -> Void
 
     @State private var showingActions = false
     @State private var showingFolders = false
+    @State private var isDropTarget = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -3979,6 +4466,84 @@ private struct TimelineNoteItem: View {
                 showingFolders = false
             }
         }
+        .onDrag {
+            onDragBegan(note.id)
+            let provider = NSItemProvider()
+            let payload = Data(note.id.uuidString.utf8)
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.burritoNote.identifier,
+                visibility: .all
+            ) { completion in
+                completion(payload, nil)
+                return nil
+            }
+            // Keep the plain-text representation for the folder sidebar drop.
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.plainText.identifier,
+                visibility: .all
+            ) { completion in
+                completion(payload, nil)
+                return nil
+            }
+            return provider
+        }
+        .onDrop(
+            of: [.burritoNote],
+            delegate: NoteRowDropDelegate(
+                noteID: note.id,
+                day: day,
+                setTargeted: { targeted in
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        isDropTarget = targeted
+                    }
+                },
+                hover: onReorderHover,
+                exited: onReorderExit,
+                commit: onReorderCommit
+            )
+        )
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(BurritoTheme.accent, lineWidth: 1.5)
+                    .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    /// Drives the live reorder preview while a note is dragged over this row:
+    /// the row reports hover position (upper half = before, lower half =
+    /// after) and commits the final order when the drop lands.
+    private struct NoteRowDropDelegate: DropDelegate {
+        let noteID: UUID
+        let day: Date
+        let setTargeted: (Bool) -> Void
+        let hover: (Date, UUID, Bool) -> Void
+        let exited: () -> Void
+        let commit: (Date, UUID, Bool) -> Void
+
+        func dropEntered(info: DropInfo) {
+            setTargeted(true)
+            hover(day, noteID, info.location.y < 28)
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            // Keep the preview aligned while the pointer crosses the row's
+            // midpoint: dropEntered only fires once per row entry.
+            hover(day, noteID, info.location.y < 28)
+            return DropProposal(operation: .move)
+        }
+
+        func dropExited(info: DropInfo) {
+            setTargeted(false)
+            exited()
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            setTargeted(false)
+            commit(day, noteID, info.location.y < 28)
+            return true
+        }
     }
 
     @ViewBuilder
@@ -4022,6 +4587,14 @@ private struct TimelineNoteItem: View {
                     systemImage: "folder"
                 ) {
                     showingFolders = true
+                }
+                BurritoPopoverRow(
+                    title: "Generate again",
+                    systemImage: "arrow.clockwise",
+                    isDisabled: note.processingStage != nil || note.lifecycle == .recording
+                ) {
+                    showingActions = false
+                    requestRegeneration(note)
                 }
                 BurritoPopoverDivider()
                 BurritoPopoverRow(
@@ -5369,7 +5942,7 @@ private struct MarkdownNoteContent: View {
     var openMemory: ((MemoryCitation) -> Void)?
 
     private var document: MarkdownDocument {
-        MarkdownDocument.parse(markdown)
+        MarkdownDocument.parse(GeneratedNote.strippedSourceArtifacts(from: markdown))
     }
 
     var body: some View {
@@ -6756,6 +7329,7 @@ private struct NoteDetailView: View {
     let backAction: () -> Void
     let selectRelatedNote: (UUID) -> Void
     let newRecordingAction: () -> Void
+    let showToast: (String, Bool) -> Void
 
     @State private var selectedTab: Tab = .notes
     @State private var isEditingMarkdown = false
@@ -6893,7 +7467,9 @@ private struct NoteDetailView: View {
 
                                     BurritoPopoverRow(
                                         title: "Generate again",
-                                        systemImage: "arrow.clockwise"
+                                        systemImage: "arrow.clockwise",
+                                        isDisabled: note.processingStage != nil
+                                            || note.lifecycle == .recording
                                     ) {
                                         showingMorePopover = false
                                         requestRegeneration()
@@ -7133,7 +7709,8 @@ private struct NoteDetailView: View {
                             Task { await coordinator.stop(context: modelContext) }
                         }
                     }
-                } else if let stage = note.processingStage {
+                } else if let stage = note.processingStage,
+                          !coordinator.backgroundGenerationNoteIDs.contains(note.id) {
                     ProcessingRail(
                         stage: stage,
                         isContinuation: !note.markdownBody.isEmpty
@@ -7148,6 +7725,9 @@ private struct NoteDetailView: View {
                             Button("Regenerate") {
                                 requestRegeneration()
                             }
+                            .disabled(
+                                note.processingStage != nil || note.lifecycle == .recording
+                            )
                         }
                         .font(.burritoUI(size: 13, relativeTo: .callout))
                         .padding(.horizontal, 18)
@@ -7253,12 +7833,21 @@ private struct NoteDetailView: View {
     }
 
     private func regenerate() {
+        showToast("Generating notes in the background…", false)
         Task {
-            await coordinator.generate(
+            await coordinator.generateInBackground(
                 note: note,
                 context: modelContext,
                 undoManager: undoManager
             )
+            if note.lifecycle == .ready {
+                showToast("Notes ready for “\(note.title)”", false)
+            } else {
+                showToast(
+                    note.lastErrorMessage ?? "Note generation failed. Try again.",
+                    true
+                )
+            }
         }
     }
 
