@@ -123,6 +123,109 @@ struct PersistenceTests {
         #expect(imported.playbackRate.rawValue == 2)
     }
 
+    @Test("Importing manual order renumbers the combined day without collisions")
+    func importMergesManualOrder() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: .now)
+        let template = TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize.")
+
+        // Destination library: two manually ordered notes on today's day.
+        let existingA = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        existingA.updatedAt = day.addingTimeInterval(3_600)
+        existingA.manualOrder = 0
+        existingA.manualOrderDay = day
+        let existingB = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        existingB.updatedAt = day.addingTimeInterval(7_200)
+        existingB.manualOrder = 1
+        existingB.manualOrderDay = day
+        context.insert(existingA)
+        context.insert(existingB)
+        try context.save()
+
+        // Archive: two more notes with colliding manual positions.
+        let importedA = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        importedA.updatedAt = day.addingTimeInterval(10_800)
+        importedA.manualOrder = 0
+        importedA.manualOrderDay = day
+        let importedB = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        importedB.updatedAt = day.addingTimeInterval(14_400)
+        importedB.manualOrder = 1
+        importedB.manualOrderDay = day
+        let archive = BurritoArchive.capture(notes: [importedA, importedB], folders: [], templates: [])
+
+        _ = try archive.restore(into: context)
+
+        let all = try context.fetch(FetchDescriptor<Note>())
+        let dayNotes = Note.orderedWithinDay(all)
+        let positions = dayNotes.enumerated().map { index, note -> (UUID, Int) in
+            (note.id, note.manualOrder ?? -1)
+        }
+        // Renumbered 0...n with no duplicates, destination first in its own
+        // order, then imported in its own order.
+        #expect(Set(positions.map(\.1)) == Set(0..<positions.count))
+        #expect(positions.map(\.0) == [
+            existingA.id, existingB.id, importedA.id, importedB.id,
+        ])
+    }
+
+    @Test("Manual order day anchor rebases onto the restore timezone")
+    func importRebasesManualOrderDay() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Note.self,
+            Folder.self,
+            NoteTemplate.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        let template = TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize.")
+
+        // Archived in a timezone where the note's day started 30 hours
+        // before its local start-of-day (e.g., UTC+13 vs UTC-11).
+        let updatedAt = Date.now
+        let foreignDay = Calendar(identifier: .gregorian)
+            .date(byAdding: .hour, value: -30, to: Calendar.current.startOfDay(for: updatedAt))!
+        let note = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        note.updatedAt = updatedAt
+        note.manualOrder = 0
+        note.manualOrderDay = foreignDay
+        let archive = BurritoArchive.capture(notes: [note], folders: [], templates: [])
+
+        _ = try archive.restore(into: context)
+
+        let restored = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(restored.hasValidManualOrder)
+        #expect(restored.manualOrderDay == Calendar.current.startOfDay(for: updatedAt))
+    }
+
     @Test("Archives without a playback rate restore at natural speed")
     func archivePlaybackRateBackwardCompatibility() throws {
         let note = Note(
