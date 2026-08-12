@@ -56,6 +56,8 @@ struct BurritoArchive: Codable, Equatable, Sendable {
         let folderID: UUID?
         var systemAudioArchivePath: String?
         var microphoneAudioArchivePath: String?
+        var manualOrder: Int?
+        var manualOrderDay: Date?
     }
 
     static func capture(
@@ -97,7 +99,9 @@ struct BurritoArchive: Codable, Equatable, Sendable {
                     calendarEvent: note.calendarEvent,
                     folderID: note.folder?.id,
                     systemAudioArchivePath: nil,
-                    microphoneAudioArchivePath: nil
+                    microphoneAudioArchivePath: nil,
+                    manualOrder: note.manualOrder,
+                    manualOrderDay: note.manualOrderDay
                 )
             },
             folders: folders.map {
@@ -807,6 +811,10 @@ extension BurritoArchive {
             note.systemAudioRelativePath = audioPaths[record.id]?.system
             note.microphoneAudioRelativePath = audioPaths[record.id]?.microphone
             note.folder = record.folderID.flatMap { foldersByID[$0] }
+            // Old backups have no manual order; those notes fall back to the
+            // default updated-first timeline ordering.
+            note.manualOrder = record.manualOrder
+            note.manualOrderDay = record.manualOrderDay
             context.insert(note)
             existingNoteIDs.insert(record.id)
             notesInserted += 1

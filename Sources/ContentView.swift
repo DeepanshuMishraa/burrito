@@ -994,12 +994,14 @@ struct ContentView: View {
                             reorderTarget = nil
                         },
                         onReorderHover: { day, targetID, before in
+                            let target = NoteReorderTarget(
+                                day: day,
+                                targetID: targetID,
+                                before: before
+                            )
+                            guard reorderTarget != target else { return }
                             withAnimation(.burritoSpring) {
-                                reorderTarget = NoteReorderTarget(
-                                    day: day,
-                                    targetID: targetID,
-                                    before: before
-                                )
+                                reorderTarget = target
                             }
                         },
                         onReorderExit: {
@@ -1070,6 +1072,7 @@ struct ContentView: View {
         notes.insert(dragged, at: min(max(insertion, 0), notes.count))
         for (offset, note) in notes.enumerated() {
             note.manualOrder = offset
+            note.manualOrderDay = day
         }
         try? modelContext.save()
     }
@@ -3659,6 +3662,12 @@ struct BurritoToast: Equatable {
     let isError: Bool
 }
 
+extension UTType {
+    /// Drag payload for note rows: only notes dragged from the timeline
+    /// register this type, so external text drops can never reorder notes.
+    static let burritoNote = UTType(exportedAs: "com.local.burrito.note")
+}
+
 /// Where a dragged note currently hovers: the target day group, the row it
 /// is being dropped onto, and whether it lands before or after that row.
 private struct NoteReorderTarget: Equatable {
@@ -4443,10 +4452,27 @@ private struct TimelineNoteItem: View {
         }
         .onDrag {
             onDragBegan(note.id)
-            return NSItemProvider(object: note.id.uuidString as NSString)
+            let provider = NSItemProvider()
+            let payload = Data(note.id.uuidString.utf8)
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.burritoNote.identifier,
+                visibility: .all
+            ) { completion in
+                completion(payload, nil)
+                return nil
+            }
+            // Keep the plain-text representation for the folder sidebar drop.
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.plainText.identifier,
+                visibility: .all
+            ) { completion in
+                completion(payload, nil)
+                return nil
+            }
+            return provider
         }
         .onDrop(
-            of: [.plainText],
+            of: [.burritoNote],
             delegate: NoteRowDropDelegate(
                 noteID: note.id,
                 day: day,
@@ -4486,7 +4512,10 @@ private struct TimelineNoteItem: View {
         }
 
         func dropUpdated(info: DropInfo) -> DropProposal? {
-            DropProposal(operation: .move)
+            // Keep the preview aligned while the pointer crosses the row's
+            // midpoint: dropEntered only fires once per row entry.
+            hover(day, noteID, info.location.y < 28)
+            return DropProposal(operation: .move)
         }
 
         func dropExited(info: DropInfo) {

@@ -81,6 +81,10 @@ final class Note {
     /// Manual position within the note's day group once the user has
     /// reordered the timeline by dragging. nil means "no manual order yet".
     var manualOrder: Int?
+    /// The day (start of day, updatedAt-based) this manual position belongs
+    /// to. A note edited into a different day no longer anchors the ordering
+    /// of its new day group.
+    var manualOrderDay: Date?
 
     init(
         id: UUID = UUID(),
@@ -126,6 +130,7 @@ final class Note {
         self.calendarEventData = calendarEvent.flatMap { try? JSONEncoder().encode($0) }
         self.folder = nil
         self.manualOrder = nil
+        self.manualOrderDay = nil
     }
 
     var lifecycle: NoteLifecycle {
@@ -215,19 +220,28 @@ final class Note {
 }
 
 extension Note {
-    /// Display order inside one day group. Once any note in the group has a
-    /// manual order (the user reordered the timeline), manual positions win
-    /// and new notes without one sink below the reordered ones; otherwise
-    /// the most recently updated note comes first.
+    /// Whether this note's manual position still applies: the position is
+    /// anchored to the day the note was ordered in, so a note whose
+    /// `updatedAt` moved to a different day (edit across midnight,
+    /// regeneration) stops anchoring its new day group.
+    var hasValidManualOrder: Bool {
+        guard manualOrder != nil, let day = manualOrderDay else { return false }
+        return Calendar.current.isDate(updatedAt, inSameDayAs: day)
+    }
+
+    /// Display order inside one day group. Once any note in the group holds
+    /// a manual position for that day, manual positions win and notes
+    /// without one sink below; otherwise the most recently updated note
+    /// comes first.
     static func orderedWithinDay(_ notes: [Note]) -> [Note] {
-        guard notes.contains(where: { $0.manualOrder != nil }) else {
+        guard notes.contains(where: \.hasValidManualOrder) else {
             return notes.sorted { $0.updatedAt > $1.updatedAt }
         }
         let manual = notes
-            .filter { $0.manualOrder != nil }
+            .filter(\.hasValidManualOrder)
             .sorted { ($0.manualOrder ?? 0) < ($1.manualOrder ?? 0) }
         let rest = notes
-            .filter { $0.manualOrder == nil }
+            .filter { !$0.hasValidManualOrder }
             .sorted { $0.updatedAt > $1.updatedAt }
         return manual + rest
     }

@@ -233,9 +233,12 @@ struct PersistenceTests {
         // Default: most recently updated first.
         #expect(Note.orderedWithinDay([older, newer]).map(\.id) == [newer.id, older.id])
 
-        // After a reorder, manual positions win.
+        // After a reorder, manual positions win (anchored to the note's day).
+        let day = Calendar.current.startOfDay(for: newer.updatedAt)
         newer.manualOrder = 1
+        newer.manualOrderDay = day
         older.manualOrder = 0
+        older.manualOrderDay = day
         #expect(Note.orderedWithinDay([newer, older]).map(\.id) == [older.id, newer.id])
 
         // A new note without a manual order sinks below the reordered ones.
@@ -249,6 +252,35 @@ struct PersistenceTests {
             Note.orderedWithinDay([newer, older, fresh]).map(\.id)
                 == [older.id, newer.id, fresh.id]
         )
+    }
+
+    @Test("A note edited into another day stops anchoring its new day group")
+    func manualOrderDoesNotFollowDayMoves() {
+        let template = TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize.")
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: .now) ?? .now
+        let today = Date.now
+
+        let moved = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        moved.updatedAt = today
+        moved.manualOrder = 0
+        moved.manualOrderDay = calendar.startOfDay(for: yesterday)
+
+        let regular = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        regular.updatedAt = yesterday
+
+        // The moved note's manual position belongs to yesterday: today's
+        // group stays on the default ordering and is not anchored by it.
+        #expect(!moved.hasValidManualOrder)
+        #expect(Note.orderedWithinDay([moved, regular]).map(\.id) == [moved.id, regular.id])
     }
 
     @Test("Human notes persist independently from generated notes")
