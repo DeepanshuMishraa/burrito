@@ -698,7 +698,12 @@ enum MLXRequestMapper {
 actor SelectedLanguageModelAdapter {
     static let shared = SelectedLanguageModelAdapter()
 
-    func resolve(languageIdentifier: String) async -> Result<FoundationModelAdapter, BurritoError> {
+    func resolve(languageIdentifier: String) async -> Result<any GenerationAdapter, BurritoError> {
+        // An enabled terminal agent harness replaces the in-process text
+        // models entirely: no Qwen download, no Apple Intelligence use.
+        if let harness = AgentHarnessStore.currentSelection() {
+            return .success(AgentHarnessAdapter(harness: harness))
+        }
         switch LocalLanguageModelStore.currentSelection() {
         case .apple:
             let model = SystemLanguageModel.default

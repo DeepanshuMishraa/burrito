@@ -78,6 +78,15 @@ private final class FeedbackSpy: AppFeedbackProviding {
     }
 }
 
+@MainActor
+private final class TestClock {
+    private(set) var now = Date()
+
+    func advance(by interval: TimeInterval) {
+        now = now.addingTimeInterval(interval)
+    }
+}
+
 private struct TranscriberStub: Transcribing {
     var languageResult: Result<Void, BurritoError> = .success(())
     var installationResult: Result<Void, BurritoError> = .success(())
@@ -434,6 +443,7 @@ struct CoordinatorTests {
 
         await coordinator.start(options: options, context: context)
         await coordinator.stop(context: context)
+        await waitUntil { transcriber.inputs.withLock { $0 }.count == 2 }
 
         let inputs = transcriber.inputs.withLock { $0 }
         #expect(inputs.count == 2)
@@ -608,6 +618,7 @@ struct CoordinatorTests {
         await coordinator.stop(context: context)
         let notes = try context.fetch(FetchDescriptor<Note>())
         let note = try #require(notes.first)
+        await waitUntil { note.lifecycle != .processing }
 
         // Then
         #expect(capture.stops == 1)
@@ -663,6 +674,7 @@ struct CoordinatorTests {
 
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 2)
+        await waitUntil { notes.allSatisfy { $0.lifecycle == .ready } }
         #expect(notes.allSatisfy { $0.lifecycle == .ready })
     }
 
@@ -701,6 +713,96 @@ struct CoordinatorTests {
         await coordinator.stop(context: context)
     }
 
+    @Test("Study mode continues recording into an existing folder")
+    func studyModeContinuesIntoExistingFolder() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Database isolation", order: 0)
+        context.insert(folder)
+        try context.save()
+
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory)
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Study Notes",
+                symbol: "book",
+                instructions: "Teach the material."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        let started = await coordinator.startStudyMode(
+            name: "Database isolation",
+            folderID: folder.id,
+            options: options,
+            context: context
+        )
+
+        #expect(started)
+        // No duplicate folder was created for the continuation.
+        let folders = try context.fetch(FetchDescriptor<Folder>())
+        #expect(folders.count == 1)
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.folder?.id == folder.id)
+
+        await coordinator.stop(context: context)
+    }
+
+    @Test("Study rotation keeps generating notes after the session is stopped")
+    func studyRotationKeepsProcessingAfterStop() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let generator = BlockingGeneratorStub()
+        let clock = TestClock()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            now: { clock.now }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Study Notes",
+                symbol: "book",
+                instructions: "Teach the material."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        let started = await coordinator.startStudyMode(
+            name: "Database isolation",
+            options: options,
+            context: context
+        )
+        #expect(started)
+
+        // Cross the 10-minute study segment boundary: the finished segment's
+        // transcription and generation start while the next segment records.
+        clock.advance(by: 601)
+        await waitUntil { capture.stops == 1 }
+        await waitUntil { generator.generationStarted.withLock { $0 } }
+
+        // Stopping the session must NOT abandon the finished segment's note.
+        await coordinator.stop(context: context)
+
+        generator.allowGeneration.withLock { $0 = true }
+
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 2)
+        await waitUntil { notes.allSatisfy { $0.lifecycle == .ready } }
+        #expect(notes.filter { $0.markdownBody == "# Generated" }.count == 2)
+        #expect(notes.allSatisfy { !$0.transcriptSegments.isEmpty })
+    }
+
     @Test("Human notes written during capture guide generation and remain intact")
     func humanNotesGuideGeneration() async throws {
         let context = try makeContext()
@@ -727,6 +829,7 @@ struct CoordinatorTests {
         let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
         note.userNotes = "- The launch date is the key decision."
         await coordinator.stop(context: context)
+        await waitUntil { note.lifecycle != .processing }
 
         #expect(
             generator.receivedUserNotes.withLock { $0 }
@@ -770,6 +873,7 @@ struct CoordinatorTests {
         #expect(note.calendarEvent == event)
 
         await coordinator.stop(context: context)
+        await waitUntil { note.lifecycle != .processing }
 
         #expect(note.lifecycle == .ready)
         #expect(note.title == event.title)
@@ -831,6 +935,7 @@ struct CoordinatorTests {
         #expect(coordinator.activeNoteID == note.id)
         #expect(capture.modes == [.meeting])
         await coordinator.stop(context: context)
+        await waitUntil { note.lifecycle != .processing }
 
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 1)
@@ -894,6 +999,7 @@ struct CoordinatorTests {
             context: context
         )
         await coordinator.stop(context: context)
+        await waitUntil { note.lifecycle != .processing }
 
         #expect(note.title == "Inference Runtime Architecture")
         #expect(generator.titleCallCount.withLock { $0 } == 2)
@@ -1072,6 +1178,7 @@ struct CoordinatorTests {
         await coordinator.stop(context: context)
 
         let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        await waitUntil { note.lifecycle != .processing }
         #expect(note.lifecycle == .ready)
         #expect(note.lastErrorMessage?.contains(warning.recoveryMessage) == true)
         #expect(note.lastErrorMessage?.contains(cleanupWarning.recoveryMessage) == true)
@@ -1110,6 +1217,7 @@ struct CoordinatorTests {
         await coordinator.stop(context: context)
 
         let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        await waitUntil { note.lifecycle != .processing }
         #expect(note.lifecycle == .recoverable)
         #expect(note.lastErrorMessage?.contains(generationError.recoveryMessage) == true)
         #expect(note.lastErrorMessage?.contains(diarizationWarning.recoveryMessage) == true)

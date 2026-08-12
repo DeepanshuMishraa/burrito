@@ -35,6 +35,7 @@ final class AppCoordinator {
     private var studySession: StudySession?
     private var studyRotationInFlight = false
     private var studyRotationTask: Task<Void, Never>?
+    private var processingTasks: [UUID: Task<Void, Never>] = [:]
 
     private struct StudySession {
         let id: UUID
@@ -224,6 +225,7 @@ final class AppCoordinator {
 
     func startStudyMode(
         name: String,
+        folderID: UUID? = nil,
         options: RecordingOptions,
         context: ModelContext
     ) async -> Bool {
@@ -237,19 +239,32 @@ final class AppCoordinator {
             return false
         }
 
-        let folder = Folder(
-            name: trimmedName,
-            order: (try? context.fetch(FetchDescriptor<Folder>()).count) ?? 0
-        )
-        context.insert(folder)
-        try? context.save()
+        var createdFolder = false
+        let folder: Folder
+        if let folderID,
+           let existing = fetchFolder(id: folderID, context: context) {
+            // Continuing an earlier study session: new 10-minute notes keep
+            // landing in the same folder.
+            folder = existing
+        } else {
+            let newFolder = Folder(
+                name: trimmedName,
+                order: (try? context.fetch(FetchDescriptor<Folder>()).count) ?? 0
+            )
+            context.insert(newFolder)
+            try? context.save()
+            folder = newFolder
+            createdFolder = true
+        }
         studySession = StudySession(id: UUID(), folderID: folder.id, options: options)
         studyRotationInFlight = false
         await start(options: options, context: context)
         let started = captureState.isRecording && activeNoteID != nil
         if !started {
-            context.delete(folder)
-            try? context.save()
+            if createdFolder {
+                context.delete(folder)
+                try? context.save()
+            }
             studySession = nil
         }
         return started
@@ -490,9 +505,9 @@ final class AppCoordinator {
         captureState = .stopping(sessionID: sessionID)
         note.lifecycle = .processing
         note.processingStage = .preparingAudio
+        // Computed before finishCaptureSession() resets the pause accounting.
         let recordingDuration = activeRecordingDuration(since: startedAt, at: now())
         let appendsToExisting = appendsToExistingNote
-        var processingWarnings: [String] = []
         isPaused = false
         pausedAt = nil
         note.updatedAt = .now
@@ -545,6 +560,31 @@ final class AppCoordinator {
         note.processingStage = .transcribing
         try? context.save()
 
+        // Process the finished segment in a task owned by this note, never by
+        // the rotation or stop caller. A later Stop (or the next 10-minute
+        // rotation) cancels only the capture handoff, so the completed
+        // segment always transcribes and generates its note in the
+        // background while the next segment records.
+        guard processingTasks[note.id] == nil else { return }
+        processingTasks[note.id] = Task { [weak self] in
+            guard let self else { return }
+            await self.processFinishedRecording(
+                note: note,
+                files: files,
+                appendsToExisting: appendsToExisting,
+                context: context
+            )
+            self.processingTasks[note.id] = nil
+        }
+    }
+
+    private func processFinishedRecording(
+        note: Note,
+        files: RecordingFiles,
+        appendsToExisting: Bool,
+        context: ModelContext
+    ) async {
+        var processingWarnings: [String] = []
         var systemSegments: [TranscriptSegment] = []
         let systemURL = existingPCMURL(files.systemTranscriptionURL)
             ?? files.systemAudioURL
@@ -638,6 +678,9 @@ final class AppCoordinator {
             with: combinedSegments,
             marksEdited: true
         )
+        // The transcript is persisted before generation so the note always
+        // keeps its source material — "Generate Again" works even if the
+        // model step fails.
         try? context.save()
 
         if note.retainsAudio {

@@ -759,7 +759,7 @@ actor BurritoChatAnswerer {
     static let shared = BurritoChatAnswerer()
 
     typealias AdapterResolver = @Sendable (String) async -> Result<
-        FoundationModelAdapter,
+        any GenerationAdapter,
         BurritoError
     >
 
@@ -785,7 +785,7 @@ actor BurritoChatAnswerer {
         onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
     ) async -> Result<BurritoChatResponse, BurritoError> {
         let resolved = await resolveAdapter(languageIdentifier)
-        let adapter: FoundationModelAdapter
+        let adapter: any GenerationAdapter
         switch resolved {
         case .success(let resolvedAdapter):
             adapter = resolvedAdapter
@@ -1080,7 +1080,7 @@ enum FoundationModelFailure {
     }
 }
 
-actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting {
+actor FoundationModelAdapter: PromptTokenMeasuring, TextCompleting, GenerationAdapter {
     private let systemModel: SystemLanguageModel
     private let model: any AI.LanguageModel
     private let tokenMeasurer: (any PromptTokenMeasuring)?
@@ -1319,7 +1319,7 @@ struct FoundationNoteGenerator: NoteGenerating {
         static let generatedNoteSchema = 256
     }
 
-    private let adapter: FoundationModelAdapter
+    private let adapter: any GenerationAdapter
     private let usesAutomaticSelection: Bool
 
     init() {
@@ -1327,7 +1327,7 @@ struct FoundationNoteGenerator: NoteGenerating {
         usesAutomaticSelection = true
     }
 
-    init(adapter: FoundationModelAdapter) {
+    init(adapter: any GenerationAdapter) {
         self.adapter = adapter
         usesAutomaticSelection = false
     }

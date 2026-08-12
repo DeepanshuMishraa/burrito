@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		07670D5BEF488D40D8EBD4D9 /* BurritoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76A1A8D23722F9D95F7B98A1 /* BurritoTheme.swift */; };
 		0B86C8CAA54AD4D778B1A753 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7EDE94375DECAC98C16A4F /* Settings.swift */; };
+		0BA10B59EDB9015E0A4B895C /* AgentLogos.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C70D5F413C8D6C3EC63EC8B6 /* AgentLogos.xcassets */; };
 		0E3BA93FE49F26DAF814181C /* SourceSerif4-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2614DA902D0C6E1873CDA406 /* SourceSerif4-Variable.ttf */; };
 		0E9F95BF0C94994DAA3BCC0B /* DomainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2216874DB0B52B8350E522 /* DomainTests.swift */; };
 		128870AEA18E97C7018118EB /* LocalSpeakerDiarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02E71FAA52FEB9F4BA5F2BCA /* LocalSpeakerDiarizer.swift */; };
 		15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F27CD15A054415C3F40F273 /* AppFeedback.swift */; };
 		186739FF47CA52B9784FE4EA /* Licenses in Resources */ = {isa = PBXBuildFile; fileRef = FA3D7EBB074D620282F9FD1A /* Licenses */; };
+		1A9365F93166457D5E0E2B2D /* AgentHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14F0F65B7365D0D58846DE2 /* AgentHarnessTests.swift */; };
 		1B1F893472991DB102746466 /* SplineSansMono-Italic-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 315B68AEDED5C28C20A30FE3 /* SplineSansMono-Italic-Variable.ttf */; };
 		1DD68C6D9799D4BFB7E88354 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 299A838A7B8892CA4C7945E3 /* Sparkle */; };
 		2169822823AD17A5D5D02865 /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82ED12E10888F40656C23877 /* IBMPlexMono-Regular.ttf */; };
@@ -21,6 +23,7 @@
 		2D70894A600592B1DAF71C5C /* Domain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8932061A0CA5A58DCC622228 /* Domain.swift */; };
 		3C1DFA2ABD10929B61F443B7 /* AudioPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9444472CEA7E986538CF33CB /* AudioPreparation.swift */; };
 		40A188A56DD99DAB17B51200 /* LiveSpeechTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0330074E0BDD3575BC85AB46 /* LiveSpeechTranscriber.swift */; };
+		414BB4CF93B1EB8836F0527E /* AgentHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 528D06281C985CB00CA201BE /* AgentHarness.swift */; };
 		41FB26DA332FD6000EC6FE24 /* FoundationNoteGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */; };
 		423F0C804295A1547510A8A0 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D84C8DF4CCF6F5716D26E45A /* MLXLMCommon */; };
 		4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */; };
@@ -100,6 +103,7 @@
 		45D22E34D202F6D2E40DE0E9 /* LocalLanguageModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLanguageModels.swift; sourceTree = "<group>"; };
 		4763766120520B992AC0D060 /* Supermemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Supermemory.swift; sourceTree = "<group>"; };
 		4B7690D84EB76E54225C77A5 /* FoundationNoteGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationNoteGenerator.swift; sourceTree = "<group>"; };
+		528D06281C985CB00CA201BE /* AgentHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarness.swift; sourceTree = "<group>"; };
 		6C785E411A246A02F5F4825A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSurfaceTests.swift; sourceTree = "<group>"; };
 		6F1BD5D3190B117216873A29 /* MeetingDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetectionTests.swift; sourceTree = "<group>"; };
@@ -118,6 +122,7 @@
 		9444472CEA7E986538CF33CB /* AudioPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreparation.swift; sourceTree = "<group>"; };
 		9F27CD15A054415C3F40F273 /* AppFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFeedback.swift; sourceTree = "<group>"; };
 		A012C13A161767957F1B4B7A /* Inter-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Inter-Variable.ttf"; sourceTree = "<group>"; };
+		A14F0F65B7365D0D58846DE2 /* AgentHarnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHarnessTests.swift; sourceTree = "<group>"; };
 		A516A8DE5CC1A96513E93F1E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		A59E0FDE3EFF23639001DDCE /* IBMPlexMono-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Bold.ttf"; sourceTree = "<group>"; };
 		A6C7EF82257ED4B3FA6F2713 /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
@@ -125,6 +130,7 @@
 		BBF83398A4AAF1B3B0C7A862 /* MarkdownDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDocument.swift; sourceTree = "<group>"; };
 		BD624A415DD4DC2FDE21D4C8 /* BurritoThemeRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoThemeRegistry.swift; sourceTree = "<group>"; };
 		C067CDAA3D4D35E6FAFFD16E /* BurritoIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoIcons.swift; sourceTree = "<group>"; };
+		C70D5F413C8D6C3EC63EC8B6 /* AgentLogos.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = AgentLogos.xcassets; sourceTree = "<group>"; };
 		CC8327DA7535C5139846AA77 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
 		CD8A5C41E428A301A9252A76 /* GeistMono-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "GeistMono-Variable.ttf"; sourceTree = "<group>"; };
 		D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurritoUpdateManagerTests.swift; sourceTree = "<group>"; };
@@ -163,6 +169,7 @@
 		05E85C1DB4D0CA916BC1F73E /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				A14F0F65B7365D0D58846DE2 /* AgentHarnessTests.swift */,
 				6D0C6AF20D7235C2933D3DAC /* AppSurfaceTests.swift */,
 				D218592B6D63D9696453A7FB /* BurritoUpdateManagerTests.swift */,
 				80312D2153FF4924DF498F98 /* CoordinatorTests.swift */,
@@ -196,6 +203,7 @@
 		B7EA8FC7AAE41E4FF5C19180 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				528D06281C985CB00CA201BE /* AgentHarness.swift */,
 				00A639102CCFABB8A22A07D3 /* AppCommands.swift */,
 				FB467C2185ABF4B927D300BC /* AppCoordinator.swift */,
 				9F27CD15A054415C3F40F273 /* AppFeedback.swift */,
@@ -232,6 +240,7 @@
 		BE6E8B76279B7B2F974327D4 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				C70D5F413C8D6C3EC63EC8B6 /* AgentLogos.xcassets */,
 				A516A8DE5CC1A96513E93F1E /* AppIcon.icon */,
 				7A5DD43716EDCE8FF78532DD /* Scooter-loader.json */,
 				E3123D2A1EAB3921FFA71726 /* Fonts */,
@@ -360,6 +369,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0BA10B59EDB9015E0A4B895C /* AgentLogos.xcassets in Resources */,
 				62481C515D9DBDD0BE1F4F58 /* AppIcon.icon in Resources */,
 				EFE8A10A8C3F888C52FCF836 /* Geist-Variable.ttf in Resources */,
 				CDF42D894BAF990DDE61C554 /* GeistMono-Variable.ttf in Resources */,
@@ -385,6 +395,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				414BB4CF93B1EB8836F0527E /* AgentHarness.swift in Sources */,
 				FE52C4B6D22D60C9C91FEBE7 /* AppCommands.swift in Sources */,
 				CB26B5BBFD9C48634BCAC653 /* AppCoordinator.swift in Sources */,
 				15831522FBBA363B61EA5354 /* AppFeedback.swift in Sources */,
@@ -421,6 +432,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A9365F93166457D5E0E2B2D /* AgentHarnessTests.swift in Sources */,
 				F665F94406C43C2C995261FE /* AppSurfaceTests.swift in Sources */,
 				4DB0A171FCAEC94D39818F3E /* BurritoUpdateManagerTests.swift in Sources */,
 				FB2E20A4BCBBC6D6B66A5881 /* CoordinatorTests.swift in Sources */,

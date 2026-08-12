@@ -153,6 +153,7 @@ struct ContentView: View {
     @State private var newFolderName = ""
     @State private var showingStudyModePrompt = false
     @State private var studyModeName = ""
+    @State private var studyModeSelectedFolderID: UUID?
     @State private var studyModeLaunchSource: StudyModeLaunchSource = .app
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
@@ -361,6 +362,8 @@ struct ContentView: View {
                 BurritoModalBackdrop {
                     StudyModeNameDialog(
                         name: $studyModeName,
+                        folders: studyFolders,
+                        selectedFolderID: $studyModeSelectedFolderID,
                         cancel: {
                             studyModeName = ""
                             showingStudyModePrompt = false
@@ -1130,12 +1133,24 @@ struct ContentView: View {
     private func presentStudyModePrompt(source: StudyModeLaunchSource) {
         studyModeLaunchSource = source
         studyModeName = ""
+        studyModeSelectedFolderID = nil
         showingStudyModePrompt = true
     }
 
     private func handlePendingStudyMode() {
         guard let source = studyModeInbox.consume() else { return }
         presentStudyModePrompt(source: source)
+    }
+
+    /// Folders that already hold notes — candidates for continuing an earlier
+    /// study session, most recently used first.
+    private var studyFolders: [Folder] {
+        folders
+            .filter { !$0.notes.isEmpty }
+            .sorted {
+                ($0.notes.map(\.updatedAt).max() ?? .distantPast)
+                    > ($1.notes.map(\.updatedAt).max() ?? .distantPast)
+            }
     }
 
     private func startStudyMode() {
@@ -1155,11 +1170,14 @@ struct ContentView: View {
             retainsAudio: defaultRetainsAudio
         )
         let launchSource = studyModeLaunchSource
+        let folderID = studyModeSelectedFolderID
         showingStudyModePrompt = false
         studyModeName = ""
+        studyModeSelectedFolderID = nil
         Task {
             let started = await coordinator.startStudyMode(
                 name: name,
+                folderID: folderID,
                 options: options,
                 context: modelContext
             )
@@ -2073,9 +2091,12 @@ private struct ModelsView: View {
     }
 
     private var activeEngineTitle: String {
+        if let harness = AgentHarnessStore.currentSelection() {
+            return "\(harness.displayName) (agent)"
+        }
         switch languageModelStore.selection {
-        case .apple: "Apple Intelligence"
-        case .local(let variant): variant.displayName
+        case .apple: return "Apple Intelligence"
+        case .local(let variant): return variant.displayName
         }
     }
 
@@ -2225,75 +2246,107 @@ private struct ModelsView: View {
 
                     } else {
                         // TEXT MODELS TAB
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 14) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Active Engine: \(activeEngineTitle)")
-                                        .font(.burritoUI(size: 13, weight: 450))
-                                        .foregroundStyle(.primary)
-                                    Text("Used for prompt synthesis, structure parsing, and note generation.")
+                        if let activeAgent = AgentHarnessStore.currentSelection() {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 12) {
+                                    AgentLogoView(harness: activeAgent, size: 34)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(activeAgent.displayName) is generating your notes")
+                                            .font(.burritoUI(size: 13, weight: 450))
+                                            .foregroundStyle(.primary)
+                                        Text(
+                                            "On-device text models are disabled while the agent harness is "
+                                                + "active. Turn it off in Settings → Agents to use Apple "
+                                                + "Intelligence or a Qwen model again."
+                                        )
                                         .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
                                         .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    BurritoLabel("Active", systemImage: "checkmark.circle.fill")
+                                        .font(.burritoUI(size: 11, weight: 450))
+                                        .foregroundStyle(BurritoTheme.accent)
                                 }
-                                Spacer()
+                                .padding(16)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
-                            .padding(16)
-                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .burritoElevation(.surface)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 14) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Active Engine: \(activeEngineTitle)")
+                                            .font(.burritoUI(size: 13, weight: 450))
+                                            .foregroundStyle(.primary)
+                                        Text("Used for prompt synthesis, structure parsing, and note generation.")
+                                            .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(16)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
                         }
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(alignment: .firstTextBaseline) {
-                                BurritoSectionLabel(title: "NOTE GENERATION MODELS")
-                                Spacer()
-                                Text("Apple Intelligence is the default")
-                                    .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
-                                    .foregroundStyle(.tertiary)
-                            }
-
-                            VStack(spacing: 4) {
-                                GenerationModelCatalogRow(
-                                    title: "Apple Intelligence",
-                                    summary: "Built into macOS. Lightweight, private, and always available.",
-                                    parameterCount: "System model",
-                                    downloadSize: "No download",
-                                    isSelected: languageModelStore.selection == .apple,
-                                    state: nil
-                                ) {
-                                    languageModelStore.select(.apple)
+                        if AgentHarnessStore.currentSelection() == nil {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    BurritoSectionLabel(title: "NOTE GENERATION MODELS")
+                                    Spacer()
+                                    Text("Apple Intelligence is the default")
+                                        .font(.burritoUI(size: 11, weight: 400, relativeTo: .caption))
+                                        .foregroundStyle(.tertiary)
                                 }
 
-                                ForEach(
-                                    Array(LocalLanguageModelVariant.allCases.enumerated()),
-                                    id: \.element
-                                ) { index, variant in
+                                VStack(spacing: 4) {
                                     GenerationModelCatalogRow(
-                                        title: variant.displayName,
-                                        summary: variant.summary,
-                                        parameterCount: variant.parameterCount,
-                                        downloadSize: variant.downloadSize,
-                                        isSelected: languageModelStore.selection == .local(variant),
-                                        state: languageModelStore.state(for: variant)
+                                        title: "Apple Intelligence",
+                                        summary: "Built into macOS. Lightweight, private, and always available.",
+                                        parameterCount: "System model",
+                                        downloadSize: "No download",
+                                        isSelected: languageModelStore.selection == .apple,
+                                        state: nil
                                     ) {
-                                        switch languageModelStore.state(for: variant) {
-                                        case .installed:
-                                            languageModelStore.select(.local(variant))
-                                        case .notInstalled, .paused, .failed:
-                                            Task { await languageModelStore.install(variant) }
-                                        case .downloading:
-                                            languageModelStore.cancelInstallation(variant)
+                                        languageModelStore.select(.apple)
+                                    }
+
+                                    ForEach(
+                                        Array(LocalLanguageModelVariant.allCases.enumerated()),
+                                        id: \.element
+                                    ) { index, variant in
+                                        GenerationModelCatalogRow(
+                                            title: variant.displayName,
+                                            summary: variant.summary,
+                                            parameterCount: variant.parameterCount,
+                                            downloadSize: variant.downloadSize,
+                                            isSelected: languageModelStore.selection == .local(variant),
+                                            state: languageModelStore.state(for: variant)
+                                        ) {
+                                            switch languageModelStore.state(for: variant) {
+                                            case .installed:
+                                                languageModelStore.select(.local(variant))
+                                            case .notInstalled, .paused, .failed:
+                                                Task { await languageModelStore.install(variant) }
+                                            case .downloading:
+                                                languageModelStore.cancelInstallation(variant)
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            .padding(.vertical, 6)
-                            .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .burritoElevation(.surface)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                                .padding(.vertical, 6)
+                                .background(BurritoTheme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .burritoElevation(.surface)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(BurritoTheme.softBorder)
+                                }
                             }
                         }
                     }
@@ -3372,16 +3425,28 @@ private struct NewFolderDialog: View {
 
 private struct StudyModeNameDialog: View {
     @Binding var name: String
+    let folders: [Folder]
+    @Binding var selectedFolderID: UUID?
     let cancel: () -> Void
     let start: () -> Void
+
+    @State private var isFolderPickerPresented = false
+
+    private var selectedFolder: Folder? {
+        folders.first { $0.id == selectedFolderID }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Start study mode")
                     .font(.burritoDisplay(size: 28, weight: .init(400)))
-                Text("Name this session. Each 10-minute note will be added to its folder.")
-                    .foregroundStyle(.secondary)
+                Text(
+                    selectedFolderID == nil
+                        ? "Name this session. Each 10-minute note will be added to its folder."
+                        : "New notes will continue in “\(selectedFolder?.name ?? "")”."
+                )
+                .foregroundStyle(.secondary)
             }
             TextField("Database isolation", text: $name)
                 .textFieldStyle(.plain)
@@ -3394,6 +3459,120 @@ private struct StudyModeNameDialog: View {
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(start)
+
+            if !folders.isEmpty {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Continue an earlier session")
+                            .font(.burritoUI(size: 12, weight: 450))
+                            .foregroundStyle(.primary)
+                        Text("Pick a folder to keep recording into it.")
+                            .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        BurritoHaptics.trigger(.alignment)
+                        isFolderPickerPresented.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selectedFolder?.name ?? "New session")
+                                .font(.burritoUI(size: 12, weight: 450))
+                                .foregroundStyle(BurritoTheme.accent)
+                                .lineLimit(1)
+                            BurritoIcon(name: "chevron.down", size: 8)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(BurritoTheme.softBorder)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Continue an earlier study session")
+                    .accessibilityValue(selectedFolder?.name ?? "New session")
+                    .popover(
+                        isPresented: $isFolderPickerPresented,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        VStack(spacing: 2) {
+                            Button {
+                                BurritoHaptics.trigger(.alignment)
+                                selectedFolderID = nil
+                                isFolderPickerPresented = false
+                            } label: {
+                                HStack(spacing: 10) {
+                                    BurritoIcon(name: "plus", size: 12)
+                                        .foregroundStyle(selectedFolderID == nil ? BurritoTheme.accent : .secondary)
+                                    Text("New session")
+                                        .font(.burritoUI(size: 12, weight: 450))
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedFolderID == nil {
+                                        BurritoIcon(name: "checkmark", size: 10)
+                                            .foregroundStyle(BurritoTheme.accent)
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .frame(height: 32)
+                                .background(
+                                    selectedFolderID == nil
+                                        ? BurritoTheme.controlFill
+                                        : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            Divider().padding(.vertical, 2)
+
+                            ForEach(folders) { folder in
+                                Button {
+                                    BurritoHaptics.trigger(.alignment)
+                                    selectedFolderID = folder.id
+                                    isFolderPickerPresented = false
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        BurritoIcon(name: "folder", size: 12)
+                                            .foregroundStyle(selectedFolderID == folder.id ? BurritoTheme.accent : .secondary)
+                                        Text(folder.name)
+                                            .font(.burritoUI(size: 12, weight: 450))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if selectedFolderID == folder.id {
+                                            BurritoIcon(name: "checkmark", size: 10)
+                                                .foregroundStyle(BurritoTheme.accent)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 32)
+                                    .background(
+                                        selectedFolderID == folder.id
+                                            ? BurritoTheme.controlFill
+                                            : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(6)
+                        .frame(width: 250)
+                        .background(BurritoTheme.raised)
+                        .presentationBackground(BurritoTheme.raised)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .burritoElevation(.control)
+            }
+
             HStack {
                 Button("Cancel", action: cancel)
                     .buttonStyle(BurritoActionButtonStyle(prominent: false))

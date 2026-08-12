@@ -1,3 +1,4 @@
+import AI
 import Foundation
 
 @MainActor
@@ -94,4 +95,30 @@ protocol TextCompleting: Sendable {
         prompt: String,
         maximumResponseTokens: Int
     ) async throws -> GeneratedNote
+}
+
+/// A note-generation backend: an in-process model (Apple Intelligence or an
+/// MLX download) or a terminal agent harness routed through its CLI.
+protocol GenerationAdapter: PromptTokenMeasuring, TextCompleting {
+    var supportsToolCalling: Bool { get }
+    func completeTitle(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int
+    ) async throws -> String
+    func completeStreaming(
+        instructions: String,
+        prompt: String,
+        maximumResponseTokens: Int,
+        onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
+    ) async throws -> String
+    func completeChatStreaming(
+        instructions: String,
+        conversation: [BurritoChatTurn],
+        question: String,
+        tools: [any AIToolProtocol],
+        meetingEvidence: String?,
+        maximumResponseTokens: Int,
+        onTextUpdate: @MainActor @Sendable @escaping (String) -> Void
+    ) async throws -> String
 }
