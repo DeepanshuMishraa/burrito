@@ -158,6 +158,10 @@ struct ContentView: View {
     @State private var toast: BurritoToast?
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var pendingRegenerationNote: Note?
+    /// Live drag-reorder state: the dragged note ID and its current hover
+    /// target, applied to the timeline so rows slide while dragging.
+    @State private var draggedNoteID: UUID?
+    @State private var reorderTarget: NoteReorderTarget?
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -230,8 +234,48 @@ struct ContentView: View {
             calendar.startOfDay(for: $0.updatedAt)
         }
         return grouped
-            .map { (date: $0.key, notes: $0.value) }
+            .map { (date: $0.key, notes: previewedReorder(Note.orderedWithinDay($0.value), day: $0.key)) }
             .sorted { $0.date > $1.date }
+    }
+
+    /// Overlays the live drag preview: while a note is being dragged, its
+    /// row appears at the hovered position so the timeline animates in place.
+    private func previewedReorder(_ notes: [Note], day: Date) -> [Note] {
+        guard let target = reorderTarget,
+              let draggedID = draggedNoteID,
+              Calendar.current.isDate(target.day, inSameDayAs: day)
+        else {
+            return notes
+        }
+        return Self.moving(
+            draggedID,
+            targetID: target.targetID,
+            before: target.before,
+            in: notes
+        )
+    }
+
+    /// Moves one note before/after a target within an ordered array.
+    private static func moving(
+        _ draggedID: UUID,
+        targetID: UUID,
+        before: Bool,
+        in notes: [Note]
+    ) -> [Note] {
+        guard let draggedIndex = notes.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
+              draggedIndex != targetIndex
+        else {
+            return notes
+        }
+        var result = notes
+        let dragged = result.remove(at: draggedIndex)
+        var insertion = before ? targetIndex : targetIndex + 1
+        if draggedIndex < insertion {
+            insertion -= 1
+        }
+        result.insert(dragged, at: min(max(insertion, 0), result.count))
+        return result
     }
 
     var body: some View {
@@ -943,9 +987,40 @@ struct ContentView: View {
                         open: {
                             selectedNoteID = note.id
                         },
-                        requestRegeneration: regenerateNoteInBackground
+                        requestRegeneration: regenerateNoteInBackground,
+                        day: group.date,
+                        onDragBegan: { draggedID in
+                            draggedNoteID = draggedID
+                            reorderTarget = nil
+                        },
+                        onReorderHover: { day, targetID, before in
+                            withAnimation(.burritoSpring) {
+                                reorderTarget = NoteReorderTarget(
+                                    day: day,
+                                    targetID: targetID,
+                                    before: before
+                                )
+                            }
+                        },
+                        onReorderExit: {
+                            if reorderTarget != nil {
+                                withAnimation(.burritoSpring) {
+                                    reorderTarget = nil
+                                }
+                            }
+                        },
+                        onReorderCommit: { day, targetID, before in
+                            guard let draggedID = draggedNoteID else { return }
+                            reorderNote(
+                                id: draggedID,
+                                inDay: day,
+                                relativeTo: targetID,
+                                before: before
+                            )
+                            draggedNoteID = nil
+                            reorderTarget = nil
+                        }
                     )
-                    .draggable(note.id.uuidString)
                     .contextMenu {
                         noteContextMenu(note)
                     }
@@ -963,6 +1038,40 @@ struct ContentView: View {
             return "Yesterday"
         }
         return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
+    /// Applies a drag-and-drop reorder inside one day group: the dragged note
+    /// moves before/after the target, then the whole group is renumbered so
+    /// the manual order sticks. The full day is renumbered even when the
+    /// timeline is filtered (favorites, search) so positions never collide.
+    private func reorderNote(
+        id draggedID: UUID,
+        inDay day: Date,
+        relativeTo targetID: UUID,
+        before: Bool
+    ) {
+        let calendar = Calendar.current
+        var notes = Note.orderedWithinDay(
+            notes.filter {
+                $0.deletedAt == nil && calendar.isDate($0.updatedAt, inSameDayAs: day)
+            }
+        )
+        guard let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
+              let draggedIndex = notes.firstIndex(where: { $0.id == draggedID }),
+              draggedIndex != targetIndex
+        else {
+            return
+        }
+        var insertion = before ? targetIndex : targetIndex + 1
+        let dragged = notes.remove(at: draggedIndex)
+        if draggedIndex < insertion {
+            insertion -= 1
+        }
+        notes.insert(dragged, at: min(max(insertion, 0), notes.count))
+        for (offset, note) in notes.enumerated() {
+            note.manualOrder = offset
+        }
+        try? modelContext.save()
     }
 
     @ViewBuilder
@@ -1148,6 +1257,8 @@ struct ContentView: View {
         let ids = Set(values.compactMap(UUID.init(uuidString:)))
         let matches = notes.filter { ids.contains($0.id) }
         for note in matches { note.folder = folder }
+        draggedNoteID = nil
+        reorderTarget = nil
         return !matches.isEmpty
     }
 
@@ -3548,6 +3659,14 @@ struct BurritoToast: Equatable {
     let isError: Bool
 }
 
+/// Where a dragged note currently hovers: the target day group, the row it
+/// is being dropped onto, and whether it lands before or after that row.
+private struct NoteReorderTarget: Equatable {
+    let day: Date
+    let targetID: UUID
+    let before: Bool
+}
+
 private struct BurritoToastView: View {
     let toast: BurritoToast
 
@@ -4258,9 +4377,15 @@ private struct TimelineNoteItem: View {
     let isIndexed: Bool
     let open: () -> Void
     let requestRegeneration: (Note) -> Void
+    let day: Date
+    let onDragBegan: (UUID) -> Void
+    let onReorderHover: (Date, UUID, Bool) -> Void
+    let onReorderExit: () -> Void
+    let onReorderCommit: (Date, UUID, Bool) -> Void
 
     @State private var showingActions = false
     @State private var showingFolders = false
+    @State private var isDropTarget = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -4315,6 +4440,64 @@ private struct TimelineNoteItem: View {
             if !isPresented {
                 showingFolders = false
             }
+        }
+        .onDrag {
+            onDragBegan(note.id)
+            return NSItemProvider(object: note.id.uuidString as NSString)
+        }
+        .onDrop(
+            of: [.plainText],
+            delegate: NoteRowDropDelegate(
+                noteID: note.id,
+                day: day,
+                setTargeted: { targeted in
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        isDropTarget = targeted
+                    }
+                },
+                hover: onReorderHover,
+                exited: onReorderExit,
+                commit: onReorderCommit
+            )
+        )
+        .overlay {
+            if isDropTarget {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(BurritoTheme.accent, lineWidth: 1.5)
+                    .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    /// Drives the live reorder preview while a note is dragged over this row:
+    /// the row reports hover position (upper half = before, lower half =
+    /// after) and commits the final order when the drop lands.
+    private struct NoteRowDropDelegate: DropDelegate {
+        let noteID: UUID
+        let day: Date
+        let setTargeted: (Bool) -> Void
+        let hover: (Date, UUID, Bool) -> Void
+        let exited: () -> Void
+        let commit: (Date, UUID, Bool) -> Void
+
+        func dropEntered(info: DropInfo) {
+            setTargeted(true)
+            hover(day, noteID, info.location.y < 28)
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func dropExited(info: DropInfo) {
+            setTargeted(false)
+            exited()
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            setTargeted(false)
+            commit(day, noteID, info.location.y < 28)
+            return true
         }
     }
 

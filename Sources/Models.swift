@@ -78,6 +78,9 @@ final class Note {
     var lastErrorMessage: String?
     var calendarEventData: Data?
     var folder: Folder?
+    /// Manual position within the note's day group once the user has
+    /// reordered the timeline by dragging. nil means "no manual order yet".
+    var manualOrder: Int?
 
     init(
         id: UUID = UUID(),
@@ -122,6 +125,7 @@ final class Note {
         self.lastErrorMessage = nil
         self.calendarEventData = calendarEvent.flatMap { try? JSONEncoder().encode($0) }
         self.folder = nil
+        self.manualOrder = nil
     }
 
     var lifecycle: NoteLifecycle {
@@ -207,6 +211,25 @@ final class Note {
         if !marksEdited {
             generatedFromTranscriptRevision = transcriptRevision
         }
+    }
+}
+
+extension Note {
+    /// Display order inside one day group. Once any note in the group has a
+    /// manual order (the user reordered the timeline), manual positions win
+    /// and new notes without one sink below the reordered ones; otherwise
+    /// the most recently updated note comes first.
+    static func orderedWithinDay(_ notes: [Note]) -> [Note] {
+        guard notes.contains(where: { $0.manualOrder != nil }) else {
+            return notes.sorted { $0.updatedAt > $1.updatedAt }
+        }
+        let manual = notes
+            .filter { $0.manualOrder != nil }
+            .sorted { ($0.manualOrder ?? 0) < ($1.manualOrder ?? 0) }
+        let rest = notes
+            .filter { $0.manualOrder == nil }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return manual + rest
     }
 }
 

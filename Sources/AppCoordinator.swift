@@ -379,6 +379,7 @@ final class AppCoordinator {
             newNote.microphoneAudioRelativePath = files.microphoneAudioURL.map(
                 fileStore.relativePath(for:)
             )
+            newNote.manualOrder = nextManualOrder(after: now, context: context)
             context.insert(newNote)
             if let studySession,
                let folder = fetchFolder(id: studySession.folderID, context: context) {
@@ -1091,6 +1092,30 @@ final class AppCoordinator {
             predicate: #Predicate { $0.id == requestedID }
         )
         return try? context.fetch(descriptor).first
+    }
+
+    /// Manual position for a brand-new note: on top of its day group when
+    /// that day has already been manually reordered, otherwise no manual
+    /// order (the default updated-first ordering applies).
+    private func nextManualOrder(after date: Date, context: ModelContext) -> Int? {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else {
+            return nil
+        }
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate {
+                $0.manualOrder != nil
+                    && $0.createdAt >= day
+                    && $0.createdAt < nextDay
+            }
+        )
+        guard let notes = try? context.fetch(descriptor),
+              let minimum = notes.compactMap(\.manualOrder).min()
+        else {
+            return nil
+        }
+        return minimum - 1
     }
 
     private func fetchFolder(id: UUID, context: ModelContext) -> Folder? {

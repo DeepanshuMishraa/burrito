@@ -214,6 +214,43 @@ struct PersistenceTests {
         #expect(note.notesMayBeOutdated)
     }
 
+    @Test("Day-group ordering prefers manual positions once reordered")
+    func manualDayOrdering() {
+        let template = TemplateSnapshot(name: "Summary", symbol: "doc", instructions: "Summarize.")
+        let older = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        older.updatedAt = Date(timeIntervalSinceReferenceDate: 100)
+        let newer = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        newer.updatedAt = Date(timeIntervalSinceReferenceDate: 300)
+
+        // Default: most recently updated first.
+        #expect(Note.orderedWithinDay([older, newer]).map(\.id) == [newer.id, older.id])
+
+        // After a reorder, manual positions win.
+        newer.manualOrder = 1
+        older.manualOrder = 0
+        #expect(Note.orderedWithinDay([newer, older]).map(\.id) == [older.id, newer.id])
+
+        // A new note without a manual order sinks below the reordered ones.
+        let fresh = Note(
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        fresh.updatedAt = Date(timeIntervalSinceReferenceDate: 400)
+        #expect(
+            Note.orderedWithinDay([newer, older, fresh]).map(\.id)
+                == [older.id, newer.id, fresh.id]
+        )
+    }
+
     @Test("Human notes persist independently from generated notes")
     func humanNotesRemainIndependent() {
         let note = Note(
