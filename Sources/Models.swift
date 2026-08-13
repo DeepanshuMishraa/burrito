@@ -212,7 +212,9 @@ final class Note {
     func replaceTranscript(with segments: [TranscriptSegment], marksEdited: Bool) {
         transcriptSegments = segments
         transcriptRevision += 1
-        updatedAt = .now
+        // Activity time is the caller's concern: automatic processing must
+        // not move the note to "now" (that would reposition the timeline
+        // hours after the recording), while user edits bump it explicitly.
         if !marksEdited {
             generatedFromTranscriptRevision = transcriptRevision
         }

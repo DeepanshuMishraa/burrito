@@ -170,7 +170,7 @@ private struct SettingsPane: View {
     @AppStorage("retainAudioDefault") private var retainAudioDefault = false
     @AppStorage(NoteTakingDetectionEligibility.storageKey) private var noteTakingDetectionEnabled = true
     @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
-        BurritoColorTheme.burrito.rawValue
+        BurritoColorTheme.tokyoNight.rawValue
     @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
         BurritoFontChoice.burritoDefault.rawValue
     @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =

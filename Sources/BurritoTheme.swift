@@ -438,45 +438,6 @@ extension Animation {
     static let burritoBouncySpring = Animation.spring(response: 0.25, dampingFraction: 0.68)
 }
 
-enum BurritoAppearance: String, CaseIterable, Identifiable {
-    case system
-    case light
-    case dark
-
-    static let storageKey = "appAppearance"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .system: "System"
-        case .light: "Light"
-        case .dark: "Dark"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .system: "computer"
-        case .light: "sun02"
-        case .dark: "moon02"
-        }
-    }
-
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
-        }
-    }
-
-    static func resolve(_ rawValue: String) -> BurritoAppearance {
-        BurritoAppearance(rawValue: rawValue) ?? .system
-    }
-
-}
-
 struct BurritoThemeColor: Hashable, Sendable {
     let red: Double
     let green: Double
@@ -603,50 +564,48 @@ struct BurritoThemePalette: Sendable {
 }
 
 enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
-    case burrito
-    case modernMinimal = "modern-minimal"
-    case t3Chat = "t3-chat"
-    case twitter
-    case mochaMousse = "mocha-mousse"
-    case bubblegum
-    case doom64 = "doom-64"
     case catppuccin
-    case graphite
-    case perpetuity
-    case kodamaGrove = "kodama-grove"
-    case cosmicNight = "cosmic-night"
-    case tangerine
-    case quantumRose = "quantum-rose"
-    case nature
-    case boldTech = "bold-tech"
-    case elegantLuxury = "elegant-luxury"
-    case amberMinimal = "amber-minimal"
-    case supabase
-    case neoBrutalism = "neo-brutalism"
-    case solarDusk = "solar-dusk"
-    case claymorphism
-    case cyberpunk
-    case pastelDreams = "pastel-dreams"
-    case cleanSlate = "clean-slate"
-    case caffeine
-    case oceanBreeze = "ocean-breeze"
-    case retroArcade = "retro-arcade"
-    case midnightBloom = "midnight-bloom"
-    case candyland
-    case northernLights = "northern-lights"
-    case vintagePaper = "vintage-paper"
-    case sunsetHorizon = "sunset-horizon"
-    case starryNight = "starry-night"
-    case claude
-    case vercel
-    case mono
+    case catppuccinLatte = "catppuccin-latte"
+    case catppuccinMacchiato = "catppuccin-macchiato"
+    case catppuccinMocha = "catppuccin-mocha"
+    case dracula
+    case gruvbox
+    case gruvboxLight = "gruvbox-light"
+    case kanagawa
+    case kanagawaLotus = "kanagawa-lotus"
+    case nord
+    case oneDark = "one-dark"
+    case oneLight = "one-light"
+    case rosePine = "rose-pine"
+    case rosePineDawn = "rose-pine-dawn"
+    case solarized
+    case solarizedLight = "solarized-light"
+    case terminal
+    case tokyoNight = "tokyo-night"
+    case tokyoNightDay = "tokyo-night-day"
+    case vesper
 
     static let storageKey = "appColorTheme"
 
     var id: Self { self }
 
+    /// Themes are fixed appearances: the app forces the matching color
+    /// scheme so native controls render on the theme's own palette instead
+    /// of following the system's light/dark setting.
+    var isDark: Bool {
+        switch self {
+        case .catppuccin, .catppuccinMacchiato, .catppuccinMocha,
+             .dracula, .gruvbox, .kanagawa, .nord, .oneDark,
+             .rosePine, .solarized, .terminal, .tokyoNight, .vesper:
+            true
+        case .catppuccinLatte, .gruvboxLight, .kanagawaLotus,
+             .oneLight, .rosePineDawn, .solarizedLight, .tokyoNightDay:
+            false
+        }
+    }
+
     static func resolve(_ rawValue: String) -> BurritoColorTheme {
-        BurritoColorTheme(rawValue: rawValue) ?? .burrito
+        BurritoColorTheme(rawValue: rawValue) ?? .tokyoNight
     }
 }
 
@@ -660,10 +619,16 @@ final class BurritoStyleStore {
     private(set) var interfaceFontSize: Int
     private(set) var palette: BurritoThemePalette
 
+    /// Each theme is a fixed appearance; the app forces this scheme so
+    /// native controls render on the theme's palette.
+    var colorScheme: ColorScheme {
+        theme.isDark ? .dark : .light
+    }
+
     private init(defaults: UserDefaults = .standard) {
         let theme = BurritoColorTheme.resolve(
             defaults.string(forKey: BurritoColorTheme.storageKey)
-                ?? BurritoColorTheme.burrito.rawValue
+                ?? BurritoColorTheme.tokyoNight.rawValue
         )
         self.theme = theme
         font = BurritoFontChoice.resolve(

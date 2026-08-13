@@ -43,11 +43,58 @@ final class AppCoordinator {
     /// list). Their processing UI is suppressed so the user never sees a
     /// generation screen they did not opt into.
     private(set) var backgroundGenerationNoteIDs: Set<UUID> = []
+    /// Serializes model inference app-wide: on-device models run one request
+    /// chain at a time, so a finished study segment can never collide with a
+    /// manual regeneration, an import, or the concurrent title pass.
+    private let generationGate = GenerationGate()
 
     private struct StudySession {
         let id: UUID
         let folderID: UUID
         let options: RecordingOptions
+    }
+
+    /// Serial queue for model inference. Only the model calls are gated:
+    /// note state mutations stay in the caller's task, so observers never
+    /// see a note half-updated between generation and its follow-up work.
+    private actor GenerationGate {
+        private var tail: Task<Void, Never> = Task {}
+
+        func run<T: Sendable>(
+            _ operation: @escaping @MainActor () async -> T
+        ) async -> T {
+            let previous = tail
+            let task = Task { @MainActor in
+                await previous.value
+                return await operation()
+            }
+            tail = Task { @MainActor in
+                _ = await task.value
+            }
+            return await task.value
+        }
+    }
+
+    /// Whether note generation currently routes through a terminal agent
+    /// harness. Harness CLI processes run independently, so concurrent note
+    /// generations are safe and must NOT be serialized — each `opencode run`
+    /// is a separate process. Only in-process models (Apple Intelligence,
+    /// MLX) share one session and must run one request chain at a time.
+    private var usesAgentHarnessBackend: Bool {
+        guard let harness = AgentHarnessStore.currentSelection() else { return false }
+        return harness.resolveExecutableURL() != nil
+    }
+
+    /// Runs a model operation, serialized only when the backend is an
+    /// in-process model. Agent-harness backends run in parallel so two notes
+    /// regenerate at the same time instead of queueing behind each other.
+    private func runGeneration<T: Sendable>(
+        _ operation: @escaping @MainActor () async -> T
+    ) async -> T {
+        if usesAgentHarnessBackend {
+            return await operation()
+        }
+        return await generationGate.run(operation)
     }
 
     /// Holds the tail of a note's background processing chain. All access
@@ -58,6 +105,15 @@ final class AppCoordinator {
     }
 
     private static let studySegmentLimit: TimeInterval = 10 * 60
+    /// Generation attempts for one note. Transient failures (a busy on-device
+    /// model, a timed-out agent harness) resolve on retry so study segments
+    /// finish their notes without a manual "Generate again".
+    private static let maxGenerationAttempts = 3
+    /// Backoff seconds before retry `n` (1-based): 1s, then 2s.
+    private static let generationRetryBackoff: [Int: TimeInterval] = [1: 1, 2: 2]
+    /// Prior session context is bounded so it never dominates the prompt
+    /// budget of small on-device models.
+    private static let priorContextCharacterBudget = 2_500
 
     init(
         capture: any AudioCapturing,
@@ -232,8 +288,29 @@ final class AppCoordinator {
                 note.lastErrorMessage = "Burrito closed before this recording finished. Existing audio is preserved; retry processing when ready."
             }
             try context.save()
+            healUnfinishedNotes(in: notes, context: context)
         } catch {
             lastError = .storageFailed(details: error.localizedDescription)
+        }
+    }
+
+    /// Auto-finishes notes whose transcript was preserved but whose notes
+    /// never generated (an interrupted or failed background run): their
+    /// generation restarts in the background on launch, so a study segment
+    /// resolves without the user clicking "Generate again".
+    private func healUnfinishedNotes(in notes: [Note], context: ModelContext) {
+        for note in notes
+        where note.lifecycle == .recoverable
+            && note.processingStage == nil
+            && !note.userEditedNotes
+            && note.notesMayBeOutdated
+            && !note.transcriptSegments.isEmpty
+            && note.lastErrorMessage != nil
+        {
+            note.lastErrorMessage = nil
+            Task { [weak self] in
+                await self?.generateInBackground(note: note, context: context)
+            }
         }
     }
 
@@ -381,6 +458,13 @@ final class AppCoordinator {
             )
             newNote.manualOrder = nextManualOrder(after: now, context: context)
             if newNote.manualOrder != nil {
+                newNote.manualOrderDay = Calendar.current.startOfDay(for: now)
+            }
+            // Study-session segments always carry a manual position: their
+            // day group then orders them by creation time, never by whichever
+            // segment happened to finish processing last.
+            if newNote.manualOrder == nil, studySession != nil {
+                newNote.manualOrder = 0
                 newNote.manualOrderDay = Calendar.current.startOfDay(for: now)
             }
             context.insert(newNote)
@@ -791,6 +875,18 @@ final class AppCoordinator {
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
+        await performGeneration(
+            note: note,
+            context: context,
+            undoManager: undoManager
+        )
+    }
+
+    private func performGeneration(
+        note: Note,
+        context: ModelContext,
+        undoManager: UndoManager?
+    ) async {
         let oldTitle = note.title
         let oldBody = note.markdownBody
         let transcriptSegments = note.transcriptSegments
@@ -798,54 +894,51 @@ final class AppCoordinator {
         let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
+        let priorContext = priorSessionContext(for: note)
 
         note.lifecycle = .processing
         note.processingStage = .generatingNotes
         note.lastErrorMessage = nil
         try? context.save()
 
-        async let generatedResult = generator.generate(
-            segments: transcriptSegments,
-            userNotes: userNotes,
-            meetingContext: calendarEvent,
-            template: template,
-            languageIdentifier: languageIdentifier
-        )
-        async let titleResult = suggestedTitle(
-            segments: transcriptSegments,
-            currentTitle: oldTitle,
-            languageIdentifier: languageIdentifier,
-            calendarEvent: calendarEvent
-        )
-        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
-
-        switch generatedResultValue {
-        case .success(let generated):
-            if let calendarEvent {
-                note.title = calendarAwareTitle(
-                    event: calendarEvent,
-                    currentTitle: oldTitle
+        // Transient failures retry in the background so study segments
+        // resolve their notes without a manual click. The note keeps its
+        // transcript across attempts; the revision anchor only moves on
+        // success, so the "notes may be outdated" state never appears
+        // while retries are still running.
+        var generated: GeneratedNote?
+        var generationError: BurritoError?
+        for attempt in 0..<Self.maxGenerationAttempts {
+            if attempt > 0 {
+                try? await Task.sleep(
+                    for: .milliseconds(
+                        (Self.generationRetryBackoff[attempt] ?? 1) * 1_000
+                    )
                 )
-            } else {
-                note.title = await resolvedSuggestedTitle(
-                    initialResult: titleResultValue,
+            }
+            let result = await runGeneration { () -> Result<GeneratedNote, BurritoError> in
+                await self.generator.generate(
                     segments: transcriptSegments,
-                    currentTitle: oldTitle,
-                    languageIdentifier: languageIdentifier
-                ) ?? generated.title
+                    userNotes: userNotes,
+                    meetingContext: calendarEvent,
+                    template: template,
+                    languageIdentifier: languageIdentifier,
+                    priorContext: priorContext
+                )
             }
-            note.markdownBody = generated.markdown
-            note.generatedFromTranscriptRevision = note.transcriptRevision
-            note.userEditedNotes = false
-            note.lifecycle = .ready
-            note.processingStage = nil
-            note.updatedAt = .now
-            undoManager?.registerUndo(withTarget: note) { target in
-                target.title = oldTitle
-                target.markdownBody = oldBody
-                target.userEditedNotes = true
+            switch result {
+            case .success(let value):
+                generated = value
+            case .failure(let error):
+                generationError = error
             }
-        case .failure(let error):
+            if generated != nil { break }
+        }
+
+        guard let generated else {
+            let error = generationError ?? .generationFailed(
+                details: "Notes could not be generated right now. Your transcript is preserved; choose Generate again."
+            )
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
@@ -855,11 +948,69 @@ final class AppCoordinator {
             if activeNoteID == note.id {
                 lastError = error
             }
+            try? context.save()
+            return
+        }
+
+        // The title pass runs through the same gate (never alongside another
+        // model request) but after generation, so two model sessions are
+        // never active at the same time.
+        let resolvedTitle = await runGeneration { () -> String? in
+            if let calendarEvent {
+                return self.calendarAwareTitle(
+                    event: calendarEvent,
+                    currentTitle: oldTitle
+                )
+            }
+            let titleResult = await self.suggestedTitle(
+                segments: transcriptSegments,
+                currentTitle: oldTitle,
+                languageIdentifier: languageIdentifier,
+                calendarEvent: calendarEvent
+            )
+            return await self.resolvedSuggestedTitle(
+                initialResult: titleResult,
+                segments: transcriptSegments,
+                currentTitle: oldTitle,
+                languageIdentifier: languageIdentifier
+            )
+        }
+        note.title = resolvedTitle ?? generated.title
+        note.markdownBody = generated.markdown
+        note.generatedFromTranscriptRevision = note.transcriptRevision
+        note.userEditedNotes = false
+        note.lifecycle = .ready
+        note.processingStage = nil
+        undoManager?.registerUndo(withTarget: note) { target in
+            target.title = oldTitle
+            target.markdownBody = oldBody
+            target.userEditedNotes = true
         }
         try? context.save()
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    /// Continuity material for a folder-backed note: the most recent sibling
+    /// note's generated notes (or its raw transcript when notes are not ready
+    /// yet), bounded to a small budget. Study-mode 10-minute segments use
+    /// this so the next segment's notes stay consistent with the previous one.
+    private func priorSessionContext(for note: Note) -> String? {
+        guard let siblings = note.folder?.notes else { return nil }
+        let previous = siblings
+            .filter { $0.id != note.id && $0.deletedAt == nil }
+            .max { $0.createdAt < $1.createdAt }
+        guard let previous else { return nil }
+        let generated = GeneratedNote
+            .strippedSourceArtifacts(from: previous.markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = generated.isEmpty
+            ? Transcript.rendered(previous.transcriptSegments)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            : generated
+        guard !content.isEmpty else { return nil }
+        return String(content.prefix(Self.priorContextCharacterBudget))
     }
 
     private func appendGeneratedNotes(
@@ -881,43 +1032,44 @@ final class AppCoordinator {
         note.lastErrorMessage = nil
         try? context.save()
 
-        async let generatedResult = generator.generate(
-            segments: segments,
-            userNotes: userNotes,
-            meetingContext: calendarEvent,
-            template: template,
-            languageIdentifier: languageIdentifier
-        )
-        async let titleResult = suggestedTitle(
-            segments: completeTranscript,
-            currentTitle: existingTitle,
-            languageIdentifier: languageIdentifier,
-            calendarEvent: calendarEvent
-        )
-        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
-
-        switch generatedResultValue {
-        case .success(let generated):
-            let updatedTitle: String
+        let generatedResult = await runGeneration { () -> Result<GeneratedNote, BurritoError> in
+            await self.generator.generate(
+                segments: segments,
+                userNotes: userNotes,
+                meetingContext: calendarEvent,
+                template: template,
+                languageIdentifier: languageIdentifier
+            )
+        }
+        let resolvedTitle = await runGeneration { () -> String? in
             if let calendarEvent {
-                updatedTitle = calendarAwareTitle(
+                return self.calendarAwareTitle(
                     event: calendarEvent,
                     currentTitle: existingTitle
                 )
-            } else {
-                updatedTitle = await resolvedSuggestedTitle(
-                    initialResult: titleResultValue,
-                    segments: completeTranscript,
-                    currentTitle: existingTitle,
-                    languageIdentifier: languageIdentifier
-                ) ?? existingTitle
             }
+            let titleResult = await self.suggestedTitle(
+                segments: completeTranscript,
+                currentTitle: existingTitle,
+                languageIdentifier: languageIdentifier,
+                calendarEvent: calendarEvent
+            )
+            return await self.resolvedSuggestedTitle(
+                initialResult: titleResult,
+                segments: completeTranscript,
+                currentTitle: existingTitle,
+                languageIdentifier: languageIdentifier
+            )
+        }
+
+        switch generatedResult {
+        case .success(let generated):
+            note.title = resolvedTitle ?? existingTitle
             let appendedBody = """
                 ## \(generated.title)
 
                 \(generated.markdown)
                 """
-            note.title = updatedTitle
             note.markdownBody = existingBody.trimmingCharacters(in: .whitespacesAndNewlines)
                 .isEmpty
                 ? generated.markdown

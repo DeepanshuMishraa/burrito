@@ -54,26 +54,24 @@ struct AppSurfaceTests {
 
     @Test("Color themes resolve persisted values safely")
     func colorThemesResolvePersistedValuesSafely() {
-        #expect(BurritoColorTheme.resolve("ocean-breeze") == .oceanBreeze)
-        #expect(BurritoColorTheme.resolve("unknown-theme") == .burrito)
+        #expect(BurritoColorTheme.resolve("catppuccin-latte") == .catppuccinLatte)
+        #expect(BurritoColorTheme.resolve("unknown-theme") == .tokyoNight)
         #expect(Set(BurritoColorTheme.allCases.map(\.title)).count == BurritoColorTheme.allCases.count)
     }
 
-    @Test("Color themes include Burrito and every tweakcn registry preset")
-    func colorThemesIncludeRegistryPresets() {
+    @Test("Color themes cover every curated preset with light variants")
+    func colorThemesIncludeCuratedPresets() {
         let expected: Set<String> = [
-            "burrito", "modern-minimal", "t3-chat", "twitter", "mocha-mousse",
-            "bubblegum", "doom-64", "catppuccin", "graphite", "perpetuity",
-            "kodama-grove", "cosmic-night", "tangerine", "quantum-rose", "nature",
-            "bold-tech", "elegant-luxury", "amber-minimal", "supabase", "neo-brutalism",
-            "solar-dusk", "claymorphism", "cyberpunk", "pastel-dreams", "clean-slate",
-            "caffeine", "ocean-breeze", "retro-arcade", "midnight-bloom", "candyland",
-            "northern-lights", "vintage-paper", "sunset-horizon", "starry-night", "claude",
-            "vercel", "mono",
+            "catppuccin", "catppuccin-latte", "catppuccin-macchiato", "catppuccin-mocha",
+            "dracula", "gruvbox", "gruvbox-light", "kanagawa", "kanagawa-lotus",
+            "nord", "one-dark", "one-light", "rose-pine", "rose-pine-dawn",
+            "solarized", "solarized-light", "terminal", "tokyo-night",
+            "tokyo-night-day", "vesper",
         ]
 
         #expect(Set(BurritoColorTheme.allCases.map(\.rawValue)) == expected)
-        #expect(BurritoColorTheme.allCases.first == .burrito)
+        #expect(BurritoColorTheme.allCases.first == .catppuccin)
+        #expect(BurritoColorTheme.allCases.contains { !$0.isDark })
     }
 
     @Test("Every color theme preserves readable semantic contrast")

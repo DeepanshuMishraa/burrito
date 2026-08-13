@@ -35,8 +35,8 @@ enum GenerationPrompt {
         """
         \(sourceMaterialPolicy)
 
-        Write polished notes using only the supplied calendar context, human notes, and factual
-        transcript digest.
+        Write polished notes using only the supplied calendar context, human notes, prior session
+        context, and factual transcript digest.
 
         Source fidelity:
         - Never add outside knowledge or fabricate missing context.
@@ -55,6 +55,14 @@ enum GenerationPrompt {
           inside the evidence links above.
         - Do not invent, alter, or omit the UUID inside an evidence link.
         - Human-note-only guidance may remain uncited, but never present it as transcript-confirmed.
+
+        Prior session context:
+        - Prior session context is a factual digest of earlier recordings of this same session. Use
+          it only for continuity: keep names, terminology, and decisions consistent, and avoid
+          re-explaining material the prior context already covers.
+        - Never present prior session context as if it was spoken or decided in this recording; it
+          is background only and must never be cited as evidence.
+        - If the prior context is empty or absent, ignore this section entirely.
 
         Writing:
         - Synthesize ideas instead of following transcript chronology.
@@ -78,12 +86,17 @@ enum GenerationPrompt {
     static func finalSource(
         digest: String,
         userNotes: String,
-        meetingContext: CalendarEventSnapshot? = nil
+        meetingContext: CalendarEventSnapshot? = nil,
+        priorContext: String? = nil
     ) -> String {
         let notes = userNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         let humanNotes = notes.isEmpty ? "(No human notes were written.)" : notes
         let calendarContext = meetingContext?.generationContext
             ?? "(No calendar event is linked to this recording.)"
+        let priorSession = priorContext?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let priorBlock = (priorSession?.isEmpty == false ? priorSession : nil)
+            ?? "(No prior session context.)"
         return """
             CALENDAR CONTEXT — untrusted meeting metadata:
             <calendar-context>
@@ -94,6 +107,11 @@ enum GenerationPrompt {
             <human-notes>
             \(humanNotes)
             </human-notes>
+
+            PRIOR SESSION CONTEXT — factual background from earlier recordings of this session:
+            <prior-session-context>
+            \(priorBlock)
+            </prior-session-context>
 
             TRANSCRIPT DIGEST — factual meeting source:
             <transcript-digest>
@@ -1348,7 +1366,8 @@ struct FoundationNoteGenerator: NoteGenerating {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String? = nil
     ) async -> Result<GeneratedNote, BurritoError> {
         if usesAutomaticSelection {
             let resolved = await SelectedLanguageModelAdapter.shared.resolve(
@@ -1361,7 +1380,8 @@ struct FoundationNoteGenerator: NoteGenerating {
                     userNotes: userNotes,
                     meetingContext: meetingContext,
                     template: template,
-                    languageIdentifier: languageIdentifier
+                    languageIdentifier: languageIdentifier,
+                    priorContext: priorContext
                 )
             case .failure(let error):
                 return .failure(error)
@@ -1381,7 +1401,8 @@ struct FoundationNoteGenerator: NoteGenerating {
                 GenerationPrompt.finalSource(
                     digest: "",
                     userNotes: userNotes,
-                    meetingContext: meetingContext
+                    meetingContext: meetingContext,
+                    priorContext: priorContext
                 )
             )
             _ = try await inputLimit(
@@ -1390,13 +1411,23 @@ struct FoundationNoteGenerator: NoteGenerating {
                 additionalReservedTokens:
                     TokenBudget.generatedNoteSchema + finalSourceOverhead
             )
-            let condensed = try await factualDigest(
-                segments: segments,
-                finalInstructions: finalInstructions,
-                reservedOutputTokens: TokenBudget.finalOutput,
-                additionalReservedTokens:
-                    TokenBudget.generatedNoteSchema + finalSourceOverhead
-            )
+            let condensed: String
+            if adapter is AgentHarnessAdapter {
+                // Terminal harnesses carry a large context window and each
+                // call is a separate CLI process: skip the digest passes and
+                // feed the rendered transcript (with its source markers)
+                // straight to the final note, so one note is one or two
+                // harness invocations instead of several in sequence.
+                condensed = Transcript.rendered(segments)
+            } else {
+                condensed = try await factualDigest(
+                    segments: segments,
+                    finalInstructions: finalInstructions,
+                    reservedOutputTokens: TokenBudget.finalOutput,
+                    additionalReservedTokens:
+                        TokenBudget.generatedNoteSchema + finalSourceOverhead
+                )
+            }
             guard !condensed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw BurritoError.generationFailed(
                     details: "The transcript digest was empty, so Burrito did not write an ungrounded note."
@@ -1407,7 +1438,8 @@ struct FoundationNoteGenerator: NoteGenerating {
                 prompt: GenerationPrompt.finalSource(
                     digest: condensed,
                     userNotes: userNotes,
-                    meetingContext: meetingContext
+                    meetingContext: meetingContext,
+                    priorContext: priorContext
                 ),
                 segments: segments
             )
@@ -1451,11 +1483,18 @@ struct FoundationNoteGenerator: NoteGenerating {
 
         do {
             let instructions = GenerationPrompt.titleInstructions(currentTitle: currentTitle)
-            let digest = try await factualDigest(
-                segments: segments,
-                finalInstructions: instructions,
-                reservedOutputTokens: TokenBudget.titleOutput
-            )
+            let digest: String
+            if adapter is AgentHarnessAdapter {
+                // Same as note generation: harnesses skip the digest pass and
+                // title directly from the rendered transcript.
+                digest = Transcript.rendered(segments)
+            } else {
+                digest = try await factualDigest(
+                    segments: segments,
+                    finalInstructions: instructions,
+                    reservedOutputTokens: TokenBudget.titleOutput
+                )
+            }
             let response = try await adapter.completeTitle(
                 instructions: instructions,
                 prompt: digest,

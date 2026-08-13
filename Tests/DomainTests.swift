@@ -306,30 +306,6 @@ struct SmartStopTests {
     }
 }
 
-@Suite("Appearance")
-struct AppearanceTests {
-    @Test("Unknown stored appearance falls back to the system")
-    func unknownAppearanceFallback() {
-        #expect(BurritoAppearance.resolve("future-mode") == .system)
-    }
-
-    @Test("System appearance remains inherited")
-    func systemAppearanceIsNotForced() {
-        #expect(BurritoAppearance.system.colorScheme == nil)
-        #expect(BurritoAppearance.light.colorScheme == .light)
-        #expect(BurritoAppearance.dark.colorScheme == .dark)
-    }
-
-    @Test("Appearance choices use distinct Hugeicons glyphs")
-    func appearanceIconsAreDistinctAndSupported() {
-        let icons = BurritoAppearance.allCases.map(\.systemImage)
-
-        #expect(icons == ["computer", "sun02", "moon02"])
-        #expect(Set(icons).count == BurritoAppearance.allCases.count)
-        #expect(icons.allSatisfy(BurritoIconCatalog.supports))
-    }
-}
-
 @Suite("Notification access")
 struct NotificationAccessTests {
     @Test("Authorization without a banner style still needs settings")

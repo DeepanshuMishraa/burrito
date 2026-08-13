@@ -158,10 +158,9 @@ struct ContentView: View {
     @State private var toast: BurritoToast?
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var pendingRegenerationNote: Note?
-    /// Live drag-reorder state: the dragged note ID and its current hover
-    /// target, applied to the timeline so rows slide while dragging.
+    /// The note row currently being dragged: dims its timeline row and gates
+    /// the final reorder commit.
     @State private var draggedNoteID: UUID?
-    @State private var reorderTarget: NoteReorderTarget?
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -169,10 +168,8 @@ struct ContentView: View {
     @AppStorage("defaultTemplateID") private var defaultTemplateID = BuiltInTemplate.summary.rawValue
     @AppStorage("transcriptionLanguage") private var defaultLanguage = "en-US"
     @AppStorage("retainAudioDefault") private var defaultRetainsAudio = false
-    @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
-        BurritoAppearance.system.rawValue
     @AppStorage(BurritoColorTheme.storageKey) private var colorThemeRawValue =
-        BurritoColorTheme.burrito.rawValue
+        BurritoColorTheme.tokyoNight.rawValue
     @AppStorage(BurritoFontChoice.storageKey) private var fontChoiceRawValue =
         BurritoFontChoice.burritoDefault.rawValue
     @AppStorage(BurritoInterfaceFontSize.storageKey) private var interfaceFontSizeRawValue =
@@ -180,10 +177,6 @@ struct ContentView: View {
     @AppStorage(SupermemoryConfiguration.enabledKey) private var supermemoryEnabled = false
     @AppStorage(SupermemoryConfiguration.indexingEnabledKey) private var supermemoryIndexingEnabled = false
     private let userProfile = MacUserProfile.current
-
-    private var appearance: BurritoAppearance {
-        BurritoAppearance.resolve(appearanceRawValue)
-    }
 
     private var colorTheme: BurritoColorTheme {
         BurritoColorTheme.resolve(colorThemeRawValue)
@@ -243,48 +236,8 @@ struct ContentView: View {
             calendar.startOfDay(for: $0.updatedAt)
         }
         return grouped
-            .map { (date: $0.key, notes: previewedReorder(Note.orderedWithinDay($0.value), day: $0.key)) }
+            .map { (date: $0.key, notes: Note.orderedWithinDay($0.value)) }
             .sorted { $0.date > $1.date }
-    }
-
-    /// Overlays the live drag preview: while a note is being dragged, its
-    /// row appears at the hovered position so the timeline animates in place.
-    private func previewedReorder(_ notes: [Note], day: Date) -> [Note] {
-        guard let target = reorderTarget,
-              let draggedID = draggedNoteID,
-              Calendar.current.isDate(target.day, inSameDayAs: day)
-        else {
-            return notes
-        }
-        return Self.moving(
-            draggedID,
-            targetID: target.targetID,
-            before: target.before,
-            in: notes
-        )
-    }
-
-    /// Moves one note before/after a target within an ordered array.
-    private static func moving(
-        _ draggedID: UUID,
-        targetID: UUID,
-        before: Bool,
-        in notes: [Note]
-    ) -> [Note] {
-        guard let draggedIndex = notes.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = notes.firstIndex(where: { $0.id == targetID }),
-              draggedIndex != targetIndex
-        else {
-            return notes
-        }
-        var result = notes
-        let dragged = result.remove(at: draggedIndex)
-        var insertion = before ? targetIndex : targetIndex + 1
-        if draggedIndex < insertion {
-            insertion -= 1
-        }
-        result.insert(dragged, at: min(max(insertion, 0), result.count))
-        return result
     }
 
     var body: some View {
@@ -340,7 +293,7 @@ struct ContentView: View {
         .frame(minWidth: 1_020, minHeight: 640)
         .foregroundStyle(BurritoTheme.foreground)
         .tint(BurritoTheme.accent)
-        .preferredColorScheme(appearance.colorScheme)
+        .preferredColorScheme(styleStore.colorScheme)
         .font(.burritoUI(size: 13, weight: .regular))
         .onChange(of: colorThemeRawValue, initial: true) { _, rawValue in
             styleStore.selectTheme(rawValue)
@@ -875,7 +828,6 @@ struct ContentView: View {
 
                 SidebarAccountCard(
                     profile: userProfile,
-                    appearanceRawValue: $appearanceRawValue,
                     updater: updater,
                     theme: colorTheme
                 )
@@ -1005,38 +957,21 @@ struct ContentView: View {
                         },
                         requestRegeneration: regenerateNoteInBackground,
                         day: group.date,
+                        isDragged: note.id == draggedNoteID,
                         onDragBegan: { draggedID in
                             draggedNoteID = draggedID
-                            reorderTarget = nil
-                        },
-                        onReorderHover: { day, targetID, before in
-                            let target = NoteReorderTarget(
-                                day: day,
-                                targetID: targetID,
-                                before: before
-                            )
-                            guard reorderTarget != target else { return }
-                            withAnimation(.burritoSpring) {
-                                reorderTarget = target
-                            }
-                        },
-                        onReorderExit: {
-                            if reorderTarget != nil {
-                                withAnimation(.burritoSpring) {
-                                    reorderTarget = nil
-                                }
-                            }
                         },
                         onReorderCommit: { day, targetID, before in
                             guard let draggedID = draggedNoteID else { return }
-                            reorderNote(
-                                id: draggedID,
-                                inDay: day,
-                                relativeTo: targetID,
-                                before: before
-                            )
+                            withAnimation(.burritoSpring) {
+                                reorderNote(
+                                    id: draggedID,
+                                    inDay: day,
+                                    relativeTo: targetID,
+                                    before: before
+                                )
+                            }
                             draggedNoteID = nil
-                            reorderTarget = nil
                         }
                     )
                     .contextMenu {
@@ -1277,7 +1212,6 @@ struct ContentView: View {
         let matches = notes.filter { ids.contains($0.id) }
         for note in matches { note.folder = folder }
         draggedNoteID = nil
-        reorderTarget = nil
         return !matches.isEmpty
     }
 
@@ -1986,14 +1920,9 @@ private struct CommandPaletteRowButtonStyle: ButtonStyle {
 private struct SidebarAccountCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let profile: MacUserProfile
-    @Binding var appearanceRawValue: String
     @Bindable var updater: BurritoUpdateManager
     let theme: BurritoColorTheme
     @State private var isProfilePresented = false
-
-    private var appearance: BurritoAppearance {
-        BurritoAppearance.resolve(appearanceRawValue)
-    }
 
     private var palette: BurritoThemePalette {
         theme.palette
@@ -2001,54 +1930,6 @@ private struct SidebarAccountCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("APPEARANCE")
-                    .font(.burritoUI(size: 9, weight: 450))
-                    .tracking(0.7)
-                    .foregroundStyle(palette.foreground.color.opacity(0.72))
-
-                HStack(spacing: 2) {
-                    ForEach(BurritoAppearance.allCases) { option in
-                        Button {
-                            BurritoHaptics.trigger(.alignment)
-                            if reduceMotion {
-                                appearanceRawValue = option.rawValue
-                            } else {
-                                withAnimation(.burritoSpring) {
-                                    appearanceRawValue = option.rawValue
-                                }
-                            }
-                        } label: {
-                            BurritoIcon(name: option.systemImage, size: 11)
-                                .foregroundStyle(
-                                    appearance == option
-                                        ? palette.accent.color
-                                        : palette.foreground.color.opacity(0.72)
-                                )
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 28)
-                                .background(
-                                    appearance == option
-                                        ? palette.accentSoft.color
-                                        : palette.controlFill.color,
-                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                )
-                                .burritoElevation(.control)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(option.title)
-                        .accessibilityLabel("\(option.title) appearance")
-                        .accessibilityAddTraits(appearance == option ? .isSelected : [])
-                    }
-                }
-            }
-            .padding(11)
-
-            Rectangle()
-                .fill(palette.softBorder.color)
-                .frame(height: 1)
-
             Button {
                 isProfilePresented.toggle()
             } label: {
@@ -3684,14 +3565,6 @@ extension UTType {
     static let burritoNote = UTType(exportedAs: "com.local.burrito.note")
 }
 
-/// Where a dragged note currently hovers: the target day group, the row it
-/// is being dropped onto, and whether it lands before or after that row.
-private struct NoteReorderTarget: Equatable {
-    let day: Date
-    let targetID: UUID
-    let before: Bool
-}
-
 private struct BurritoToastView: View {
     let toast: BurritoToast
 
@@ -3726,24 +3599,105 @@ private struct StudyModeNameDialog: View {
     let cancel: () -> Void
     let start: () -> Void
 
-    @State private var isFolderPickerPresented = false
+    private enum Mode: Equatable {
+        case newSession
+        case continueSession
+    }
 
-    private var selectedFolder: Folder? {
-        folders.first { $0.id == selectedFolderID }
+    @State private var mode: Mode = .newSession
+
+    private var isContinuing: Bool {
+        mode == .continueSession
+    }
+
+    private var canStart: Bool {
+        switch mode {
+        case .newSession:
+            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .continueSession:
+            selectedFolderID != nil
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Start study mode")
+                Text("Study mode")
                     .font(.burritoDisplay(size: 28, weight: .init(400)))
-                Text(
-                    selectedFolderID == nil
-                        ? "Name this session. Each 10-minute note will be added to its folder."
-                        : "New notes will continue in “\(selectedFolder?.name ?? "")”."
-                )
-                .foregroundStyle(.secondary)
+                Text("Record in focused 10-minute segments. Each segment becomes its own note in one session folder.")
+                    .foregroundStyle(.secondary)
             }
+
+            modePicker
+
+            if isContinuing {
+                folderList
+            } else {
+                sessionNameField
+            }
+
+            HStack {
+                Button("Cancel", action: cancel)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
+                Spacer()
+                Button(isContinuing ? "Continue session" : "Start study mode", action: start)
+                    .buttonStyle(BurritoActionButtonStyle(prominent: true))
+                    .disabled(!canStart)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(26)
+        .frame(width: 470)
+        .onChange(of: mode) { _, newMode in
+            switch newMode {
+            case .newSession:
+                selectedFolderID = nil
+            case .continueSession:
+                name = ""
+            }
+        }
+    }
+
+    private var modePicker: some View {
+        HStack(spacing: 4) {
+            modeButton(.newSession, title: "New session", symbol: "plus")
+            modeButton(.continueSession, title: "Continue session", symbol: "folder")
+        }
+        .padding(4)
+        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .burritoElevation(.control)
+    }
+
+    private func modeButton(_ target: Mode, title: String, symbol: String) -> some View {
+        Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(.smooth(duration: 0.15)) {
+                mode = target
+            }
+        } label: {
+            HStack(spacing: 6) {
+                BurritoIcon(name: symbol, size: 11)
+                Text(title)
+                    .font(.burritoUI(size: 12, weight: 450))
+            }
+            .foregroundStyle(mode == target ? BurritoTheme.accentForeground : .secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 28)
+            .background(
+                mode == target
+                    ? BurritoTheme.accent
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(mode == target ? .isSelected : [])
+    }
+
+    private var sessionNameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("Database isolation", text: $name)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 13)
@@ -3755,135 +3709,106 @@ private struct StudyModeNameDialog: View {
                         .stroke(BurritoTheme.softBorder)
                 }
                 .onSubmit(start)
+            Text("New notes land in a folder with this name.")
+                .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                .foregroundStyle(.tertiary)
+        }
+    }
 
-            if !folders.isEmpty {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Continue an earlier session")
-                            .font(.burritoUI(size: 12, weight: 450))
-                            .foregroundStyle(.primary)
-                        Text("Pick a folder to keep recording into it.")
-                            .font(.burritoUI(size: 10, weight: .regular, relativeTo: .caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button {
-                        BurritoHaptics.trigger(.alignment)
-                        isFolderPickerPresented.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(selectedFolder?.name ?? "New session")
-                                .font(.burritoUI(size: 12, weight: 450))
-                                .foregroundStyle(BurritoTheme.accent)
-                                .lineLimit(1)
-                            BurritoIcon(name: "chevron.down", size: 8)
+    private var folderList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView {
+                VStack(spacing: 3) {
+                    if folders.isEmpty {
+                        VStack(spacing: 6) {
+                            BurritoIcon(name: "folder", size: 18)
                                 .foregroundStyle(.tertiary)
+                            Text("No previous sessions yet")
+                                .font(.burritoUI(size: 12, weight: 450))
+                            Text("Record a new session first, then continue it here.")
+                                .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(BurritoTheme.softBorder)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 26)
+                    } else {
+                        ForEach(folders) { folder in
+                            folderRow(folder)
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Continue an earlier study session")
-                    .accessibilityValue(selectedFolder?.name ?? "New session")
-                    .popover(
-                        isPresented: $isFolderPickerPresented,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        VStack(spacing: 2) {
-                            Button {
-                                BurritoHaptics.trigger(.alignment)
-                                selectedFolderID = nil
-                                isFolderPickerPresented = false
-                            } label: {
-                                HStack(spacing: 10) {
-                                    BurritoIcon(name: "plus", size: 12)
-                                        .foregroundStyle(selectedFolderID == nil ? BurritoTheme.accent : .secondary)
-                                    Text("New session")
-                                        .font(.burritoUI(size: 12, weight: 450))
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    if selectedFolderID == nil {
-                                        BurritoIcon(name: "checkmark", size: 10)
-                                            .foregroundStyle(BurritoTheme.accent)
-                                    }
-                                }
-                                .padding(.horizontal, 10)
-                                .frame(height: 32)
-                                .background(
-                                    selectedFolderID == nil
-                                        ? BurritoTheme.controlFill
-                                        : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                            Divider().padding(.vertical, 2)
-
-                            ForEach(folders) { folder in
-                                Button {
-                                    BurritoHaptics.trigger(.alignment)
-                                    selectedFolderID = folder.id
-                                    isFolderPickerPresented = false
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        BurritoIcon(name: "folder", size: 12)
-                                            .foregroundStyle(selectedFolderID == folder.id ? BurritoTheme.accent : .secondary)
-                                        Text(folder.name)
-                                            .font(.burritoUI(size: 12, weight: 450))
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
-                                        Spacer()
-                                        if selectedFolderID == folder.id {
-                                            BurritoIcon(name: "checkmark", size: 10)
-                                                .foregroundStyle(BurritoTheme.accent)
-                                        }
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 32)
-                                    .background(
-                                        selectedFolderID == folder.id
-                                            ? BurritoTheme.controlFill
-                                            : Color.clear,
-                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(6)
-                        .frame(width: 250)
-                        .background(BurritoTheme.raised)
-                        .presentationBackground(BurritoTheme.raised)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .burritoElevation(.control)
+                .padding(4)
             }
-
-            HStack {
-                Button("Cancel", action: cancel)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: false))
-                Spacer()
-                Button("Start study mode", action: start)
-                    .buttonStyle(BurritoActionButtonStyle(prominent: true))
-                    .disabled(
-                        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            && selectedFolderID == nil
-                    )
-                    .keyboardShortcut(.defaultAction)
+            .frame(height: 196)
+            .background(BurritoTheme.controlFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .burritoElevation(.control)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(BurritoTheme.softBorder)
             }
+            Text("New 10-minute notes keep landing in the selected folder.")
+                .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                .foregroundStyle(.tertiary)
         }
-        .padding(26)
-        .frame(width: 440)
+    }
+
+    private func folderRow(_ folder: Folder) -> some View {
+        let isSelected = selectedFolderID == folder.id
+        return Button {
+            BurritoHaptics.trigger(.alignment)
+            withAnimation(.smooth(duration: 0.15)) {
+                selectedFolderID = folder.id
+            }
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(FolderAccent.color(for: folder.id).opacity(0.16))
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        BurritoIcon(name: "folder.fill", size: 13)
+                            .foregroundStyle(FolderAccent.color(for: folder.id))
+                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(folder.name)
+                        .font(.burritoUI(size: 13, weight: 450))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(folderSubtitle(folder))
+                        .font(.burritoUI(size: 11, weight: .regular, relativeTo: .caption))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                if isSelected {
+                    BurritoIcon(name: "checkmark.circle.fill", size: 14)
+                        .foregroundStyle(BurritoTheme.accent)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 46)
+            .background(
+                isSelected ? BurritoTheme.accentSoft : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(BurritoTheme.accent.opacity(0.35))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(folder.name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func folderSubtitle(_ folder: Folder) -> String {
+        let count = folder.notes.count
+        let latest = folder.notes.map(\.updatedAt).max()
+        let time = latest.map { $0.formatted(.relative(presentation: .named)) } ?? "no notes yet"
+        return "\(count) note\(count == 1 ? "" : "s") · \(time)"
     }
 }
 
@@ -4403,14 +4328,14 @@ private struct TimelineNoteItem: View {
     let open: () -> Void
     let requestRegeneration: (Note) -> Void
     let day: Date
+    let isDragged: Bool
     let onDragBegan: (UUID) -> Void
-    let onReorderHover: (Date, UUID, Bool) -> Void
-    let onReorderExit: () -> Void
     let onReorderCommit: (Date, UUID, Bool) -> Void
 
     @State private var showingActions = false
     @State private var showingFolders = false
     @State private var isDropTarget = false
+    @State private var dropBefore = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -4450,7 +4375,9 @@ private struct TimelineNoteItem: View {
         .padding(.trailing, 6)
         .padding(.vertical, 2)
         .background(
-            showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear,
+            isDropTarget
+                ? BurritoTheme.accentSoft
+                : (showingActions ? BurritoTheme.paper.opacity(0.6) : Color.clear),
             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .burritoElevation(.surface, isActive: showingActions)
@@ -4460,6 +4387,7 @@ private struct TimelineNoteItem: View {
                     .stroke(BurritoTheme.softBorder)
             }
         }
+        .opacity(isDragged ? 0.45 : 1)
         .contentShape(Rectangle())
         .onChange(of: showingActions) { _, isPresented in
             if !isPresented {
@@ -4496,47 +4424,61 @@ private struct TimelineNoteItem: View {
                     withAnimation(.easeOut(duration: 0.12)) {
                         isDropTarget = targeted
                     }
+                    if !targeted {
+                        dropBefore = false
+                    }
                 },
-                hover: onReorderHover,
-                exited: onReorderExit,
+                setBefore: { before in
+                    dropBefore = before
+                },
                 commit: onReorderCommit
             )
         )
         .overlay {
-            if isDropTarget {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(BurritoTheme.accent, lineWidth: 1.5)
-                    .padding(.horizontal, 2)
+            if isDropTarget, !isDragged {
+                InsertionIndicator(before: dropBefore)
             }
         }
     }
 
-    /// Drives the live reorder preview while a note is dragged over this row:
-    /// the row reports hover position (upper half = before, lower half =
-    /// after) and commits the final order when the drop lands.
+    /// A 2pt accent line at the row edge the note would land on — a clear
+    /// "insert here" affordance that never shoves the list around.
+    private struct InsertionIndicator: View {
+        let before: Bool
+
+        var body: some View {
+            Capsule()
+                .fill(BurritoTheme.accent)
+                .frame(height: 2)
+                .padding(.horizontal, 8)
+                .frame(maxHeight: .infinity, alignment: before ? .top : .bottom)
+                .offset(y: before ? -1 : 1)
+        }
+    }
+
+    /// Drives the reorder drop: the row reports hover position (upper half =
+    /// before, lower half = after) and commits the final order on drop.
     private struct NoteRowDropDelegate: DropDelegate {
         let noteID: UUID
         let day: Date
         let setTargeted: (Bool) -> Void
-        let hover: (Date, UUID, Bool) -> Void
-        let exited: () -> Void
+        let setBefore: (Bool) -> Void
         let commit: (Date, UUID, Bool) -> Void
 
         func dropEntered(info: DropInfo) {
             setTargeted(true)
-            hover(day, noteID, info.location.y < 28)
+            setBefore(info.location.y < 28)
         }
 
         func dropUpdated(info: DropInfo) -> DropProposal? {
-            // Keep the preview aligned while the pointer crosses the row's
+            // Keep the indicator aligned while the pointer crosses the row's
             // midpoint: dropEntered only fires once per row entry.
-            hover(day, noteID, info.location.y < 28)
+            setBefore(info.location.y < 28)
             return DropProposal(operation: .move)
         }
 
         func dropExited(info: DropInfo) {
             setTargeted(false)
-            exited()
         }
 
         func performDrop(info: DropInfo) -> Bool {
@@ -8391,6 +8333,8 @@ private struct TranscriptEditor: View {
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 segments[index].text = newValue
                 note.replaceTranscript(with: segments, marksEdited: true)
+                // User edits surface the note in the timeline again.
+                note.updatedAt = .now
             }
         )
     }
@@ -8415,6 +8359,8 @@ private struct TranscriptEditor: View {
                     segments[index].speakerName = replacement
                 }
                 note.replaceTranscript(with: segments, marksEdited: true)
+                // User edits surface the note in the timeline again.
+                note.updatedAt = .now
             }
         )
     }
