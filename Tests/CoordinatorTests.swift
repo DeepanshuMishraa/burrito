@@ -218,6 +218,7 @@ private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
 private final class BlockingGeneratorStub: NoteGenerating, Sendable {
     let generationStarted = Mutex(false)
     let allowGeneration = Mutex(false)
+    let callCount = Mutex(0)
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
         .success(())
@@ -231,6 +232,7 @@ private final class BlockingGeneratorStub: NoteGenerating, Sendable {
         languageIdentifier: String,
         priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError> {
+        callCount.withLock { $0 += 1 }
         generationStarted.withLock { $0 = true }
         while !allowGeneration.withLock({ $0 }) {
             try? await Task.sleep(for: .milliseconds(10))
@@ -939,8 +941,7 @@ struct CoordinatorTests {
     }
 
     @Test("Permanent generation failures retry exactly once and stop")
-    func permanentGenerationFailureDoesNotRetry() async throws {
-        let context = try makeContext()
+    func permanentGenerationFailureDoesNotRetry() async throws {        let context = try makeContext()
         let generator = FlakyGeneratorStub(
             failuresBeforeSuccess: .max,
             failure: .generationFailed(
@@ -972,6 +973,65 @@ struct CoordinatorTests {
         await waitUntil { note.lifecycle != .processing }
         #expect(note.lifecycle == .recoverable)
         // A deterministic failure must not burn backoff + retry attempts.
+        #expect(generator.callCount.withLock { $0 } == 1)
+    }
+
+    @Test("A cancelled queued generation never starts its model request")
+    func cancelledQueuedGenerationDoesNotStart() async throws {
+        let context = try makeContext()
+        let generator = BlockingGeneratorStub()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let template = TemplateSnapshot(
+            name: "Summary",
+            symbol: "doc",
+            instructions: "Summarize."
+        )
+        func makeNote(title: String) -> Note {
+            Note(
+                lifecycle: .ready,
+                title: title,
+                transcriptSegments: [
+                    TranscriptSegment(
+                        source: .system,
+                        startTime: 0,
+                        duration: 4,
+                        text: "Recorded material for \(title)."
+                    ),
+                ],
+                languageIdentifier: "en-US",
+                template: template,
+                retainsAudio: false
+            )
+        }
+
+        // Note A holds the in-process generation gate (blocks in the stub).
+        let noteA = makeNote(title: "A")
+        context.insert(noteA)
+        let taskA = Task { await coordinator.generate(note: noteA, context: context) }
+
+        // Note B queues behind A on the gate.
+        let noteB = makeNote(title: "B")
+        context.insert(noteB)
+        let taskB = Task { await coordinator.generate(note: noteB, context: context) }
+        await waitUntil { noteB.lifecycle == .processing }
+
+        // Cancelling B's caller must abort the queued gate operation: B's
+        // model request must never start, even after A's slot frees.
+        taskB.cancel()
+        generator.allowGeneration.withLock { $0 = true }
+
+        await taskA.value
+        await waitUntil { noteA.lifecycle == .ready }
+        #expect(noteA.lifecycle == .ready)
+        await waitUntil { noteB.lifecycle != .processing }
+        #expect(noteB.lifecycle == .recoverable)
+        // Only A's generation reached the model.
         #expect(generator.callCount.withLock { $0 } == 1)
     }
 

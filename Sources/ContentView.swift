@@ -975,6 +975,13 @@ struct ContentView: View {
                             hoveredRowCount = 0
                             dragEndResetTask?.cancel()
                             dragEndResetTask = nil
+                            // Escape path for a drag that never enters a
+                            // timeline row (dropped on empty space or the
+                            // sidebar): schedule the visual cleanup now.
+                            // Hovering a row cancels it and re-arms the
+                            // session; the authoritative draggedNoteID is
+                            // never cleared here, so a later drop still works.
+                            scheduleDragEndResetIfNeeded()
                         },
                         onHoverChange: { isHovering in
                             if isHovering {

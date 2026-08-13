@@ -514,9 +514,14 @@ enum BurritoError: Error, Equatable, Sendable {
     var isRetryableGenerationFailure: Bool {
         switch self {
         case .speechRecognitionPermissionDenied,
+             .screenRecordingPermissionDenied,
+             .microphonePermissionDenied,
+             .unsupportedLanguage,
              .languageAssetMissing,
              .languageAssetInstallationFailed:
-            // Missing permissions or assets need user action, not retries.
+            // Missing permissions, unsupported languages, and missing
+            // assets need user action, not retries: background retries
+            // would waste attempts and delay the actionable error.
             return false
         case .appleIntelligenceUnavailable(let reason):
             // "Not ready" resolves once the model is free; eligibility and

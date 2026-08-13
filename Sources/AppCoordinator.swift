@@ -57,21 +57,31 @@ final class AppCoordinator {
     /// Serial queue for model inference. Only the model calls are gated:
     /// note state mutations stay in the caller's task, so observers never
     /// see a note half-updated between generation and its follow-up work.
+    /// A queued or in-flight operation is tied to its caller: if the caller
+    /// is cancelled (a heal aborted by recording, for example), the gate
+    /// task is cancelled too — a queued operation never starts, and a
+    /// running in-process operation aborts at its next cancellation check.
     private actor GenerationGate {
         private var tail: Task<Void, Never> = Task {}
 
         func run<T: Sendable>(
             _ operation: @escaping @MainActor () async -> T
-        ) async -> T {
+        ) async throws -> T {
             let previous = tail
             let task = Task { @MainActor in
+                try Task.checkCancellation()
                 await previous.value
+                try Task.checkCancellation()
                 return await operation()
             }
             tail = Task { @MainActor in
-                _ = await task.value
+                _ = try? await task.value
             }
-            return await task.value
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
         }
     }
 
@@ -88,13 +98,17 @@ final class AppCoordinator {
     /// Runs a model operation, serialized only when the backend is an
     /// in-process model. Agent-harness backends run in parallel so two notes
     /// regenerate at the same time instead of queueing behind each other.
+    /// Throws `CancellationError` when the caller is cancelled while the
+    /// operation is queued or in flight (in-process path only; harness
+    /// operations run in the caller's task and observe its cancellation
+    /// directly).
     private func runGeneration<T: Sendable>(
         _ operation: @escaping @MainActor () async -> T
-    ) async -> T {
+    ) async throws -> T {
         if usesAgentHarnessBackend {
             return await operation()
         }
-        return await generationGate.run(operation)
+        return try await generationGate.run(operation)
     }
 
     /// Holds the tail of a note's background processing chain. All access
@@ -948,15 +962,23 @@ final class AppCoordinator {
                 // started) must not start another model request.
                 guard !Task.isCancelled else { return (nil, generationError) }
             }
-            let result = await runGeneration { () -> Result<GeneratedNote, BurritoError> in
-                await self.generator.generate(
-                    segments: segments,
-                    userNotes: userNotes,
-                    meetingContext: meetingContext,
-                    template: template,
-                    languageIdentifier: languageIdentifier,
-                    priorContext: priorContext
-                )
+            let result: Result<GeneratedNote, BurritoError>
+            do {
+                result = try await runGeneration { () -> Result<GeneratedNote, BurritoError> in
+                    await self.generator.generate(
+                        segments: segments,
+                        userNotes: userNotes,
+                        meetingContext: meetingContext,
+                        template: template,
+                        languageIdentifier: languageIdentifier,
+                        priorContext: priorContext
+                    )
+                }
+            } catch {
+                // The gate throws only CancellationError: the caller was
+                // cancelled (heal aborted, recording started). Stop
+                // immediately and let the caller settle the note state.
+                return (nil, generationError)
             }
             switch result {
             case .success(let generated):
@@ -1020,27 +1042,30 @@ final class AppCoordinator {
 
         // The title pass runs through the same gate (never alongside another
         // model request) but after generation, so two model sessions are
-        // never active at the same time.
-        let resolvedTitle = await runGeneration { () -> String? in
-            if let calendarEvent {
-                return self.calendarAwareTitle(
-                    event: calendarEvent,
-                    currentTitle: oldTitle
+        // never active at the same time. Cancellation here (heal aborted)
+        // falls back to the generated title: the note body is already ready.
+        let resolvedTitle: String? = (
+            try? await runGeneration { () -> String? in
+                if let calendarEvent {
+                    return self.calendarAwareTitle(
+                        event: calendarEvent,
+                        currentTitle: oldTitle
+                    )
+                }
+                let titleResult = await self.suggestedTitle(
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier,
+                    calendarEvent: calendarEvent
+                )
+                return await self.resolvedSuggestedTitle(
+                    initialResult: titleResult,
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier
                 )
             }
-            let titleResult = await self.suggestedTitle(
-                segments: transcriptSegments,
-                currentTitle: oldTitle,
-                languageIdentifier: languageIdentifier,
-                calendarEvent: calendarEvent
-            )
-            return await self.resolvedSuggestedTitle(
-                initialResult: titleResult,
-                segments: transcriptSegments,
-                currentTitle: oldTitle,
-                languageIdentifier: languageIdentifier
-            )
-        }
+        ) ?? nil
         note.title = resolvedTitle ?? generated.title
         note.markdownBody = generated.markdown
         note.generatedFromTranscriptRevision = note.transcriptRevision
@@ -1132,26 +1157,30 @@ final class AppCoordinator {
             return
         }
 
-        let resolvedTitle = await runGeneration { () -> String? in
-            if let calendarEvent {
-                return self.calendarAwareTitle(
-                    event: calendarEvent,
-                    currentTitle: existingTitle
+        // Cancellation here (heal aborted mid-append) falls back to the
+        // existing title; the appended body is already generated.
+        let resolvedTitle: String? = (
+            try? await runGeneration { () -> String? in
+                if let calendarEvent {
+                    return self.calendarAwareTitle(
+                        event: calendarEvent,
+                        currentTitle: existingTitle
+                    )
+                }
+                let titleResult = await self.suggestedTitle(
+                    segments: completeTranscript,
+                    currentTitle: existingTitle,
+                    languageIdentifier: languageIdentifier,
+                    calendarEvent: calendarEvent
+                )
+                return await self.resolvedSuggestedTitle(
+                    initialResult: titleResult,
+                    segments: completeTranscript,
+                    currentTitle: existingTitle,
+                    languageIdentifier: languageIdentifier
                 )
             }
-            let titleResult = await self.suggestedTitle(
-                segments: completeTranscript,
-                currentTitle: existingTitle,
-                languageIdentifier: languageIdentifier,
-                calendarEvent: calendarEvent
-            )
-            return await self.resolvedSuggestedTitle(
-                initialResult: titleResult,
-                segments: completeTranscript,
-                currentTitle: existingTitle,
-                languageIdentifier: languageIdentifier
-            )
-        }
+        ) ?? nil
 
         note.title = resolvedTitle ?? existingTitle
         let appendedBody = """
