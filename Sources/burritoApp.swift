@@ -85,6 +85,10 @@ struct burritoApp: App {
                 calendarAccess: calendarAccess
             )
             .modelContainer(container)
+            // The menu-bar scene is a separate window: force the selected
+            // theme's scheme so its native controls never render in the
+            // system's light/dark appearance while the app shows the other.
+            .preferredColorScheme(BurritoStyleStore.shared.colorScheme)
         } label: {
             Image(
                 nsImage: BurritoMenuBarArtwork.image(

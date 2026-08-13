@@ -506,6 +506,10 @@ final class AppCoordinator {
             if let studySession,
                let folder = fetchFolder(id: studySession.folderID, context: context) {
                 newNote.folder = folder
+                // Mark study-session lineage so later segments (and healed
+                // notes after a restart) can draw continuity context from
+                // earlier segments of this same session.
+                newNote.studyFolderID = studySession.folderID
             }
             note = newNote
         }
@@ -1048,14 +1052,25 @@ final class AppCoordinator {
         }
     }
 
-    /// Continuity material for a folder-backed note: the most recent sibling
-    /// note's generated notes (or its raw transcript when notes are not ready
-    /// yet), bounded to a small budget. Study-mode 10-minute segments use
-    /// this so the next segment's notes stay consistent with the previous one.
+    /// Continuity material for a note created by a study session: the most
+    /// recent EARLIER segment of the same session lineage (its generated
+    /// notes, or its raw transcript when notes are not ready yet), bounded to
+    /// a small budget. Regular folder-backed notes are never treated as a
+    /// session: without study lineage the note has no prior context, so
+    /// unrelated siblings cannot seed continuity from other meetings.
     private func priorSessionContext(for note: Note) -> String? {
-        guard let siblings = note.folder?.notes else { return nil }
+        guard let lineage = note.studyFolderID,
+              let siblings = note.folder?.notes
+        else {
+            return nil
+        }
         let previous = siblings
-            .filter { $0.id != note.id && $0.deletedAt == nil }
+            .filter {
+                $0.studyFolderID == lineage
+                    && $0.id != note.id
+                    && $0.deletedAt == nil
+                    && $0.createdAt < note.createdAt
+            }
             .max { $0.createdAt < $1.createdAt }
         guard let previous else { return nil }
         let generated = GeneratedNote

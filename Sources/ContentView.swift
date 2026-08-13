@@ -1357,14 +1357,20 @@ struct ContentView: View {
     }
 
     /// Folders that already hold notes — candidates for continuing an earlier
-    /// study session, most recently used first.
+    /// study session, most recently used first. Trashed notes are invisible:
+    /// they are neither counted nor treated as recent activity.
     private var studyFolders: [Folder] {
-        folders
-            .filter { !$0.notes.isEmpty }
-            .sorted {
-                ($0.notes.map(\.updatedAt).max() ?? .distantPast)
-                    > ($1.notes.map(\.updatedAt).max() ?? .distantPast)
+        func latestActivity(_ folder: Folder) -> Date {
+            folder.notes
+                .filter { $0.deletedAt == nil }
+                .map(\.updatedAt)
+                .max() ?? .distantPast
+        }
+        return folders
+            .filter { folder in
+                folder.notes.contains { $0.deletedAt == nil }
             }
+            .sorted { latestActivity($0) > latestActivity($1) }
     }
 
     private func startStudyMode() {
@@ -3844,8 +3850,10 @@ private struct StudyModeNameDialog: View {
     }
 
     private func folderSubtitle(_ folder: Folder) -> String {
-        let count = folder.notes.count
-        let latest = folder.notes.map(\.updatedAt).max()
+        // Trashed notes are invisible to the Continue-session list.
+        let liveNotes = folder.notes.filter { $0.deletedAt == nil }
+        let count = liveNotes.count
+        let latest = liveNotes.map(\.updatedAt).max()
         let time = latest.map { $0.formatted(.relative(presentation: .named)) } ?? "no notes yet"
         return "\(count) note\(count == 1 ? "" : "s") · \(time)"
     }

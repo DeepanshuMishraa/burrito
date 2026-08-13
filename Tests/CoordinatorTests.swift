@@ -933,8 +933,8 @@ struct CoordinatorTests {
         #expect(note.lastErrorMessage == nil)
     }
 
-    @Test("Folder-backed notes receive the previous note as prior session context")
-    func priorSessionContextComesFromFolderSibling() async throws {
+    @Test("Study-session notes receive the earlier segment as prior session context")
+    func priorSessionContextComesFromEarlierStudySegment() async throws {
         let context = try makeContext()
         let folder = Folder(name: "Database isolation", order: 0)
         context.insert(folder)
@@ -943,6 +943,7 @@ struct CoordinatorTests {
             symbol: "book",
             instructions: "Teach the material."
         )
+        let lineage = UUID()
         let older = Note(
             lifecycle: .ready,
             title: "Segment one",
@@ -953,6 +954,7 @@ struct CoordinatorTests {
             retainsAudio: false
         )
         older.folder = folder
+        older.studyFolderID = lineage
         let current = Note(
             lifecycle: .ready,
             title: "Segment two",
@@ -962,6 +964,7 @@ struct CoordinatorTests {
             retainsAudio: false
         )
         current.folder = folder
+        current.studyFolderID = lineage
         context.insert(older)
         context.insert(current)
         try context.save()
@@ -978,6 +981,106 @@ struct CoordinatorTests {
 
         let received = spy.receivedPriorContexts.withLock { $0 }
         #expect(received == ["# Segment one\n\nCovered indexes and joins."])
+    }
+
+    @Test("Regular folder notes never receive prior session context")
+    func priorSessionContextRequiresStudyLineage() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Team syncs", order: 0)
+        context.insert(folder)
+        let template = TemplateSnapshot(
+            name: "Summary",
+            symbol: "doc",
+            instructions: "Summarize."
+        )
+        let unrelated = Note(
+            lifecycle: .ready,
+            title: "Q3 planning",
+            markdownBody: "# Q3 planning\n\nBudget and roadmap.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        unrelated.folder = folder
+        let current = Note(
+            lifecycle: .ready,
+            title: "Standup",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        current.folder = folder
+        context.insert(unrelated)
+        context.insert(current)
+        try context.save()
+
+        let spy = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: spy,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        await coordinator.generate(note: current, context: context)
+
+        // No study lineage: the folder sibling must not seed context, even
+        // though it is the most recent sibling in the folder.
+        #expect(spy.receivedPriorContexts.withLock { $0 } == [nil])
+    }
+
+    @Test("Regenerating an earlier segment never uses a later sibling as context")
+    func priorSessionContextSkipsLaterSiblings() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Database isolation", order: 0)
+        context.insert(folder)
+        let template = TemplateSnapshot(
+            name: "Study Notes",
+            symbol: "book",
+            instructions: "Teach the material."
+        )
+        let lineage = UUID()
+        let first = Note(
+            lifecycle: .ready,
+            title: "Segment one",
+            markdownBody: "# Segment one",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        first.folder = folder
+        first.studyFolderID = lineage
+        let later = Note(
+            lifecycle: .ready,
+            title: "Segment two",
+            markdownBody: "# Segment two\n\nFuture material.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        later.folder = folder
+        later.studyFolderID = lineage
+        context.insert(first)
+        context.insert(later)
+        try context.save()
+
+        let spy = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: spy,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        // Regenerating the FIRST segment must not pull the second segment's
+        // (future) content into its prompt.
+        await coordinator.generate(note: first, context: context)
+
+        #expect(spy.receivedPriorContexts.withLock { $0 } == [nil])
     }
 
     @Test("Recoverable notes with a transcript auto-regenerate on launch")

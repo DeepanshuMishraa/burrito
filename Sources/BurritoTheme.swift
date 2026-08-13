@@ -605,7 +605,62 @@ enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     static func resolve(_ rawValue: String) -> BurritoColorTheme {
-        BurritoColorTheme(rawValue: rawValue) ?? .tokyoNight
+        if let theme = BurritoColorTheme(rawValue: rawValue) {
+            return theme
+        }
+        if let migrated = migratedValue(from: rawValue),
+           let theme = BurritoColorTheme(rawValue: migrated) {
+            return theme
+        }
+        return .tokyoNight
+    }
+
+    /// Maps a persisted raw value from the pre-curation 39-theme set to a
+    /// curated equivalent, so returning users keep a theme close to their
+    /// previous selection instead of silently landing on the new default.
+    /// Themes whose raw value still exists (e.g. "catppuccin") resolve
+    /// directly and never pass through here.
+    static let legacyMigrationMap: [String: String] = [
+        "burrito": "gruvbox-light",
+        "modern-minimal": "one-light",
+        "t3-chat": "rose-pine-dawn",
+        "twitter": "one-light",
+        "mocha-mousse": "gruvbox-light",
+        "bubblegum": "rose-pine-dawn",
+        "doom-64": "dracula",
+        "graphite": "vesper",
+        "perpetuity": "solarized",
+        "kodama-grove": "gruvbox",
+        "cosmic-night": "tokyo-night",
+        "tangerine": "tokyo-night",
+        "quantum-rose": "rose-pine",
+        "nature": "gruvbox",
+        "bold-tech": "tokyo-night",
+        "elegant-luxury": "vesper",
+        "amber-minimal": "gruvbox-light",
+        "supabase": "one-dark",
+        "neo-brutalism": "terminal",
+        "solar-dusk": "gruvbox",
+        "claymorphism": "nord",
+        "cyberpunk": "tokyo-night",
+        "pastel-dreams": "rose-pine-dawn",
+        "clean-slate": "one-light",
+        "caffeine": "gruvbox",
+        "ocean-breeze": "nord",
+        "retro-arcade": "tokyo-night",
+        "midnight-bloom": "tokyo-night",
+        "candyland": "rose-pine",
+        "northern-lights": "nord",
+        "vintage-paper": "gruvbox-light",
+        "sunset-horizon": "rose-pine-dawn",
+        "starry-night": "tokyo-night",
+        "claude": "vesper",
+        "vercel": "terminal",
+        "mono": "one-dark",
+    ]
+
+    static func migratedValue(from rawValue: String) -> String? {
+        legacyMigrationMap[rawValue]
     }
 }
 
@@ -626,6 +681,13 @@ final class BurritoStyleStore {
     }
 
     private init(defaults: UserDefaults = .standard) {
+        // One-time migration: a persisted pre-curation theme value is
+        // rewritten as its curated equivalent so the settings UI shows the
+        // theme the user actually gets.
+        if let stored = defaults.string(forKey: BurritoColorTheme.storageKey),
+           let migrated = BurritoColorTheme.migratedValue(from: stored) {
+            defaults.set(migrated, forKey: BurritoColorTheme.storageKey)
+        }
         let theme = BurritoColorTheme.resolve(
             defaults.string(forKey: BurritoColorTheme.storageKey)
                 ?? BurritoColorTheme.tokyoNight.rawValue

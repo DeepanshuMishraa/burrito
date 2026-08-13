@@ -59,6 +59,27 @@ struct AppSurfaceTests {
         #expect(Set(BurritoColorTheme.allCases.map(\.title)).count == BurritoColorTheme.allCases.count)
     }
 
+    @Test("Legacy theme values migrate to curated equivalents")
+    func legacyThemesMigrateToCuratedEquivalents() {
+        // The previous default and a spread of removed presets: each maps to
+        // a sensible curated theme instead of silently landing on Tokyo Night.
+        #expect(BurritoColorTheme.resolve("burrito") == .gruvboxLight)
+        #expect(BurritoColorTheme.resolve("ocean-breeze") == .nord)
+        #expect(BurritoColorTheme.resolve("mono") == .oneDark)
+        #expect(BurritoColorTheme.resolve("twitter") == .oneLight)
+        #expect(BurritoColorTheme.resolve("bubblegum") == .rosePineDawn)
+        #expect(BurritoColorTheme.resolve("doom-64") == .dracula)
+        #expect(BurritoColorTheme.resolve("quantum-rose") == .rosePine)
+        #expect(BurritoColorTheme.resolve("vercel") == .terminal)
+        // Every removed raw value resolves to exactly its mapped equivalent.
+        for (rawValue, target) in BurritoColorTheme.legacyMigrationMap {
+            #expect(
+                BurritoColorTheme.resolve(rawValue) == BurritoColorTheme(rawValue: target),
+                Comment(rawValue: rawValue)
+            )
+        }
+    }
+
     @Test("Color themes cover every curated preset with light variants")
     func colorThemesIncludeCuratedPresets() {
         let expected: Set<String> = [
