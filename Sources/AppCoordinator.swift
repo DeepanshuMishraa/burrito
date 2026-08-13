@@ -315,9 +315,10 @@ final class AppCoordinator {
                 && note.lastErrorMessage != nil
         }
         guard !eligible.isEmpty else { return }
-        for note in eligible {
-            note.lastErrorMessage = nil
-        }
+        // The error marker stays on the note until generation actually
+        // begins (generateInBackground clears it): if the heal is cancelled
+        // (e.g. recording started), the note remains eligible for healing on
+        // the next launch instead of silently losing its marker.
         healingTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.healingTask = nil }
@@ -943,6 +944,9 @@ final class AppCoordinator {
                         (Self.generationRetryBackoff[attempt] ?? 1) * 1_000
                     )
                 )
+                // Cancellation during backoff (heal cancelled, recording
+                // started) must not start another model request.
+                guard !Task.isCancelled else { return (nil, generationError) }
             }
             let result = await runGeneration { () -> Result<GeneratedNote, BurritoError> in
                 await self.generator.generate(
@@ -960,7 +964,9 @@ final class AppCoordinator {
             case .failure(let error):
                 generationError = error
                 if !error.isRetryableGenerationFailure {
-                    break
+                    // Permanent failures fail identically on retry: stop
+                    // immediately instead of burning model time.
+                    return (nil, generationError)
                 }
             }
         }

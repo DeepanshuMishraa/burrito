@@ -567,7 +567,6 @@ enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
     case catppuccin
     case catppuccinLatte = "catppuccin-latte"
     case catppuccinMacchiato = "catppuccin-macchiato"
-    case catppuccinMocha = "catppuccin-mocha"
     case dracula
     case gruvbox
     case gruvboxLight = "gruvbox-light"
@@ -594,7 +593,7 @@ enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
     /// of following the system's light/dark setting.
     var isDark: Bool {
         switch self {
-        case .catppuccin, .catppuccinMacchiato, .catppuccinMocha,
+        case .catppuccin, .catppuccinMacchiato,
              .dracula, .gruvbox, .kanagawa, .nord, .oneDark,
              .rosePine, .solarized, .terminal, .tokyoNight, .vesper:
             true
@@ -657,6 +656,10 @@ enum BurritoColorTheme: String, CaseIterable, Identifiable, Sendable {
         "claude": "vesper",
         "vercel": "terminal",
         "mono": "one-dark",
+        // The duplicate catppuccin-mocha entry shipped only on the
+        // pre-release branch; fold any persisted selection into the base
+        // Catppuccin theme (which is Mocha).
+        "catppuccin-mocha": "catppuccin",
     ]
 
     static func migratedValue(from rawValue: String) -> String? {

@@ -287,9 +287,14 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
 private final class FlakyGeneratorStub: NoteGenerating, Sendable {
     let callCount = Mutex(0)
     let failuresBeforeSuccess: Int
+    let failure: BurritoError
 
-    init(failuresBeforeSuccess: Int) {
+    init(
+        failuresBeforeSuccess: Int,
+        failure: BurritoError = .generationFailed(details: "The model was busy.")
+    ) {
         self.failuresBeforeSuccess = failuresBeforeSuccess
+        self.failure = failure
     }
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
@@ -309,7 +314,7 @@ private final class FlakyGeneratorStub: NoteGenerating, Sendable {
             return count
         }
         guard attempt > failuresBeforeSuccess else {
-            return .failure(.generationFailed(details: "The model was busy."))
+            return .failure(failure)
         }
         return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
     }
@@ -931,6 +936,43 @@ struct CoordinatorTests {
         #expect(note.lifecycle == .ready)
         #expect(generator.callCount.withLock { $0 } == 2)
         #expect(note.lastErrorMessage == nil)
+    }
+
+    @Test("Permanent generation failures retry exactly once and stop")
+    func permanentGenerationFailureDoesNotRetry() async throws {
+        let context = try makeContext()
+        let generator = FlakyGeneratorStub(
+            failuresBeforeSuccess: .max,
+            failure: .generationFailed(
+                details: "The transcript is empty, so Burrito did not write an ungrounded note."
+            )
+        )
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        await waitUntil { note.lifecycle != .processing }
+        #expect(note.lifecycle == .recoverable)
+        // A deterministic failure must not burn backoff + retry attempts.
+        #expect(generator.callCount.withLock { $0 } == 1)
     }
 
     @Test("Study-session notes receive the earlier segment as prior session context")

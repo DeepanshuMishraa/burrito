@@ -533,6 +533,7 @@ enum BurritoError: Error, Equatable, Sendable {
                 "could not be grounded in the transcript",
                 "did not contain all required model files",
                 "the selected language is not supported",
+                "are too large for on-device generation",
             ]
             return !permanentMarkers.contains(where: normalized.contains)
         default:

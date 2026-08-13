@@ -83,7 +83,7 @@ struct AppSurfaceTests {
     @Test("Color themes cover every curated preset with light variants")
     func colorThemesIncludeCuratedPresets() {
         let expected: Set<String> = [
-            "catppuccin", "catppuccin-latte", "catppuccin-macchiato", "catppuccin-mocha",
+            "catppuccin", "catppuccin-latte", "catppuccin-macchiato",
             "dracula", "gruvbox", "gruvbox-light", "kanagawa", "kanagawa-lotus",
             "nord", "one-dark", "one-light", "rose-pine", "rose-pine-dawn",
             "solarized", "solarized-light", "terminal", "tokyo-night",

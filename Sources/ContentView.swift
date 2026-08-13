@@ -158,9 +158,15 @@ struct ContentView: View {
     @State private var toast: BurritoToast?
     @State private var toastDismissTask: Task<Void, Never>?
     @State private var pendingRegenerationNote: Note?
-    /// The note row currently being dragged: dims its timeline row and gates
-    /// the final reorder commit.
+    /// The note row currently being dragged: gates the final reorder commit.
+    /// Survives the abandonment timer — only a real commit, a folder drop,
+    /// or the next drag replaces it — so a slow drag that pauses over empty
+    /// space can still drop.
     @State private var draggedNoteID: UUID?
+    /// Visual drag session: drives the row dimming. Cleared when the drag
+    /// leaves every timeline row (abandoned, cancelled, or dropped outside
+    /// a row); re-armed when the drag re-enters a row.
+    @State private var isDragSessionActive = false
     /// Rows currently hovered by the active drag. When the count drops to
     /// zero the drag has left the timeline (abandoned, cancelled, or dropped
     /// outside a row), so the dimmed state clears shortly after.
@@ -962,9 +968,10 @@ struct ContentView: View {
                         },
                         requestRegeneration: regenerateNoteInBackground,
                         day: group.date,
-                        isDragged: note.id == draggedNoteID,
+                        isDragged: isDragSessionActive && note.id == draggedNoteID,
                         onDragBegan: { draggedID in
                             draggedNoteID = draggedID
+                            isDragSessionActive = true
                             hoveredRowCount = 0
                             dragEndResetTask?.cancel()
                             dragEndResetTask = nil
@@ -973,6 +980,10 @@ struct ContentView: View {
                             if isHovering {
                                 dragEndResetTask?.cancel()
                                 dragEndResetTask = nil
+                                // Re-entering a row proves the drag is still
+                                // alive: re-arm the visual session so the row
+                                // stays dimmed through pauses over empty space.
+                                isDragSessionActive = true
                                 hoveredRowCount += 1
                             } else {
                                 hoveredRowCount = max(0, hoveredRowCount - 1)
@@ -990,6 +1001,7 @@ struct ContentView: View {
                                 )
                             }
                             draggedNoteID = nil
+                            isDragSessionActive = false
                             hoveredRowCount = 0
                             dragEndResetTask?.cancel()
                             dragEndResetTask = nil
@@ -1014,17 +1026,19 @@ struct ContentView: View {
         return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
-    /// Clears the dragged-row state shortly after the drag leaves every
+    /// Clears the visual drag session shortly after the drag leaves every
     /// timeline row: covers Escape, drops on empty space, and drops outside
-    /// the list. Re-entering a row cancels the pending reset, so a slow drag
-    /// that passes over empty space keeps working.
+    /// the list. Re-entering a row cancels the pending reset and re-arms the
+    /// session, so a slow drag that passes over empty space keeps working.
+    /// The authoritative draggedNoteID is deliberately preserved here: the
+    /// commit still resolves when the drop lands after a long pause.
     private func scheduleDragEndResetIfNeeded() {
         guard draggedNoteID != nil, hoveredRowCount == 0 else { return }
         dragEndResetTask?.cancel()
         dragEndResetTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
-            draggedNoteID = nil
+            isDragSessionActive = false
             hoveredRowCount = 0
         }
     }
@@ -1248,6 +1262,7 @@ struct ContentView: View {
         let matches = notes.filter { ids.contains($0.id) }
         for note in matches { note.folder = folder }
         draggedNoteID = nil
+        isDragSessionActive = false
         hoveredRowCount = 0
         dragEndResetTask?.cancel()
         dragEndResetTask = nil
@@ -8178,6 +8193,9 @@ private struct TranscriptEditor: View {
     /// the local array, and the note is persisted after a short pause so
     /// keystrokes never re-encode and re-save the whole transcript.
     @State private var transcriptCommitTask: Task<Void, Never>?
+    /// True while local segment/speaker edits have not been committed yet.
+    /// Viewing a transcript without editing never marks it edited.
+    @State private var hasPendingTranscriptEdits = false
 
     init(note: Note, focusedSegmentID: UUID?) {
         self.note = note
@@ -8348,9 +8366,13 @@ private struct TranscriptEditor: View {
                 segments = updatedSegments
             }
             .onDisappear {
-                // Flush any pending edit before the editor goes away so the
-                // note never keeps uncommitted local edits.
-                commitTranscript()
+                // Flush a pending edit before the editor goes away so the
+                // note never keeps uncommitted local edits — but only when
+                // something was actually edited. Merely viewing a transcript
+                // must not mark it edited or move the timeline time.
+                if hasPendingTranscriptEdits {
+                    commitTranscript()
+                }
             }
         }
     }
@@ -8433,6 +8455,7 @@ private struct TranscriptEditor: View {
     /// keystrokes and speaker renames do not re-encode and re-save the
     /// whole transcript (and bump the note's activity time) on every edit.
     private func scheduleTranscriptCommit() {
+        hasPendingTranscriptEdits = true
         transcriptCommitTask?.cancel()
         transcriptCommitTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(400))
@@ -8444,6 +8467,7 @@ private struct TranscriptEditor: View {
     private func commitTranscript() {
         transcriptCommitTask?.cancel()
         transcriptCommitTask = nil
+        hasPendingTranscriptEdits = false
         note.replaceTranscript(with: segments, marksEdited: true)
         // User edits surface the note in the timeline again.
         note.updatedAt = .now

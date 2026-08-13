@@ -22,7 +22,6 @@ extension BurritoColorTheme {
         case .catppuccin: "Catppuccin"
         case .catppuccinLatte: "Catppuccin Latte"
         case .catppuccinMacchiato: "Catppuccin Macchiato"
-        case .catppuccinMocha: "Catppuccin Mocha"
         case .dracula: "Dracula"
         case .gruvbox: "Gruvbox"
         case .gruvboxLight: "Gruvbox Light"
@@ -48,8 +47,9 @@ extension BurritoColorTheme {
 
     private func makePalette() -> BurritoThemePalette {
         switch self {
-        case .catppuccin, .catppuccinMocha:
-            // Catppuccin's default flavor is Mocha.
+        case .catppuccin:
+            // Catppuccin's default flavor is Mocha; the duplicate
+            // catppuccin-mocha entry is intentionally not shipped.
             BurritoThemePalette.make(
                 foreground: (0xCDD6F4, 0xCDD6F4),
                 sidebarForeground: (0xBAC2DE, 0xBAC2DE),

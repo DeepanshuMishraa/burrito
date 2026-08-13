@@ -1499,13 +1499,15 @@ struct FoundationNoteGenerator: NoteGenerating {
             if adapter is AgentHarnessAdapter {
                 // Same as note generation: harnesses title directly from the
                 // rendered transcript when it fits, digesting only oversized
-                // transcripts.
+                // transcripts. An empty transcript falls through to the
+                // digest pipeline, which rejects it like the in-process path.
                 let rendered = Transcript.rendered(segments)
                 let titleInputLimit = try await inputLimit(
                     instructions: instructions,
                     reservedOutputTokens: TokenBudget.titleOutput
                 )
-                if try await tokenCount(rendered) <= titleInputLimit {
+                if !rendered.isEmpty,
+                   try await tokenCount(rendered) <= titleInputLimit {
                     digest = rendered
                 } else {
                     digest = try await factualDigest(
