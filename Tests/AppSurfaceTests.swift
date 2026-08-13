@@ -54,26 +54,58 @@ struct AppSurfaceTests {
 
     @Test("Color themes resolve persisted values safely")
     func colorThemesResolvePersistedValuesSafely() {
-        #expect(BurritoColorTheme.resolve("ocean-breeze") == .oceanBreeze)
-        #expect(BurritoColorTheme.resolve("unknown-theme") == .burrito)
+        #expect(BurritoColorTheme.resolve("catppuccin-latte") == .catppuccinLatte)
+        #expect(BurritoColorTheme.resolve("unknown-theme") == .tokyoNight)
         #expect(Set(BurritoColorTheme.allCases.map(\.title)).count == BurritoColorTheme.allCases.count)
     }
 
-    @Test("Color themes include Burrito and every tweakcn registry preset")
-    func colorThemesIncludeRegistryPresets() {
+    @Test("Legacy theme values migrate to curated equivalents")
+    func legacyThemesMigrateToCuratedEquivalents() {
+        // The previous default and a spread of removed presets: each maps to
+        // a sensible curated theme instead of silently landing on Tokyo Night.
+        #expect(BurritoColorTheme.resolve("burrito") == .gruvboxLight)
+        #expect(BurritoColorTheme.resolve("ocean-breeze") == .nord)
+        #expect(BurritoColorTheme.resolve("mono") == .oneDark)
+        #expect(BurritoColorTheme.resolve("twitter") == .oneLight)
+        #expect(BurritoColorTheme.resolve("bubblegum") == .rosePineDawn)
+        #expect(BurritoColorTheme.resolve("doom-64") == .dracula)
+        #expect(BurritoColorTheme.resolve("quantum-rose") == .rosePine)
+        #expect(BurritoColorTheme.resolve("vercel") == .terminal)
+        // Every removed raw value resolves to exactly its mapped equivalent.
+        for (rawValue, target) in BurritoColorTheme.legacyMigrationMap {
+            #expect(
+                BurritoColorTheme.resolve(rawValue) == BurritoColorTheme(rawValue: target),
+                Comment(rawValue: rawValue)
+            )
+        }
+    }
+
+    @Test("Color themes cover every curated preset with light variants")
+    func colorThemesIncludeCuratedPresets() {
         let expected: Set<String> = [
-            "burrito", "modern-minimal", "t3-chat", "twitter", "mocha-mousse",
-            "bubblegum", "doom-64", "catppuccin", "graphite", "perpetuity",
-            "kodama-grove", "cosmic-night", "tangerine", "quantum-rose", "nature",
-            "bold-tech", "elegant-luxury", "amber-minimal", "supabase", "neo-brutalism",
-            "solar-dusk", "claymorphism", "cyberpunk", "pastel-dreams", "clean-slate",
-            "caffeine", "ocean-breeze", "retro-arcade", "midnight-bloom", "candyland",
-            "northern-lights", "vintage-paper", "sunset-horizon", "starry-night", "claude",
-            "vercel", "mono",
+            "catppuccin", "catppuccin-latte", "catppuccin-macchiato",
+            "dracula", "gruvbox", "gruvbox-light", "kanagawa", "kanagawa-lotus",
+            "nord", "one-dark", "one-light", "rose-pine", "rose-pine-dawn",
+            "solarized", "solarized-light", "terminal", "tokyo-night",
+            "tokyo-night-day", "vesper",
+        ]
+        let expectedLight: Set<String> = [
+            "catppuccin-latte", "gruvbox-light", "kanagawa-lotus", "one-light",
+            "rose-pine-dawn", "solarized-light", "tokyo-night-day",
         ]
 
         #expect(Set(BurritoColorTheme.allCases.map(\.rawValue)) == expected)
-        #expect(BurritoColorTheme.allCases.first == .burrito)
+        #expect(BurritoColorTheme.allCases.first == .catppuccin)
+        // Every light-variant theme must be classified as light, and every
+        // dark theme must not be: a wrong isDark flag fails this assertion.
+        #expect(
+            Set(BurritoColorTheme.allCases.filter { !$0.isDark }.map(\.rawValue))
+                == expectedLight
+        )
+        #expect(
+            Set(BurritoColorTheme.allCases.filter(\.isDark).map(\.rawValue))
+                == expected.subtracting(expectedLight)
+        )
     }
 
     @Test("Every color theme preserves readable semantic contrast")

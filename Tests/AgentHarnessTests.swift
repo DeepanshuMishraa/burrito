@@ -2,7 +2,12 @@ import Foundation
 import Testing
 @testable import Burrito
 
+// These tests mutate the shared AgentHarnessStore singleton and its
+// UserDefaults-backed selection, so they must not interleave with each
+// other at suspension points: a parallel test disabling the selection
+// mid-resolve makes the routing assertion flaky.
 @MainActor
+@Suite(.serialized)
 struct AgentHarnessTests {
     @Test("Enabled agent harness routes the selected adapter away from text models")
     func agentSelectionRoutesAdapter() async {

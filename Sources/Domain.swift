@@ -506,6 +506,45 @@ enum BurritoError: Error, Equatable, Sendable {
             "Burrito could not save the recording: \(details). Existing notes and files were not changed."
         }
     }
+
+    /// Whether retrying note generation can plausibly succeed. Permanent
+    /// failures — empty or ungroundable source material, missing language
+    /// assets, unsupported models — fail identically on retry, so callers
+    /// break the retry loop immediately instead of burning model time.
+    var isRetryableGenerationFailure: Bool {
+        switch self {
+        case .speechRecognitionPermissionDenied,
+             .screenRecordingPermissionDenied,
+             .microphonePermissionDenied,
+             .unsupportedLanguage,
+             .languageAssetMissing,
+             .languageAssetInstallationFailed:
+            // Missing permissions, unsupported languages, and missing
+            // assets need user action, not retries: background retries
+            // would waste attempts and delay the actionable error.
+            return false
+        case .appleIntelligenceUnavailable(let reason):
+            // "Not ready" resolves once the model is free; eligibility and
+            // enablement do not.
+            return reason.localizedCaseInsensitiveContains("not ready")
+        case .generationFailed(let details):
+            let normalized = details.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+            let permanentMarkers = [
+                "the transcript is empty",
+                "the transcript digest was empty",
+                "could not be grounded in the transcript",
+                "did not contain all required model files",
+                "the selected language is not supported",
+                "are too large for on-device generation",
+            ]
+            return !permanentMarkers.contains(where: normalized.contains)
+        default:
+            return true
+        }
+    }
 }
 
 enum BuiltInTemplate: String, Codable, CaseIterable, Identifiable, Sendable {

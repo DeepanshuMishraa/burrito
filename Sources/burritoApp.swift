@@ -85,6 +85,12 @@ struct burritoApp: App {
                 calendarAccess: calendarAccess
             )
             .modelContainer(container)
+            // The menu-bar scene is a separate window: the style store is
+            // injected into its environment so the menu's view observes it,
+            // and the scheme is applied inside the view (see
+            // BurritoMenuBarMenu.body) — a live theme change re-renders the
+            // menu with the new forced scheme instead of leaving the old one.
+            .environment(BurritoStyleStore.shared)
         } label: {
             Image(
                 nsImage: BurritoMenuBarArtwork.image(
@@ -192,6 +198,7 @@ enum BurritoMenuBarArtwork {
 private struct BurritoMenuBarMenu: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
+    @Environment(BurritoStyleStore.self) private var styleStore
     @Query(sort: \Note.updatedAt, order: .reverse) private var notes: [Note]
     @Query(sort: \NoteTemplate.createdAt) private var templates: [NoteTemplate]
 
@@ -226,7 +233,11 @@ private struct BurritoMenuBarMenu: View {
     }
 
     var body: some View {
-        if coordinator.captureState.isRecording {
+        // Observed via the environment: a live theme change re-renders this
+        // view and re-applies the forced scheme to the menu's native
+        // controls, keeping them in sync with the theme's palette.
+        Group {
+            if coordinator.captureState.isRecording {
             Button(
                 "Recording · \(Duration.seconds(coordinator.elapsed).formatted(.time(pattern: .minuteSecond)))"
             ) {}
@@ -385,7 +396,9 @@ private struct BurritoMenuBarMenu: View {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
+            }
         }
+        .preferredColorScheme(styleStore.colorScheme)
     }
 
     @ViewBuilder

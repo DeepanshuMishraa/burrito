@@ -168,7 +168,8 @@ private struct GeneratorStub: NoteGenerating {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError> {
         generationResult
     }
@@ -185,6 +186,7 @@ private struct GeneratorStub: NoteGenerating {
 private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
     let receivedUserNotes = Mutex<[String]>([])
     let receivedMeetingContexts = Mutex<[CalendarEventSnapshot?]>([])
+    let receivedPriorContexts = Mutex<[String?]>([])
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
         .success(())
@@ -195,10 +197,12 @@ private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError> {
         receivedUserNotes.withLock { $0.append(userNotes) }
         receivedMeetingContexts.withLock { $0.append(meetingContext) }
+        receivedPriorContexts.withLock { $0.append(priorContext) }
         return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
     }
 
@@ -214,6 +218,7 @@ private final class HumanNotesGeneratorSpy: NoteGenerating, Sendable {
 private final class BlockingGeneratorStub: NoteGenerating, Sendable {
     let generationStarted = Mutex(false)
     let allowGeneration = Mutex(false)
+    let callCount = Mutex(0)
 
     func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
         .success(())
@@ -224,8 +229,10 @@ private final class BlockingGeneratorStub: NoteGenerating, Sendable {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError> {
+        callCount.withLock { $0 += 1 }
         generationStarted.withLock { $0 = true }
         while !allowGeneration.withLock({ $0 }) {
             try? await Task.sleep(for: .milliseconds(10))
@@ -245,7 +252,6 @@ private final class BlockingGeneratorStub: NoteGenerating, Sendable {
 private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
     let titleResponses: Mutex<[Result<String, BurritoError>]>
     let titleCallCount = Mutex(0)
-
     init(titleResponses: [Result<String, BurritoError>]) {
         self.titleResponses = Mutex(titleResponses)
     }
@@ -259,7 +265,8 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError> {
         .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
     }
@@ -276,6 +283,50 @@ private final class RetryingTitleGeneratorStub: NoteGenerating, Sendable {
             }
             return responses.removeFirst()
         }
+    }
+}
+
+private final class FlakyGeneratorStub: NoteGenerating, Sendable {
+    let callCount = Mutex(0)
+    let failuresBeforeSuccess: Int
+    let failure: BurritoError
+
+    init(
+        failuresBeforeSuccess: Int,
+        failure: BurritoError = .generationFailed(details: "The model was busy.")
+    ) {
+        self.failuresBeforeSuccess = failuresBeforeSuccess
+        self.failure = failure
+    }
+
+    func availability(languageIdentifier: String) async -> Result<Void, BurritoError> {
+        .success(())
+    }
+
+    func generate(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
+        template: TemplateSnapshot,
+        languageIdentifier: String,
+        priorContext: String?
+    ) async -> Result<GeneratedNote, BurritoError> {
+        let attempt = callCount.withLock { count in
+            count += 1
+            return count
+        }
+        guard attempt > failuresBeforeSuccess else {
+            return .failure(failure)
+        }
+        return .success(GeneratedNote(title: "Generated", markdown: "# Generated"))
+    }
+
+    func suggestTitle(
+        segments: [TranscriptSegment],
+        currentTitle: String,
+        languageIdentifier: String
+    ) async -> Result<String, BurritoError> {
+        .success("Generated title")
     }
 }
 
@@ -803,6 +854,425 @@ struct CoordinatorTests {
         #expect(notes.allSatisfy { !$0.transcriptSegments.isEmpty })
     }
 
+    @Test("Study segments keep creation order regardless of processing finish order")
+    func studySegmentsOrderByCreationTime() async throws {
+        let context = try makeContext()
+        let capture = CaptureSpyingStub()
+        let generator = BlockingGeneratorStub()
+        let clock = TestClock()
+        let coordinator = AppCoordinator(
+            capture: capture,
+            transcriber: TranscriberStub(needsSpeechAuthorization: false),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            now: { clock.now }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Study Notes",
+                symbol: "book",
+                instructions: "Teach the material."
+            ),
+            languageIdentifier: "en-US",
+            mode: .listenAlong,
+            retainsAudio: false
+        )
+
+        let started = await coordinator.startStudyMode(
+            name: "Database isolation",
+            options: options,
+            context: context
+        )
+        #expect(started)
+
+        clock.advance(by: 601)
+        await waitUntil { capture.stops == 1 }
+        // The second segment must be recording before its note exists.
+        await waitUntil { capture.starts == 2 }
+
+        generator.allowGeneration.withLock { $0 = true }
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 2)
+        // Let both segments finish generating before evaluating order, so
+        // the assertion never observes a half-processed day group.
+        await waitUntil { notes.allSatisfy { $0.lifecycle == .ready } }
+
+        let first = try #require(notes.min { $0.createdAt < $1.createdAt })
+        let second = try #require(notes.max { $0.createdAt < $1.createdAt })
+        // The newer segment carries a smaller manual position (ascending =
+        // newest on top), independent of which segment finished generating.
+        #expect(first.manualOrder == 0)
+        #expect(second.manualOrder == -1)
+        #expect(Note.orderedWithinDay(notes).map(\.id) == [second.id, first.id])
+
+        await coordinator.stop(context: context)
+    }
+
+    @Test("Transient generation failures retry until the note is ready")
+    func transientGenerationFailureRetries() async throws {
+        let context = try makeContext()
+        let generator = FlakyGeneratorStub(failuresBeforeSuccess: 1)
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        await waitUntil { note.lifecycle != .processing }
+        #expect(note.lifecycle == .ready)
+        #expect(generator.callCount.withLock { $0 } == 2)
+        #expect(note.lastErrorMessage == nil)
+    }
+
+    @Test("Permanent generation failures retry exactly once and stop")
+    func permanentGenerationFailureDoesNotRetry() async throws {        let context = try makeContext()
+        let generator = FlakyGeneratorStub(
+            failuresBeforeSuccess: .max,
+            failure: .generationFailed(
+                details: "The transcript is empty, so Burrito did not write an ungrounded note."
+            )
+        )
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let options = RecordingOptions(
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            languageIdentifier: "en-US",
+            mode: .meeting,
+            retainsAudio: false
+        )
+
+        await coordinator.start(options: options, context: context)
+        await coordinator.stop(context: context)
+
+        let note = try #require(context.fetch(FetchDescriptor<Note>()).first)
+        await waitUntil { note.lifecycle != .processing }
+        #expect(note.lifecycle == .recoverable)
+        // A deterministic failure must not burn backoff + retry attempts.
+        #expect(generator.callCount.withLock { $0 } == 1)
+    }
+
+    @Test("A cancelled queued generation never starts its model request")
+    func cancelledQueuedGenerationDoesNotStart() async throws {
+        let context = try makeContext()
+        let generator = BlockingGeneratorStub()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: generator,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        let template = TemplateSnapshot(
+            name: "Summary",
+            symbol: "doc",
+            instructions: "Summarize."
+        )
+        func makeNote(title: String) -> Note {
+            Note(
+                lifecycle: .ready,
+                title: title,
+                transcriptSegments: [
+                    TranscriptSegment(
+                        source: .system,
+                        startTime: 0,
+                        duration: 4,
+                        text: "Recorded material for \(title)."
+                    ),
+                ],
+                languageIdentifier: "en-US",
+                template: template,
+                retainsAudio: false
+            )
+        }
+
+        // Note A holds the in-process generation gate (blocks in the stub).
+        let noteA = makeNote(title: "A")
+        context.insert(noteA)
+        let taskA = Task { await coordinator.generate(note: noteA, context: context) }
+
+        // Note B queues behind A on the gate.
+        let noteB = makeNote(title: "B")
+        context.insert(noteB)
+        let taskB = Task { await coordinator.generate(note: noteB, context: context) }
+        await waitUntil { noteB.lifecycle == .processing }
+
+        // Cancelling B's caller must abort the queued gate operation: B's
+        // model request must never start, even after A's slot frees.
+        taskB.cancel()
+        generator.allowGeneration.withLock { $0 = true }
+
+        await taskA.value
+        await waitUntil { noteA.lifecycle == .ready }
+        #expect(noteA.lifecycle == .ready)
+        await waitUntil { noteB.lifecycle != .processing }
+        #expect(noteB.lifecycle == .recoverable)
+        // Only A's generation reached the model.
+        #expect(generator.callCount.withLock { $0 } == 1)
+    }
+
+    @Test("Study-session notes receive the earlier segment as prior session context")
+    func priorSessionContextComesFromEarlierStudySegment() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Database isolation", order: 0)
+        context.insert(folder)
+        let template = TemplateSnapshot(
+            name: "Study Notes",
+            symbol: "book",
+            instructions: "Teach the material."
+        )
+        let lineage = UUID()
+        let older = Note(
+            lifecycle: .ready,
+            title: "Segment one",
+            markdownBody: "# Segment one\n\nCovered indexes and joins.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        older.folder = folder
+        older.studyFolderID = lineage
+        let current = Note(
+            lifecycle: .ready,
+            title: "Segment two",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        current.folder = folder
+        current.studyFolderID = lineage
+        context.insert(older)
+        context.insert(current)
+        try context.save()
+
+        let spy = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: spy,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        await coordinator.generate(note: current, context: context)
+
+        let received = spy.receivedPriorContexts.withLock { $0 }
+        #expect(received == ["# Segment one\n\nCovered indexes and joins."])
+    }
+
+    @Test("Regular folder notes never receive prior session context")
+    func priorSessionContextRequiresStudyLineage() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Team syncs", order: 0)
+        context.insert(folder)
+        let template = TemplateSnapshot(
+            name: "Summary",
+            symbol: "doc",
+            instructions: "Summarize."
+        )
+        let unrelated = Note(
+            lifecycle: .ready,
+            title: "Q3 planning",
+            markdownBody: "# Q3 planning\n\nBudget and roadmap.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        unrelated.folder = folder
+        let current = Note(
+            lifecycle: .ready,
+            title: "Standup",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        current.folder = folder
+        context.insert(unrelated)
+        context.insert(current)
+        try context.save()
+
+        let spy = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: spy,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        await coordinator.generate(note: current, context: context)
+
+        // No study lineage: the folder sibling must not seed context, even
+        // though it is the most recent sibling in the folder.
+        #expect(spy.receivedPriorContexts.withLock { $0 } == [nil])
+    }
+
+    @Test("Regenerating an earlier segment never uses a later sibling as context")
+    func priorSessionContextSkipsLaterSiblings() async throws {
+        let context = try makeContext()
+        let folder = Folder(name: "Database isolation", order: 0)
+        context.insert(folder)
+        let template = TemplateSnapshot(
+            name: "Study Notes",
+            symbol: "book",
+            instructions: "Teach the material."
+        )
+        let lineage = UUID()
+        let first = Note(
+            lifecycle: .ready,
+            title: "Segment one",
+            markdownBody: "# Segment one",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        first.folder = folder
+        first.studyFolderID = lineage
+        let later = Note(
+            lifecycle: .ready,
+            title: "Segment two",
+            markdownBody: "# Segment two\n\nFuture material.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
+            languageIdentifier: "en-US",
+            template: template,
+            retainsAudio: false
+        )
+        later.folder = folder
+        later.studyFolderID = lineage
+        context.insert(first)
+        context.insert(later)
+        try context.save()
+
+        let spy = HumanNotesGeneratorSpy()
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: spy,
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        // Regenerating the FIRST segment must not pull the second segment's
+        // (future) content into its prompt.
+        await coordinator.generate(note: first, context: context)
+
+        #expect(spy.receivedPriorContexts.withLock { $0 } == [nil])
+    }
+
+    @Test("Recoverable notes with a transcript auto-regenerate on launch")
+    func recoverableNotesAutoHealOnLaunch() async throws {
+        let context = try makeContext()
+        let note = Note(
+            lifecycle: .recoverable,
+            title: "Interrupted segment",
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(
+                name: "Study Notes",
+                symbol: "book",
+                instructions: "Teach the material."
+            ),
+            retainsAudio: false
+        )
+        note.replaceTranscript(
+            with: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 0,
+                    duration: 4,
+                    text: "The transcript survived the interruption."
+                ),
+            ],
+            marksEdited: true
+        )
+        note.lastErrorMessage = "The model was busy."
+        context.insert(note)
+        try context.save()
+
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        coordinator.recoverInterruptedNotes(context: context)
+
+        await waitUntil { note.lifecycle == .ready }
+        #expect(note.lifecycle == .ready)
+        #expect(note.notesMayBeOutdated == false)
+    }
+
+    @Test("Regenerating a note preserves its timeline time and position")
+    func regenerationPreservesActivityTime() async throws {
+        let context = try makeContext()
+        let originalTime = Date(timeIntervalSinceReferenceDate: 100)
+        let note = Note(
+            lifecycle: .ready,
+            title: "Old title",
+            markdownBody: "# Old notes",
+            transcriptSegments: [
+                TranscriptSegment(
+                    source: .system,
+                    startTime: 0,
+                    duration: 4,
+                    text: "The recorded material."
+                ),
+            ],
+            createdAt: originalTime,
+            languageIdentifier: "en-US",
+            template: TemplateSnapshot(
+                name: "Summary",
+                symbol: "doc",
+                instructions: "Summarize."
+            ),
+            retainsAudio: false
+        )
+        note.updatedAt = originalTime
+        context.insert(note)
+        try context.save()
+
+        let coordinator = AppCoordinator(
+            capture: CaptureSpyingStub(),
+            transcriber: TranscriberStub(),
+            generator: GeneratorStub(),
+            fileStore: FileStoreSpy(root: FileManager.default.temporaryDirectory),
+            requestSpeechAuthorization: { true }
+        )
+        await coordinator.generateInBackground(note: note, context: context)
+
+        #expect(note.lifecycle == .ready)
+        #expect(note.markdownBody == "# Generated")
+        // Regeneration must never bump the activity time: the note keeps
+        // its timeline position instead of jumping to "now".
+        #expect(note.updatedAt == originalTime)
+    }
+
     @Test("Appended segments queue behind in-flight processing instead of being dropped")
     func appendedSegmentsQueueBehindInFlightProcessing() async throws {
         let context = try makeContext()
@@ -843,7 +1313,12 @@ struct CoordinatorTests {
         await coordinator.stop(context: context)
 
         generator.allowGeneration.withLock { $0 = true }
-        await waitUntil { note.lifecycle != .processing }
+        // The appended segment's transcript merges after the first segment
+        // finishes generating; wait for both so the assertion never races
+        // the background chain.
+        await waitUntil {
+            note.lifecycle != .processing && note.transcriptSegments.count == 4
+        }
 
         #expect(note.lifecycle == .ready)
         #expect(note.transcriptSegments.count == 4)

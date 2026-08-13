@@ -62,13 +62,35 @@ protocol NoteGenerating: Sendable {
         userNotes: String,
         meetingContext: CalendarEventSnapshot?,
         template: TemplateSnapshot,
-        languageIdentifier: String
+        languageIdentifier: String,
+        priorContext: String?
     ) async -> Result<GeneratedNote, BurritoError>
     func suggestTitle(
         segments: [TranscriptSegment],
         currentTitle: String,
         languageIdentifier: String
     ) async -> Result<String, BurritoError>
+}
+
+extension NoteGenerating {
+    /// Convenience for notes with no earlier session material: runs
+    /// generation without prior session context.
+    func generate(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
+        template: TemplateSnapshot,
+        languageIdentifier: String
+    ) async -> Result<GeneratedNote, BurritoError> {
+        await generate(
+            segments: segments,
+            userNotes: userNotes,
+            meetingContext: meetingContext,
+            template: template,
+            languageIdentifier: languageIdentifier,
+            priorContext: nil
+        )
+    }
 }
 
 protocol RecordingFileStore: Sendable {

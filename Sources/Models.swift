@@ -78,6 +78,11 @@ final class Note {
     var lastErrorMessage: String?
     var calendarEventData: Data?
     var folder: Folder?
+    /// The folder lineage of a note created by a study session. Only notes
+    /// stamped with the same lineage feed each other "prior session context":
+    /// regular folder-backed notes never do. Survives app restarts so healed
+    /// segments keep their context.
+    var studyFolderID: UUID?
     /// Manual position within the note's day group once the user has
     /// reordered the timeline by dragging. nil means "no manual order yet".
     var manualOrder: Int?
@@ -212,7 +217,9 @@ final class Note {
     func replaceTranscript(with segments: [TranscriptSegment], marksEdited: Bool) {
         transcriptSegments = segments
         transcriptRevision += 1
-        updatedAt = .now
+        // Activity time is the caller's concern: automatic processing must
+        // not move the note to "now" (that would reposition the timeline
+        // hours after the recording), while user edits bump it explicitly.
         if !marksEdited {
             generatedFromTranscriptRevision = transcriptRevision
         }

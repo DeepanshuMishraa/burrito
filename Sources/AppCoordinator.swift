@@ -43,11 +43,72 @@ final class AppCoordinator {
     /// list). Their processing UI is suppressed so the user never sees a
     /// generation screen they did not opt into.
     private(set) var backgroundGenerationNoteIDs: Set<UUID> = []
+    /// Serializes model inference app-wide: on-device models run one request
+    /// chain at a time, so a finished study segment can never collide with a
+    /// manual regeneration, an import, or the concurrent title pass.
+    private let generationGate = GenerationGate()
 
     private struct StudySession {
         let id: UUID
         let folderID: UUID
         let options: RecordingOptions
+    }
+
+    /// Serial queue for model inference. Only the model calls are gated:
+    /// note state mutations stay in the caller's task, so observers never
+    /// see a note half-updated between generation and its follow-up work.
+    /// A queued or in-flight operation is tied to its caller: if the caller
+    /// is cancelled (a heal aborted by recording, for example), the gate
+    /// task is cancelled too — a queued operation never starts, and a
+    /// running in-process operation aborts at its next cancellation check.
+    private actor GenerationGate {
+        private var tail: Task<Void, Never> = Task {}
+
+        func run<T: Sendable>(
+            _ operation: @escaping @MainActor () async -> T
+        ) async throws -> T {
+            let previous = tail
+            let task = Task { @MainActor in
+                try Task.checkCancellation()
+                await previous.value
+                try Task.checkCancellation()
+                return await operation()
+            }
+            tail = Task { @MainActor in
+                _ = try? await task.value
+            }
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        }
+    }
+
+    /// Whether note generation currently routes through a terminal agent
+    /// harness. Harness CLI processes run independently, so concurrent note
+    /// generations are safe and must NOT be serialized — each `opencode run`
+    /// is a separate process. Only in-process models (Apple Intelligence,
+    /// MLX) share one session and must run one request chain at a time.
+    private var usesAgentHarnessBackend: Bool {
+        guard let harness = AgentHarnessStore.currentSelection() else { return false }
+        return harness.resolveExecutableURL() != nil
+    }
+
+    /// Runs a model operation, serialized only when the backend is an
+    /// in-process model. Agent-harness backends run in parallel so two notes
+    /// regenerate at the same time instead of queueing behind each other.
+    /// Throws `CancellationError` when the caller is cancelled while the
+    /// operation is queued or in flight (in-process path only; harness
+    /// operations run in the caller's task and observe its cancellation
+    /// directly).
+    private func runGeneration<T: Sendable>(
+        _ operation: @escaping @MainActor () async -> T
+    ) async throws -> T {
+        if usesAgentHarnessBackend {
+            return await operation()
+        }
+        return try await generationGate.run(operation)
     }
 
     /// Holds the tail of a note's background processing chain. All access
@@ -58,6 +119,15 @@ final class AppCoordinator {
     }
 
     private static let studySegmentLimit: TimeInterval = 10 * 60
+    /// Generation attempts for one note. Transient failures (a busy on-device
+    /// model, a timed-out agent harness) resolve on retry so study segments
+    /// finish their notes without a manual "Generate again".
+    private static let maxGenerationAttempts = 3
+    /// Backoff seconds before retry `n` (1-based): 1s, then 2s.
+    private static let generationRetryBackoff: [Int: TimeInterval] = [1: 1, 2: 2]
+    /// Prior session context is bounded so it never dominates the prompt
+    /// budget of small on-device models.
+    private static let priorContextCharacterBudget = 2_500
 
     init(
         capture: any AudioCapturing,
@@ -232,8 +302,61 @@ final class AppCoordinator {
                 note.lastErrorMessage = "Burrito closed before this recording finished. Existing audio is preserved; retry processing when ready."
             }
             try context.save()
+            healUnfinishedNotes(in: notes, context: context)
         } catch {
             lastError = .storageFailed(details: error.localizedDescription)
+        }
+    }
+
+    /// Auto-finishes notes whose transcript was preserved but whose notes
+    /// never generated (an interrupted or failed background run): their
+    /// generation restarts in the background on launch, so a study segment
+    /// resolves without the user clicking "Generate again". Runs at most
+    /// `healingConcurrencyLimit` generations at once, and the whole heal is
+    /// cancelled when a recording starts so launch work never competes with
+    /// the user's session.
+    private static let healingConcurrencyLimit = 2
+    private var healingTask: Task<Void, Never>?
+
+    private func healUnfinishedNotes(in notes: [Note], context: ModelContext) {
+        healingTask?.cancel()
+        let eligible = notes.filter { note in
+            note.lifecycle == .recoverable
+                && note.processingStage == nil
+                && !note.userEditedNotes
+                && note.notesMayBeOutdated
+                && !note.transcriptSegments.isEmpty
+                && note.lastErrorMessage != nil
+        }
+        guard !eligible.isEmpty else { return }
+        // The error marker stays on the note until generation actually
+        // begins (generateInBackground clears it): if the heal is cancelled
+        // (e.g. recording started), the note remains eligible for healing on
+        // the next launch instead of silently losing its marker.
+        healingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.healingTask = nil }
+            let batchSize = Self.healingConcurrencyLimit
+            for batchStart in stride(from: 0, to: eligible.count, by: batchSize) {
+                guard !Task.isCancelled else { break }
+                let end = min(batchStart + batchSize, eligible.count)
+                let batch = Array(eligible[batchStart..<end])
+                let children = batch.map { note in
+                    Task { [weak self] in
+                        await self?.generateInBackground(note: note, context: context)
+                    }
+                }
+                for child in children {
+                    // Cancelling the heal (recording started) cancels the
+                    // in-flight generation too: harness CLI processes are
+                    // terminated and in-process model streams are aborted.
+                    await withTaskCancellationHandler {
+                        await child.value
+                    } onCancel: {
+                        child.cancel()
+                    }
+                }
+            }
         }
     }
 
@@ -302,6 +425,10 @@ final class AppCoordinator {
             lastError = .recordingAlreadyInProgress
             return
         }
+        // A recording means the user is active again: launch-time note
+        // healing must not compete with the session's own generations.
+        healingTask?.cancel()
+        healingTask = nil
         captureState = .preparing
         lastError = nil
 
@@ -383,10 +510,21 @@ final class AppCoordinator {
             if newNote.manualOrder != nil {
                 newNote.manualOrderDay = Calendar.current.startOfDay(for: now)
             }
+            // Study-session segments always carry a manual position: their
+            // day group then orders them by creation time, never by whichever
+            // segment happened to finish processing last.
+            if newNote.manualOrder == nil, studySession != nil {
+                newNote.manualOrder = 0
+                newNote.manualOrderDay = Calendar.current.startOfDay(for: now)
+            }
             context.insert(newNote)
             if let studySession,
                let folder = fetchFolder(id: studySession.folderID, context: context) {
                 newNote.folder = folder
+                // Mark study-session lineage so later segments (and healed
+                // notes after a restart) can draw continuity context from
+                // earlier segments of this same session.
+                newNote.studyFolderID = studySession.folderID
             }
             note = newNote
         }
@@ -498,6 +636,8 @@ final class AppCoordinator {
         studyRotationInFlight = false
         studyRotationTask?.cancel()
         studyRotationTask = nil
+        healingTask?.cancel()
+        healingTask = nil
         guard captureState.isRecording else { return }
         await stopCapture(context: context, continueStudy: false)
     }
@@ -791,6 +931,75 @@ final class AppCoordinator {
     }
 
     func generate(note: Note, context: ModelContext, undoManager: UndoManager? = nil) async {
+        await performGeneration(
+            note: note,
+            context: context,
+            undoManager: undoManager
+        )
+    }
+
+    /// Runs one generation attempt through the correct backend path with
+    /// bounded retries: transient failures retry with backoff, permanent
+    /// ones break immediately so a broken note never burns minutes of
+    /// model time. The last failure stays available for reporting.
+    private func generateWithRetries(
+        segments: [TranscriptSegment],
+        userNotes: String,
+        meetingContext: CalendarEventSnapshot?,
+        template: TemplateSnapshot,
+        languageIdentifier: String,
+        priorContext: String?
+    ) async -> (generated: GeneratedNote?, error: BurritoError?) {
+        var generationError: BurritoError?
+        for attempt in 0..<Self.maxGenerationAttempts {
+            if attempt > 0 {
+                try? await Task.sleep(
+                    for: .milliseconds(
+                        (Self.generationRetryBackoff[attempt] ?? 1) * 1_000
+                    )
+                )
+                // Cancellation during backoff (heal cancelled, recording
+                // started) must not start another model request.
+                guard !Task.isCancelled else { return (nil, generationError) }
+            }
+            let result: Result<GeneratedNote, BurritoError>
+            do {
+                result = try await runGeneration { () -> Result<GeneratedNote, BurritoError> in
+                    await self.generator.generate(
+                        segments: segments,
+                        userNotes: userNotes,
+                        meetingContext: meetingContext,
+                        template: template,
+                        languageIdentifier: languageIdentifier,
+                        priorContext: priorContext
+                    )
+                }
+            } catch {
+                // The gate throws only CancellationError: the caller was
+                // cancelled (heal aborted, recording started). Stop
+                // immediately and let the caller settle the note state.
+                return (nil, generationError)
+            }
+            switch result {
+            case .success(let generated):
+                return (generated, nil)
+            case .failure(let error):
+                generationError = error
+                if !error.isRetryableGenerationFailure {
+                    // Permanent failures fail identically on retry: stop
+                    // immediately instead of burning model time.
+                    return (nil, generationError)
+                }
+            }
+        }
+        return (nil, generationError)
+    }
+
+    private func performGeneration(
+        note: Note,
+        context: ModelContext,
+        undoManager: UndoManager?
+    ) async {
         let oldTitle = note.title
         let oldBody = note.markdownBody
         let transcriptSegments = note.transcriptSegments
@@ -798,54 +1007,26 @@ final class AppCoordinator {
         let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
+        let priorContext = priorSessionContext(for: note)
 
         note.lifecycle = .processing
         note.processingStage = .generatingNotes
         note.lastErrorMessage = nil
         try? context.save()
 
-        async let generatedResult = generator.generate(
+        let (generated, generationError) = await generateWithRetries(
             segments: transcriptSegments,
             userNotes: userNotes,
             meetingContext: calendarEvent,
             template: template,
-            languageIdentifier: languageIdentifier
-        )
-        async let titleResult = suggestedTitle(
-            segments: transcriptSegments,
-            currentTitle: oldTitle,
             languageIdentifier: languageIdentifier,
-            calendarEvent: calendarEvent
+            priorContext: priorContext
         )
-        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
-        switch generatedResultValue {
-        case .success(let generated):
-            if let calendarEvent {
-                note.title = calendarAwareTitle(
-                    event: calendarEvent,
-                    currentTitle: oldTitle
-                )
-            } else {
-                note.title = await resolvedSuggestedTitle(
-                    initialResult: titleResultValue,
-                    segments: transcriptSegments,
-                    currentTitle: oldTitle,
-                    languageIdentifier: languageIdentifier
-                ) ?? generated.title
-            }
-            note.markdownBody = generated.markdown
-            note.generatedFromTranscriptRevision = note.transcriptRevision
-            note.userEditedNotes = false
-            note.lifecycle = .ready
-            note.processingStage = nil
-            note.updatedAt = .now
-            undoManager?.registerUndo(withTarget: note) { target in
-                target.title = oldTitle
-                target.markdownBody = oldBody
-                target.userEditedNotes = true
-            }
-        case .failure(let error):
+        guard let generated else {
+            let error = generationError ?? .generationFailed(
+                details: "Notes could not be generated right now. Your transcript is preserved; choose Generate again."
+            )
             note.lifecycle = .recoverable
             note.processingStage = nil
             note.lastErrorMessage = error.recoveryMessage
@@ -855,11 +1036,83 @@ final class AppCoordinator {
             if activeNoteID == note.id {
                 lastError = error
             }
+            try? context.save()
+            return
+        }
+
+        // The title pass runs through the same gate (never alongside another
+        // model request) but after generation, so two model sessions are
+        // never active at the same time. Cancellation here (heal aborted)
+        // falls back to the generated title: the note body is already ready.
+        let resolvedTitle: String? = (
+            try? await runGeneration { () -> String? in
+                if let calendarEvent {
+                    return self.calendarAwareTitle(
+                        event: calendarEvent,
+                        currentTitle: oldTitle
+                    )
+                }
+                let titleResult = await self.suggestedTitle(
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier,
+                    calendarEvent: calendarEvent
+                )
+                return await self.resolvedSuggestedTitle(
+                    initialResult: titleResult,
+                    segments: transcriptSegments,
+                    currentTitle: oldTitle,
+                    languageIdentifier: languageIdentifier
+                )
+            }
+        ) ?? nil
+        note.title = resolvedTitle ?? generated.title
+        note.markdownBody = generated.markdown
+        note.generatedFromTranscriptRevision = note.transcriptRevision
+        note.userEditedNotes = false
+        note.lifecycle = .ready
+        note.processingStage = nil
+        undoManager?.registerUndo(withTarget: note) { target in
+            target.title = oldTitle
+            target.markdownBody = oldBody
+            target.userEditedNotes = true
         }
         try? context.save()
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)
         }
+    }
+
+    /// Continuity material for a note created by a study session: the most
+    /// recent EARLIER segment of the same session lineage (its generated
+    /// notes, or its raw transcript when notes are not ready yet), bounded to
+    /// a small budget. Regular folder-backed notes are never treated as a
+    /// session: without study lineage the note has no prior context, so
+    /// unrelated siblings cannot seed continuity from other meetings.
+    private func priorSessionContext(for note: Note) -> String? {
+        guard let lineage = note.studyFolderID,
+              let siblings = note.folder?.notes
+        else {
+            return nil
+        }
+        let previous = siblings
+            .filter {
+                $0.studyFolderID == lineage
+                    && $0.id != note.id
+                    && $0.deletedAt == nil
+                    && $0.createdAt < note.createdAt
+            }
+            .max { $0.createdAt < $1.createdAt }
+        guard let previous else { return nil }
+        let generated = GeneratedNote
+            .strippedSourceArtifacts(from: previous.markdownBody)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = generated.isEmpty
+            ? Transcript.rendered(previous.transcriptSegments)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            : generated
+        guard !content.isEmpty else { return nil }
+        return String(content.prefix(Self.priorContextCharacterBudget))
     }
 
     private func appendGeneratedNotes(
@@ -875,66 +1128,75 @@ final class AppCoordinator {
         let calendarEvent = note.calendarEvent
         let template = note.templateSnapshot
         let languageIdentifier = note.languageIdentifier
+        let priorContext = priorSessionContext(for: note)
 
         note.lifecycle = .processing
         note.processingStage = .generatingNotes
         note.lastErrorMessage = nil
         try? context.save()
 
-        async let generatedResult = generator.generate(
+        let (generated, generationError) = await generateWithRetries(
             segments: segments,
             userNotes: userNotes,
             meetingContext: calendarEvent,
             template: template,
-            languageIdentifier: languageIdentifier
-        )
-        async let titleResult = suggestedTitle(
-            segments: completeTranscript,
-            currentTitle: existingTitle,
             languageIdentifier: languageIdentifier,
-            calendarEvent: calendarEvent
+            priorContext: priorContext
         )
-        let (generatedResultValue, titleResultValue) = await (generatedResult, titleResult)
 
-        switch generatedResultValue {
-        case .success(let generated):
-            let updatedTitle: String
-            if let calendarEvent {
-                updatedTitle = calendarAwareTitle(
-                    event: calendarEvent,
-                    currentTitle: existingTitle
+        guard let generated else {
+            note.lifecycle = .recoverable
+            note.processingStage = nil
+            note.lastErrorMessage = (generationError ?? .generationFailed(
+                details: "Notes could not be generated right now. Your transcript is preserved; choose Generate again."
+            )).recoveryMessage
+            if activeNoteID == note.id {
+                lastError = generationError
+            }
+            try? context.save()
+            return
+        }
+
+        // Cancellation here (heal aborted mid-append) falls back to the
+        // existing title; the appended body is already generated.
+        let resolvedTitle: String? = (
+            try? await runGeneration { () -> String? in
+                if let calendarEvent {
+                    return self.calendarAwareTitle(
+                        event: calendarEvent,
+                        currentTitle: existingTitle
+                    )
+                }
+                let titleResult = await self.suggestedTitle(
+                    segments: completeTranscript,
+                    currentTitle: existingTitle,
+                    languageIdentifier: languageIdentifier,
+                    calendarEvent: calendarEvent
                 )
-            } else {
-                updatedTitle = await resolvedSuggestedTitle(
-                    initialResult: titleResultValue,
+                return await self.resolvedSuggestedTitle(
+                    initialResult: titleResult,
                     segments: completeTranscript,
                     currentTitle: existingTitle,
                     languageIdentifier: languageIdentifier
-                ) ?? existingTitle
+                )
             }
-            let appendedBody = """
-                ## \(generated.title)
+        ) ?? nil
 
-                \(generated.markdown)
-                """
-            note.title = updatedTitle
-            note.markdownBody = existingBody.trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty
-                ? generated.markdown
-                : "\(existingBody)\n\n---\n\n\(appendedBody)"
-            note.generatedFromTranscriptRevision = note.transcriptRevision
-            note.userEditedNotes = hadUserEdits
-            note.lifecycle = .ready
-            note.processingStage = nil
-            note.updatedAt = .now
-        case .failure(let error):
-            note.lifecycle = .recoverable
-            note.processingStage = nil
-            note.lastErrorMessage = error.recoveryMessage
-            if activeNoteID == note.id {
-                lastError = error
-            }
-        }
+        note.title = resolvedTitle ?? existingTitle
+        let appendedBody = """
+            ## \(generated.title)
+
+            \(generated.markdown)
+            """
+        note.markdownBody = existingBody.trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+            ? generated.markdown
+            : "\(existingBody)\n\n---\n\n\(appendedBody)"
+        note.generatedFromTranscriptRevision = note.transcriptRevision
+        note.userEditedNotes = hadUserEdits
+        note.lifecycle = .ready
+        note.processingStage = nil
+        note.updatedAt = .now
         try? context.save()
         if note.lifecycle == .ready {
             feedback.noteReady(title: note.title)

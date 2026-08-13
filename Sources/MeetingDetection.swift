@@ -1046,16 +1046,10 @@ private final class NoteTakingPromptPanel: NSPanel {
 private struct NoteTakingPromptView: View {
     @Environment(BurritoStyleStore.self) private var styleStore
     @Environment(\.accessibilityReduceTransparency) private var reducesTransparency
-    @AppStorage(BurritoAppearance.storageKey) private var appearanceRawValue =
-        BurritoAppearance.system.rawValue
 
     let session: DetectedNoteTakingSession
     let start: () -> Void
     let dismiss: () -> Void
-
-    private var appearance: BurritoAppearance {
-        BurritoAppearance.resolve(appearanceRawValue)
-    }
 
     private var title: String {
         switch session.kind {
@@ -1151,7 +1145,7 @@ private struct NoteTakingPromptView: View {
         .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
         .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
         .padding(8)
-        .preferredColorScheme(appearance.colorScheme)
+        .preferredColorScheme(styleStore.colorScheme)
         .font(.burritoUI(size: 13, weight: .regular))
         .id(
             "\(styleStore.theme.rawValue)-\(styleStore.font.rawValue)-\(styleStore.interfaceFontSize)"
