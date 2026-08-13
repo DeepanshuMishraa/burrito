@@ -1405,7 +1405,7 @@ struct FoundationNoteGenerator: NoteGenerating {
                     priorContext: priorContext
                 )
             )
-            _ = try await inputLimit(
+            let finalInputLimit = try await inputLimit(
                 instructions: finalInstructions,
                 reservedOutputTokens: TokenBudget.finalOutput,
                 additionalReservedTokens:
@@ -1414,11 +1414,23 @@ struct FoundationNoteGenerator: NoteGenerating {
             let condensed: String
             if adapter is AgentHarnessAdapter {
                 // Terminal harnesses carry a large context window and each
-                // call is a separate CLI process: skip the digest passes and
-                // feed the rendered transcript (with its source markers)
-                // straight to the final note, so one note is one or two
-                // harness invocations instead of several in sequence.
-                condensed = Transcript.rendered(segments)
+                // call is a separate CLI process: feed the rendered
+                // transcript (with its source markers) straight to the final
+                // note when it fits, so one note is one or two harness
+                // invocations instead of several in sequence. Oversized
+                // transcripts fall back to the digest pipeline.
+                let rendered = Transcript.rendered(segments)
+                if try await tokenCount(rendered) <= finalInputLimit {
+                    condensed = rendered
+                } else {
+                    condensed = try await factualDigest(
+                        segments: segments,
+                        finalInstructions: finalInstructions,
+                        reservedOutputTokens: TokenBudget.finalOutput,
+                        additionalReservedTokens:
+                            TokenBudget.generatedNoteSchema + finalSourceOverhead
+                    )
+                }
             } else {
                 condensed = try await factualDigest(
                     segments: segments,
@@ -1485,9 +1497,23 @@ struct FoundationNoteGenerator: NoteGenerating {
             let instructions = GenerationPrompt.titleInstructions(currentTitle: currentTitle)
             let digest: String
             if adapter is AgentHarnessAdapter {
-                // Same as note generation: harnesses skip the digest pass and
-                // title directly from the rendered transcript.
-                digest = Transcript.rendered(segments)
+                // Same as note generation: harnesses title directly from the
+                // rendered transcript when it fits, digesting only oversized
+                // transcripts.
+                let rendered = Transcript.rendered(segments)
+                let titleInputLimit = try await inputLimit(
+                    instructions: instructions,
+                    reservedOutputTokens: TokenBudget.titleOutput
+                )
+                if try await tokenCount(rendered) <= titleInputLimit {
+                    digest = rendered
+                } else {
+                    digest = try await factualDigest(
+                        segments: segments,
+                        finalInstructions: instructions,
+                        reservedOutputTokens: TokenBudget.titleOutput
+                    )
+                }
             } else {
                 digest = try await factualDigest(
                     segments: segments,

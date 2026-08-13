@@ -886,6 +886,9 @@ struct CoordinatorTests {
         generator.allowGeneration.withLock { $0 = true }
         let notes = try context.fetch(FetchDescriptor<Note>())
         #expect(notes.count == 2)
+        // Let both segments finish generating before evaluating order, so
+        // the assertion never observes a half-processed day group.
+        await waitUntil { notes.allSatisfy { $0.lifecycle == .ready } }
 
         let first = try #require(notes.min { $0.createdAt < $1.createdAt })
         let second = try #require(notes.max { $0.createdAt < $1.createdAt })
@@ -944,6 +947,7 @@ struct CoordinatorTests {
             lifecycle: .ready,
             title: "Segment one",
             markdownBody: "# Segment one\n\nCovered indexes and joins.",
+            createdAt: Date(timeIntervalSinceReferenceDate: 100),
             languageIdentifier: "en-US",
             template: template,
             retainsAudio: false
@@ -952,6 +956,7 @@ struct CoordinatorTests {
         let current = Note(
             lifecycle: .ready,
             title: "Segment two",
+            createdAt: Date(timeIntervalSinceReferenceDate: 200),
             languageIdentifier: "en-US",
             template: template,
             retainsAudio: false

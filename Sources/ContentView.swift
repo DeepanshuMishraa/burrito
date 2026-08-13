@@ -161,6 +161,11 @@ struct ContentView: View {
     /// The note row currently being dragged: dims its timeline row and gates
     /// the final reorder commit.
     @State private var draggedNoteID: UUID?
+    /// Rows currently hovered by the active drag. When the count drops to
+    /// zero the drag has left the timeline (abandoned, cancelled, or dropped
+    /// outside a row), so the dimmed state clears shortly after.
+    @State private var hoveredRowCount = 0
+    @State private var dragEndResetTask: Task<Void, Never>?
     @State private var confirmingEmptyTrash = false
     @State private var ownershipStatus: OwnershipOperationStatus?
     @State private var supermemoryIndexProgress: [UUID: SupermemoryIndexProgress] = [:]
@@ -960,6 +965,19 @@ struct ContentView: View {
                         isDragged: note.id == draggedNoteID,
                         onDragBegan: { draggedID in
                             draggedNoteID = draggedID
+                            hoveredRowCount = 0
+                            dragEndResetTask?.cancel()
+                            dragEndResetTask = nil
+                        },
+                        onHoverChange: { isHovering in
+                            if isHovering {
+                                dragEndResetTask?.cancel()
+                                dragEndResetTask = nil
+                                hoveredRowCount += 1
+                            } else {
+                                hoveredRowCount = max(0, hoveredRowCount - 1)
+                                scheduleDragEndResetIfNeeded()
+                            }
                         },
                         onReorderCommit: { day, targetID, before in
                             guard let draggedID = draggedNoteID else { return }
@@ -972,6 +990,9 @@ struct ContentView: View {
                                 )
                             }
                             draggedNoteID = nil
+                            hoveredRowCount = 0
+                            dragEndResetTask?.cancel()
+                            dragEndResetTask = nil
                         }
                     )
                     .contextMenu {
@@ -991,6 +1012,21 @@ struct ContentView: View {
             return "Yesterday"
         }
         return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
+    /// Clears the dragged-row state shortly after the drag leaves every
+    /// timeline row: covers Escape, drops on empty space, and drops outside
+    /// the list. Re-entering a row cancels the pending reset, so a slow drag
+    /// that passes over empty space keeps working.
+    private func scheduleDragEndResetIfNeeded() {
+        guard draggedNoteID != nil, hoveredRowCount == 0 else { return }
+        dragEndResetTask?.cancel()
+        dragEndResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            draggedNoteID = nil
+            hoveredRowCount = 0
+        }
     }
 
     /// Applies a drag-and-drop reorder inside one day group: the dragged note
@@ -1212,6 +1248,9 @@ struct ContentView: View {
         let matches = notes.filter { ids.contains($0.id) }
         for note in matches { note.folder = folder }
         draggedNoteID = nil
+        hoveredRowCount = 0
+        dragEndResetTask?.cancel()
+        dragEndResetTask = nil
         return !matches.isEmpty
     }
 
@@ -4330,6 +4369,7 @@ private struct TimelineNoteItem: View {
     let day: Date
     let isDragged: Bool
     let onDragBegan: (UUID) -> Void
+    let onHoverChange: (Bool) -> Void
     let onReorderCommit: (Date, UUID, Bool) -> Void
 
     @State private var showingActions = false
@@ -4421,17 +4461,22 @@ private struct TimelineNoteItem: View {
                 noteID: note.id,
                 day: day,
                 setTargeted: { targeted in
+                    let changed = targeted != isDropTarget
                     withAnimation(.easeOut(duration: 0.12)) {
                         isDropTarget = targeted
                     }
                     if !targeted {
                         dropBefore = false
                     }
+                    if changed {
+                        onHoverChange(targeted)
+                    }
                 },
                 setBefore: { before in
                     dropBefore = before
                 },
-                commit: onReorderCommit
+                commit: onReorderCommit,
+                midpoint: Self.rowMidpoint
             )
         )
         .overlay {
@@ -4440,6 +4485,11 @@ private struct TimelineNoteItem: View {
             }
         }
     }
+
+    /// Row height of the note content (52pt) plus the row's vertical padding
+    /// (2pt top + 2pt bottom): the point where a hover flips from "insert
+    /// before" to "insert after".
+    private static let rowMidpoint: CGFloat = 28
 
     /// A 2pt accent line at the row edge the note would land on — a clear
     /// "insert here" affordance that never shoves the list around.
@@ -4464,16 +4514,17 @@ private struct TimelineNoteItem: View {
         let setTargeted: (Bool) -> Void
         let setBefore: (Bool) -> Void
         let commit: (Date, UUID, Bool) -> Void
+        let midpoint: CGFloat
 
         func dropEntered(info: DropInfo) {
             setTargeted(true)
-            setBefore(info.location.y < 28)
+            setBefore(info.location.y < midpoint)
         }
 
         func dropUpdated(info: DropInfo) -> DropProposal? {
             // Keep the indicator aligned while the pointer crosses the row's
             // midpoint: dropEntered only fires once per row entry.
-            setBefore(info.location.y < 28)
+            setBefore(info.location.y < midpoint)
             return DropProposal(operation: .move)
         }
 
@@ -4483,7 +4534,7 @@ private struct TimelineNoteItem: View {
 
         func performDrop(info: DropInfo) -> Bool {
             setTargeted(false)
-            commit(day, noteID, info.location.y < 28)
+            commit(day, noteID, info.location.y < midpoint)
             return true
         }
     }
@@ -8115,6 +8166,10 @@ private struct TranscriptEditor: View {
     let focusedSegmentID: UUID?
     @State private var hoveredSegmentID: UUID?
     @State private var segments: [TranscriptSegment]
+    /// Pending debounced commit of transcript edits: typing writes only to
+    /// the local array, and the note is persisted after a short pause so
+    /// keystrokes never re-encode and re-save the whole transcript.
+    @State private var transcriptCommitTask: Task<Void, Never>?
 
     init(note: Note, focusedSegmentID: UUID?) {
         self.note = note
@@ -8284,6 +8339,11 @@ private struct TranscriptEditor: View {
                 }
                 segments = updatedSegments
             }
+            .onDisappear {
+                // Flush any pending edit before the editor goes away so the
+                // note never keeps uncommitted local edits.
+                commitTranscript()
+            }
         }
     }
 
@@ -8332,9 +8392,7 @@ private struct TranscriptEditor: View {
             set: { newValue in
                 guard let index = segments.firstIndex(where: { $0.id == id }) else { return }
                 segments[index].text = newValue
-                note.replaceTranscript(with: segments, marksEdited: true)
-                // User edits surface the note in the timeline again.
-                note.updatedAt = .now
+                scheduleTranscriptCommit()
             }
         )
     }
@@ -8358,11 +8416,29 @@ private struct TranscriptEditor: View {
                 } else {
                     segments[index].speakerName = replacement
                 }
-                note.replaceTranscript(with: segments, marksEdited: true)
-                // User edits surface the note in the timeline again.
-                note.updatedAt = .now
+                scheduleTranscriptCommit()
             }
         )
+    }
+
+    /// Persists edited transcript segments after a short pause so rapid
+    /// keystrokes and speaker renames do not re-encode and re-save the
+    /// whole transcript (and bump the note's activity time) on every edit.
+    private func scheduleTranscriptCommit() {
+        transcriptCommitTask?.cancel()
+        transcriptCommitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            commitTranscript()
+        }
+    }
+
+    private func commitTranscript() {
+        transcriptCommitTask?.cancel()
+        transcriptCommitTask = nil
+        note.replaceTranscript(with: segments, marksEdited: true)
+        // User edits surface the note in the timeline again.
+        note.updatedAt = .now
     }
 }
 

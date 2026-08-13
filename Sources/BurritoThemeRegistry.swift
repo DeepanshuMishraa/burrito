@@ -107,7 +107,7 @@ extension BurritoColorTheme {
             )
         case .gruvbox:
             BurritoThemePalette.make(
-                foreground: (0xEBDDB2, 0xEBDDB2),
+                foreground: (0xEBDBB2, 0xEBDBB2),
                 sidebarForeground: (0xBDAE93, 0xBDAE93),
                 accent: (0xFE8019, 0xFE8019),
                 accentForeground: (0x1D2021, 0x1D2021),
@@ -129,7 +129,7 @@ extension BurritoColorTheme {
                 canvas: (0xFBF1C7, 0xFBF1C7),
                 sidebar: (0xF9F5D7, 0xF9F5D7),
                 paper: (0xFBF1C7, 0xFBF1C7),
-                raised: (0xEBDDB2, 0xEBDDB2),
+                raised: (0xEBDBB2, 0xEBDBB2),
                 softBorder: (0xD5C4A1, 0xD5C4A1),
                 sage: (0x79740E, 0x79740E)
             )

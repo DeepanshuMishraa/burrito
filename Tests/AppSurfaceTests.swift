@@ -68,10 +68,23 @@ struct AppSurfaceTests {
             "solarized", "solarized-light", "terminal", "tokyo-night",
             "tokyo-night-day", "vesper",
         ]
+        let expectedLight: Set<String> = [
+            "catppuccin-latte", "gruvbox-light", "kanagawa-lotus", "one-light",
+            "rose-pine-dawn", "solarized-light", "tokyo-night-day",
+        ]
 
         #expect(Set(BurritoColorTheme.allCases.map(\.rawValue)) == expected)
         #expect(BurritoColorTheme.allCases.first == .catppuccin)
-        #expect(BurritoColorTheme.allCases.contains { !$0.isDark })
+        // Every light-variant theme must be classified as light, and every
+        // dark theme must not be: a wrong isDark flag fails this assertion.
+        #expect(
+            Set(BurritoColorTheme.allCases.filter { !$0.isDark }.map(\.rawValue))
+                == expectedLight
+        )
+        #expect(
+            Set(BurritoColorTheme.allCases.filter(\.isDark).map(\.rawValue))
+                == expected.subtracting(expectedLight)
+        )
     }
 
     @Test("Every color theme preserves readable semantic contrast")
